@@ -44,6 +44,40 @@ def test_full_workspace_validates(validator):
     validator.validate(ws)
 
 
+def test_expert_doc_sha256_optional(validator):
+    """expertDoc accepts optional sha256 field (v0.1.9)."""
+    ws = _minimal_workspace()
+    ws["expert_docs"] = [
+        {"name": "review-2025", "path": "references/expert/review-2025.pdf", "sha256": "abc123def456"},
+        {"name": "notes", "path": "references/expert/notes.md"},  # no sha256 — still valid
+    ]
+    validator.validate(ws)
+
+
+def test_references_pdfs_validates(validator):
+    """references_pdfs array with required fields (v0.1.9)."""
+    ws = _minimal_workspace()
+    ws["references_pdfs"] = [
+        {
+            "bib_key": "Bremer1996",
+            "path": "references/papers/Bremer1996.pdf",
+            "sha256": "deadbeefcafe1234deadbeefcafe1234deadbeefcafe1234deadbeefcafe1234",
+        }
+    ]
+    validator.validate(ws)
+
+
+def test_references_pdfs_missing_sha256_fails(validator):
+    """referencePdf requires sha256 (v0.1.9)."""
+    ws = _minimal_workspace()
+    ws["references_pdfs"] = [
+        {"bib_key": "Bremer1996", "path": "references/papers/Bremer1996.pdf"}
+        # sha256 missing — should fail
+    ]
+    with pytest.raises(ValidationError):
+        validator.validate(ws)
+
+
 def test_missing_schema_version_fails(validator):
     ws = _minimal_workspace()
     del ws["schema_version"]
