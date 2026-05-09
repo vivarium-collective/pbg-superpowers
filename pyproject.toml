@@ -1,0 +1,24 @@
+[project]
+name = "pbg-superpowers"
+version = "0.1.0"
+description = "Plugin Python helpers for the pbg-superpowers skills"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+    "jsonschema>=4.21",
+    "jinja2>=3.1",
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "pytest-cov>=4.1"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pbg_superpowers"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
