@@ -14,6 +14,7 @@
 ./pyproject.toml
 ./references/README.md
 ./references/claims.yaml
+./references/expert/.keep
 ./references/notes/.keep
 ./references/papers.bib
 ./reports/assets/.keep
@@ -38,6 +39,7 @@
 ./scripts/_templates/_assets/render-helpers.js
 ./scripts/_templates/_assets/style.css
 ./scripts/_templates/index.html.j2
+./scripts/_templates/model_index.html.j2
 ./scripts/add-acceptance.sh
 ./scripts/add-dataset.sh
 ./scripts/add-phase-plan.sh
@@ -46,6 +48,7 @@
 ./scripts/evaluate-phase-gate.sh
 ./scripts/lint-workspace.py
 ./scripts/render-dashboard.py
+./scripts/render-model-report.py
 ./scripts/serve.sh
 ./scripts/start-phase.sh
 ./workspace.yaml
