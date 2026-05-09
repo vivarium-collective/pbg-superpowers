@@ -52,3 +52,17 @@ acceptance_tests: []
 """
     with pytest.raises(PhaseValidationError):
         parse_phase_md(bad)
+
+
+def test_parse_handles_no_trailing_newline():
+    """File without trailing newline after closing --- must still parse."""
+    text = SAMPLE.rstrip("\n")
+    fm, body = parse_phase_md(text)
+    assert fm["phase"] == 1
+
+
+def test_parse_handles_crlf_line_endings():
+    """Windows CRLF line endings should be normalized."""
+    text = SAMPLE.replace("\n", "\r\n")
+    fm, body = parse_phase_md(text)
+    assert fm["phase"] == 1

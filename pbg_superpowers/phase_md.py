@@ -11,7 +11,7 @@ class PhaseValidationError(Exception):
     """Raised when phase-N.md frontmatter is invalid."""
 
 
-_FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.DOTALL)
+_FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.DOTALL)
 
 
 def _schema_path() -> Path:
@@ -23,6 +23,7 @@ def _validator() -> Draft7Validator:
 
 
 def parse_phase_md(text: str) -> tuple[dict, str]:
+    text = text.replace("\r\n", "\n")
     m = _FRONTMATTER_RE.match(text)
     if not m:
         raise PhaseValidationError("phase-N.md must start with YAML frontmatter delimited by ---")
