@@ -36,7 +36,6 @@ def test_scaffold_creates_expected_files(tmp_path, plugin_root):
         ".gitignore",
         ".claude/settings.json",
         "docs/decisions.yaml",
-        "datasets/_index.yaml",
         "references/papers.bib",
         "references/claims.yaml",
         "experiments/_runs.yaml",
@@ -50,8 +49,10 @@ def test_scaffold_creates_expected_files(tmp_path, plugin_root):
 
     # template-init.sh should have self-deleted
     assert not (target / "template-init.sh").exists()
-    # .j2 files should have been rendered (and removed)
-    assert not list(target.rglob("*.j2"))
+    # init-time .j2 files should have been rendered (and removed); the dashboard's
+    # runtime templates under scripts/_templates/ are intentionally preserved.
+    leftover_j2 = [p for p in target.rglob("*.j2") if "scripts/_templates" not in str(p)]
+    assert not leftover_j2, f"unexpected .j2 leftovers: {leftover_j2}"
     # .git from the source should have been stripped
     assert not (target / ".git").exists()
 
@@ -61,7 +62,7 @@ def test_scaffold_workspace_yaml_validates(tmp_path, plugin_root):
     ws = yaml.safe_load((target / "workspace.yaml").read_text())
     assert ws["name"] == "my-research"
     assert ws["schema_version"] == 1
-    assert ws["plugin_version"] == "0.1.0"
+    assert ws["plugin_version"] == "0.1.1"
     assert ws["stages"]["workspace_bootstrap"]["status"] == "complete"
 
 
