@@ -143,3 +143,152 @@ def test_external_model_validates(validator):
         }
     }
     validator.validate(ws)
+
+
+def test_observable_validates(validator):
+    """observable entries with all fields validate (v0.2.0)."""
+    ws = _minimal_workspace()
+    ws["models"] = {
+        "chromosome-rep1": {
+            "submodule_path": "models/chromosome-rep1",
+            "remote": "git@github.com:eagmon/chromosome-rep1.git",
+            "pbg_processes": [],
+            "stages": {},
+            "observables": [
+                {
+                    "name": "DnaA",
+                    "store_path": "chromosome.DnaA_count",
+                    "units": "molecules",
+                    "description": "DnaA protein count in the chromosome compartment",
+                },
+                {
+                    "name": "cell_mass",
+                    "store_path": "cell.mass",
+                    # units and description are optional — omit to test
+                },
+            ],
+        }
+    }
+    validator.validate(ws)
+
+
+def test_observable_missing_store_path_fails(validator):
+    """observable without store_path must fail validation (v0.2.0)."""
+    ws = _minimal_workspace()
+    ws["models"] = {
+        "chromosome-rep1": {
+            "submodule_path": "models/chromosome-rep1",
+            "remote": "git@github.com:eagmon/chromosome-rep1.git",
+            "pbg_processes": [],
+            "stages": {},
+            "observables": [
+                {"name": "DnaA"},  # store_path missing — must fail
+            ],
+        }
+    }
+    with pytest.raises(ValidationError):
+        validator.validate(ws)
+
+
+def test_visualization_validates(validator):
+    """visualization entries with required + optional fields validate (v0.2.0)."""
+    ws = _minimal_workspace()
+    ws["models"] = {
+        "chromosome-rep1": {
+            "submodule_path": "models/chromosome-rep1",
+            "remote": "git@github.com:eagmon/chromosome-rep1.git",
+            "pbg_processes": [],
+            "stages": {},
+            "observables": [
+                {"name": "DnaA", "store_path": "chromosome.DnaA_count"},
+            ],
+            "visualizations": [
+                {
+                    "name": "dnaA-trajectory",
+                    "type": "time-series",
+                    "observables": ["DnaA"],
+                    "config": {"y_label": "DnaA (molecules)"},
+                },
+                {
+                    "name": "dnaA-histogram",
+                    "type": "histogram",
+                    "observables": ["DnaA"],
+                    # config is optional — omit to test
+                },
+            ],
+        }
+    }
+    validator.validate(ws)
+
+
+def test_visualization_invalid_type_fails(validator):
+    """visualization with an unrecognised type must fail validation (v0.2.0)."""
+    ws = _minimal_workspace()
+    ws["models"] = {
+        "chromosome-rep1": {
+            "submodule_path": "models/chromosome-rep1",
+            "remote": "git@github.com:eagmon/chromosome-rep1.git",
+            "pbg_processes": [],
+            "stages": {},
+            "visualizations": [
+                {
+                    "name": "bad-viz",
+                    "type": "scatter-plot",  # not in enum — must fail
+                    "observables": ["DnaA"],
+                },
+            ],
+        }
+    }
+    with pytest.raises(ValidationError):
+        validator.validate(ws)
+
+
+def test_source_artifact_in_phase_validates(validator):
+    """phase with optional source_artifact field validates (v0.2.0)."""
+    ws = _minimal_workspace()
+    ws["models"] = {
+        "chromosome-rep1": {
+            "submodule_path": "models/chromosome-rep1",
+            "remote": "git@github.com:eagmon/chromosome-rep1.git",
+            "pbg_processes": [],
+            "stages": {},
+            "phases": [
+                {
+                    "n": 1,
+                    "name": "DnaA accumulation",
+                    "status": "planned",
+                    "source_artifact": {
+                        "kind": "expert_doc",
+                        "ref": "replication-review-2025",
+                    },
+                },
+            ],
+        }
+    }
+    validator.validate(ws)
+
+
+def test_source_artifact_invalid_kind_fails(validator):
+    """phase source_artifact with an invalid kind must fail (v0.2.0)."""
+    ws = _minimal_workspace()
+    ws["models"] = {
+        "chromosome-rep1": {
+            "submodule_path": "models/chromosome-rep1",
+            "remote": "git@github.com:eagmon/chromosome-rep1.git",
+            "pbg_processes": [],
+            "stages": {},
+            "phases": [
+                {
+                    "n": 1,
+                    "name": "DnaA accumulation",
+                    "status": "planned",
+                    "source_artifact": {
+                        "kind": "bogus-kind",  # not in enum — must fail
+                        "ref": "some-doc",
+                    },
+                },
+            ],
+        }
+    }
+    with pytest.raises(ValidationError):
+        validator.validate(ws)
