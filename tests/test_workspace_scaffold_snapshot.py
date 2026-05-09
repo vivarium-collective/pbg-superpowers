@@ -26,7 +26,8 @@ def test_scaffold_matches_manifest(tmp_path, plugin_root, fixtures_dir):
     )
     actual = sorted(
         "./" + str(p.relative_to(target))
-        for p in target.rglob("*") if p.is_file()
+        for p in target.rglob("*")
+        if p.is_file() and "__pycache__" not in str(p.relative_to(target))
     )
     expected = sorted(
         line.strip()

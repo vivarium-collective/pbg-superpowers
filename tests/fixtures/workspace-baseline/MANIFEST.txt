@@ -17,11 +17,14 @@
 ./references/expert/.keep
 ./references/notes/.keep
 ./references/papers.bib
+./references/papers/.keep
 ./reports/assets/.keep
 ./reports/index.html
 ./scripts/_lib/__init__.py
 ./scripts/_lib/_root.py
+./scripts/_lib/bibtex.py
 ./scripts/_lib/imports.py
+./scripts/_lib/pdf_metadata.py
 ./scripts/_lib/phase_files.py
 ./scripts/_lib/phase_gate.py
 ./scripts/_lib/phase_md.py
