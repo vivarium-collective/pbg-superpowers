@@ -11,7 +11,7 @@ class WorkspaceValidationError(Exception):
 
 
 def _schema_path() -> Path:
-    return Path(__file__).resolve().parents[1] / "tests" / "schemas" / "workspace.schema.json"
+    return Path(__file__).parent / "schemas" / "workspace.schema.json"
 
 
 def _validator() -> Draft7Validator:

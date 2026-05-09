@@ -15,4 +15,4 @@ def fixtures_dir(plugin_root) -> Path:
 
 @pytest.fixture
 def schemas_dir(plugin_root) -> Path:
-    return plugin_root / "tests" / "schemas"
+    return plugin_root / "pbg_superpowers" / "schemas"
