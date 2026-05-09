@@ -46,6 +46,18 @@ Stage 7 of the canonical PR flow. Operates in the model repo (the submodule).
 10. **Report refresh** — `/pbg-report` produces the per-model deep dive (deferred until Task 21).
 11. **gh handoff** — print `gh pr create`; offer to run with explicit consent.
 
+## External models (external: true)
+
+For in-place imports (`workspace.yaml.models.<name>.external == true`):
+- The composer dispatch operates against the existing model repo's structure.
+- The registry snapshot is written to `models/<name>/tests/registry-snapshot.json`
+  AS IS (no convention-rewriting in upstream). If the upstream has no `tests/`
+  directory, write to `models-overlay/<name>/tests/registry-snapshot.json`
+  instead — the workspace owns this overlay path.
+- Baseline plots / PBG document tree write to `models-overlay/<name>/reports/assets/`
+  rather than into the upstream repo, keeping it clean.
+- The PR_BODY targets the upstream remote.
+
 ## Sub-skill rollback
 
 If `/pbg-composer` fails:

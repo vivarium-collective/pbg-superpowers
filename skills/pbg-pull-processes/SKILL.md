@@ -32,6 +32,21 @@ Stage 3 of the canonical PR flow. Operates inside `models/<name>/` (the submodul
 8. **Report refresh** — call `/pbg-report` (deferred until Task 21 lands).
 9. **gh handoff** — print `gh pr create`; offer to run with explicit consent.
 
+## External models (external: true)
+
+If `workspace.yaml.models.<name>.external` is `true`, this model is an in-place
+import (the workspace doesn't own its repo). The skill's behavior changes:
+
+- The model directory is the existing repo's checkout; pull-processes still installs
+  required pbg-* deps and patches `pbg_<slug>/core.py` (or its equivalent — read the
+  upstream repo to learn its convention).
+- The PR_BODY notes that this PR opens against the **upstream remote**
+  (`models.<name>.remote`), not a workspace-owned remote.
+- Sub-skill rollback rules apply equally; the upstream repo is treated like any
+  other model for safety purposes (no force-push, never push to its main).
+- If the upstream uses a different `core.py` convention, the skill prompts the
+  user to confirm the registration approach before patching.
+
 ## Sub-skill rollback (per spec §12 rule 12)
 
 If `/pbg-expert <tool>` fails partway through, the parent skill MUST:

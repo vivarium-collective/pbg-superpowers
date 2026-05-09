@@ -12,6 +12,7 @@ EXPECTED_SKILLS = {
     "pbg-workspace", "pbg-add-model", "pbg-pull-processes", "pbg-data",
     "pbg-expert-input", "pbg-baseline", "pbg-phase-plan", "pbg-phase",
     "pbg-server", "pbg-report", "pbg-expert", "pbg-composer",
+    "pbg-import-models",
 }
 
 

@@ -62,3 +62,16 @@ If a dispatched `/pbg-expert` invocation fails partway:
 - Append a decision entry to `docs/decisions.yaml`.
 - Surface the failure in `PR_BODY.md`.
 - Continue with non-blocking implementation tasks if any remain; otherwise mark `status: gate_pending` and stop.
+
+## External models (external: true)
+
+For in-place imports (`workspace.yaml.models.<name>.external == true`):
+- Phase plan and per-phase markdown live at `models-overlay/<name>/phases/` rather
+  than `models/<name>/phases/`. The workspace owns coordination state; the upstream
+  repo stays clean.
+- `tests/test_phases.py` and the phase-gate runner still target the upstream's
+  test directory (so acceptance tests live where the model code does).
+- Deliverables (`models-overlay/<name>/phases/deliverables/phase-N-*`) are
+  workspace-owned.
+- The PR_BODY targets the upstream remote; `gh pr create` resolves the model's
+  upstream and opens the PR there.

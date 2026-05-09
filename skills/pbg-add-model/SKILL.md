@@ -17,6 +17,19 @@ Stage 1+2 of the canonical PR flow. Coordinated cross-repo operation.
 - Working tree clean (no uncommitted changes in the workspace repo).
 - `git` available; `gh` only required if `--remote` creates a new GitHub repo.
 
+## Optional: seeding from an imported model
+
+`/pbg-add-model` accepts two flags that consume entries from the workspace's
+imports catalog (populated by `/pbg-import-models`):
+
+- `--from-import <import-name>` — only valid for `fork-source` and `reference` mode imports.
+  - With `fork-source`: clones the source, scaffolds the new model on top of it (the new model owns its history; the source is unmodified).
+  - With `reference`: scaffolds a fresh model and copies a user-selected subset of files from `external/<import-name>/` into the new model's `pbg_<slug>/` (per-file cherry-pick; record source SHA in `docs/decisions.yaml`).
+
+- `--register-existing <import-name>` — only valid for `in-place` mode imports. Skips scaffolding entirely (the import already brought the repo in as `models/<import-name>/`); just confirms the model entry's `external: true` flag and runs the standard contract for the rest of stage 1+2.
+
+If the named import doesn't exist in the catalog, the skill aborts with a clear message and lists available imports.
+
 ## Lifecycle (per spec §7)
 
 1. **Pre-flight** — read workspace.yaml; refuse if model name conflicts with an existing entry; refuse if working tree dirty (offer commit/stash/abort).
