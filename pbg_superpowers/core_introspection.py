@@ -5,10 +5,14 @@ exposes (list_processes / registered_links / etc.) — they fail loudly if
 no introspection method is available.
 """
 from __future__ import annotations
-from typing import Any, Iterable
+from typing import Any
 
 
-def _try(core: Any, *attrs: str) -> Iterable[str] | None:
+_PROCESS_ATTRS = ("list_processes", "registered_links", "_links")
+_TYPE_ATTRS = ("list_types", "_types", "registered_types")
+
+
+def _try(core: Any, *attrs: str) -> list[str] | None:
     for a in attrs:
         m = getattr(core, a, None)
         if callable(m):
@@ -19,16 +23,20 @@ def _try(core: Any, *attrs: str) -> Iterable[str] | None:
 
 
 def list_processes(core: Any) -> list[str]:
-    res = _try(core, "list_processes", "registered_links", "_links")
+    res = _try(core, *_PROCESS_ATTRS)
     if res is None:
-        raise RuntimeError("core has no inspectable process registry")
+        raise RuntimeError(
+            f"core has no inspectable process registry (tried: {', '.join(_PROCESS_ATTRS)})"
+        )
     return sorted(res)
 
 
 def list_types(core: Any) -> list[str]:
-    res = _try(core, "list_types", "_types", "registered_types")
+    res = _try(core, *_TYPE_ATTRS)
     if res is None:
-        raise RuntimeError("core has no inspectable type registry")
+        raise RuntimeError(
+            f"core has no inspectable type registry (tried: {', '.join(_TYPE_ATTRS)})"
+        )
     return sorted(res)
 
 
