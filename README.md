@@ -42,7 +42,8 @@ requiring this plugin.
 | Skill | Stage | Repo target | Responsibility |
 |---|---|---|---|
 | `/pbg-workspace` | 0 | workspace | Scaffold a workspace by cloning `pbg-template` |
-| `/pbg-add-model <name>` | 1+2 | both | Register a new model (cross-repo coordinated) |
+| `/pbg-import-models <name> --source --ref --mode` | 0.5 | workspace | Register external models in 3 modes: `reference`, `fork-source`, `in-place` |
+| `/pbg-add-model <name> [--from-import]` | 1+2 | both | Register a new model (cross-repo coordinated); optional seeding from an import |
 | `/pbg-pull-processes <model>` | 3 | model | Install pbg-* deps; dispatch `/pbg-expert` for missing |
 | `/pbg-data <model>` | 4+5 | workspace | Datasets + paper references curation |
 | `/pbg-expert-input <model>` | 6 | model | Capture expectations as `if X then Y` acceptance tests |
