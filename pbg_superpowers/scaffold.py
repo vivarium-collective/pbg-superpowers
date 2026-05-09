@@ -104,15 +104,18 @@ def workspace(name: str, target: Path, template_source: str | None) -> None:
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
 
-def _render_text(text: str, vars: dict) -> str:
-    """Replace `{{ key }}` (with or without internal whitespace) using vars dict."""
-    return _PLACEHOLDER.sub(lambda m: str(vars.get(m.group(1), m.group(0))), text)
+def _render_text(text: str, substitutions: dict) -> str:
+    """Replace `{{ key }}` (with or without internal whitespace) using substitutions dict."""
+    return _PLACEHOLDER.sub(lambda m: str(substitutions.get(m.group(1), m.group(0))), text)
 
 
-def _render_template_tree(src: Path, dst: Path, vars: dict) -> None:
+def _render_template_tree(src: Path, dst: Path, substitutions: dict) -> None:
     """Copy src → dst rendering .j2 files. .keep files stay as empty markers."""
-    if dst.exists() and any(dst.iterdir()):
-        raise click.ClickException(f"{dst} exists and is non-empty")
+    if dst.exists():
+        if not dst.is_dir():
+            raise click.ClickException(f"{dst} exists and is not a directory")
+        if any(dst.iterdir()):
+            raise click.ClickException(f"{dst} exists and is non-empty")
     dst.mkdir(parents=True, exist_ok=True)
     for src_file in sorted(p for p in src.rglob("*") if p.is_file()):
         rel = src_file.relative_to(src)
@@ -120,7 +123,7 @@ def _render_template_tree(src: Path, dst: Path, vars: dict) -> None:
         out_path = dst / out_rel
         out_path.parent.mkdir(parents=True, exist_ok=True)
         if src_file.suffix == ".j2":
-            out_path.write_text(_render_text(src_file.read_text(), vars))
+            out_path.write_text(_render_text(src_file.read_text(), substitutions))
         else:
             shutil.copy2(src_file, out_path)
 
