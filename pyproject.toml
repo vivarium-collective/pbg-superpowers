@@ -22,6 +22,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pbg_superpowers"]
+# templates/ and server/ live outside the package but are required at runtime
+# (report renderer, scaffold helper, server scripts). Force-include them in the
+# wheel so non-editable installs still work.
+[tool.hatch.build.targets.wheel.force-include]
+"templates" = "pbg_superpowers/_templates"
+"server" = "pbg_superpowers/_server"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

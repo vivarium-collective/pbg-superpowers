@@ -24,8 +24,12 @@ Stage 0 of the canonical PR flow. Operates on a brand-new workspace directory.
    - `cd $TARGET && git init -q`
    - `uv venv .venv && source .venv/bin/activate`
    - `uv pip install -e .[dev]` (workspace's own pyproject)
-   - `uv pip install -e $PBG_PLUGIN` (so `pbg-scaffold` is on PATH for later /pbg-add-model calls)
    - `git add -A && git commit -m 'feat(stage-0): workspace bootstrap'`
+
+   Note: subsequent `/pbg-*` skills invoke the plugin via `python -m pbg_superpowers.scaffold`
+   (or other module paths) from the Claude Code host environment, NOT from inside the
+   workspace `.venv`. The workspace `.venv` only needs to install the workspace's own
+   `pyproject.toml` deps for `pytest` and model imports.
 5. **Verify** — `python scripts/lint-workspace.py` must print `workspace lint: OK`.
 6. **PR_BODY.md** — write at workspace root with the bootstrap checklist.
 7. **Update workspace.yaml** — already marked complete by `template-init.sh`; nothing to do.

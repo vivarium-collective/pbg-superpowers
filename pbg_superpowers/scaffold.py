@@ -141,7 +141,8 @@ def _rename_placeholder_pkg(target: Path, slug: str) -> None:
 @click.option("--target", required=True, type=click.Path(path_type=Path),
               help="Target directory (must not exist or be empty)")
 def model(model_name: str, model_slug: str, target: Path) -> None:
-    src = Path(__file__).parent.parent / "templates" / "model"
+    from ._resources import resource_dir
+    src = resource_dir("templates") / "model"
     if not src.is_dir():
         raise click.ClickException(f"model template missing at {src}")
     _render_template_tree(src, target, {

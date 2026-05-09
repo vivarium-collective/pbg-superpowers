@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+from ._resources import resource_dir
 
 
 def _env(template_dir: Path) -> Environment:
@@ -22,11 +22,14 @@ def _env(template_dir: Path) -> Environment:
 def _copy_assets(target_assets_dir: Path) -> None:
     """Copy static assets (style.css, render-helpers.js, optional client.js)."""
     target_assets_dir.mkdir(parents=True, exist_ok=True)
-    src = PLUGIN_ROOT / "templates" / "_assets"
+    src = resource_dir("templates") / "_assets"
     for name in ("style.css", "render-helpers.js"):
         shutil.copy2(src / name, target_assets_dir / name)
     # Optional: copy client.js for live mode if it exists in the plugin
-    client_js = PLUGIN_ROOT / "server" / "client.js"
+    try:
+        client_js = resource_dir("server") / "client.js"
+    except RuntimeError:
+        return
     if client_js.exists():
         shutil.copy2(client_js, target_assets_dir / "client.js")
 
@@ -40,7 +43,7 @@ def render_workspace_report(ws_root: Path, *, today: str | None = None) -> Path:
         (yaml.safe_load(decisions_file.read_text()) or {}).get("decisions", [])
         if decisions_file.exists() else []
     )
-    env = _env(PLUGIN_ROOT / "templates" / "workspace" / "reports")
+    env = _env(resource_dir("templates") / "workspace" / "reports")
     tpl = env.get_template("index.html.j2")
     out = ws_root / "reports" / "index.html"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -63,7 +66,7 @@ def render_model_report(
     today = today or date.today().isoformat()
     ws = yaml.safe_load((ws_root / "workspace.yaml").read_text())
     model = ws["models"][model_name]
-    env = _env(PLUGIN_ROOT / "templates" / "model" / "reports")
+    env = _env(resource_dir("templates") / "model" / "reports")
     tpl = env.get_template("index.html.j2")
     out = ws_root / "models" / model_name / "reports" / "index.html"
     out.parent.mkdir(parents=True, exist_ok=True)
