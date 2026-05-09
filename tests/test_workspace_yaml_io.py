@@ -9,7 +9,7 @@ from pbg_superpowers.workspace_yaml import (
 def test_load_save_roundtrip(tmp_path):
     p = tmp_path / "workspace.yaml"
     data = {
-        "schema_version": 1, "name": "x", "created": "2026-05-09",
+        "schema_version": 2, "name": "x", "created": "2026-05-09",
         "plugin_version": "0.1.0",
         "stages": {"workspace_bootstrap": {"status": "complete", "pr": 1, "completed": "2026-05-09"}},
     }
@@ -35,7 +35,7 @@ def test_save_validates_before_writing(tmp_path):
 def test_validate_rejects_bad_date_format():
     """The schema declares created: format=date. Validator must enforce it."""
     bad = {
-        "schema_version": 1, "name": "x", "created": "not-a-date",
+        "schema_version": 2, "name": "x", "created": "not-a-date",
         "plugin_version": "0.1.0",
         "stages": {"workspace_bootstrap": {"status": "complete"}},
     }
