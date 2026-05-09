@@ -9,6 +9,7 @@ workspace name piped on stdin.
 """
 from __future__ import annotations
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -98,6 +99,54 @@ def cli() -> None:
 def workspace(name: str, target: Path, template_source: str | None) -> None:
     out = scaffold_workspace(target, name, template_source)
     click.echo(f"workspace scaffolded at {out}")
+
+
+_PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+
+
+def _render_text(text: str, vars: dict) -> str:
+    """Replace `{{ key }}` (with or without internal whitespace) using vars dict."""
+    return _PLACEHOLDER.sub(lambda m: str(vars.get(m.group(1), m.group(0))), text)
+
+
+def _render_template_tree(src: Path, dst: Path, vars: dict) -> None:
+    """Copy src → dst rendering .j2 files. .keep files stay as empty markers."""
+    if dst.exists() and any(dst.iterdir()):
+        raise click.ClickException(f"{dst} exists and is non-empty")
+    dst.mkdir(parents=True, exist_ok=True)
+    for src_file in sorted(p for p in src.rglob("*") if p.is_file()):
+        rel = src_file.relative_to(src)
+        out_rel = Path(str(rel).removesuffix(".j2"))
+        out_path = dst / out_rel
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if src_file.suffix == ".j2":
+            out_path.write_text(_render_text(src_file.read_text(), vars))
+        else:
+            shutil.copy2(src_file, out_path)
+
+
+def _rename_placeholder_pkg(target: Path, slug: str) -> None:
+    """Rename the literal `pbg_<model>` dir to `pbg_<slug>`."""
+    placeholder = target / "pbg_<model>"
+    if placeholder.exists():
+        placeholder.rename(target / f"pbg_{slug}")
+
+
+@cli.command()
+@click.option("--model-name", required=True, help="Human-readable model name (e.g. ecoli-replication)")
+@click.option("--model-slug", required=True, help="Python-importable slug (e.g. ecoli_replication)")
+@click.option("--target", required=True, type=click.Path(path_type=Path),
+              help="Target directory (must not exist or be empty)")
+def model(model_name: str, model_slug: str, target: Path) -> None:
+    src = Path(__file__).parent.parent / "templates" / "model"
+    if not src.is_dir():
+        raise click.ClickException(f"model template missing at {src}")
+    _render_template_tree(src, target, {
+        "model_name": model_name,
+        "model_slug": model_slug,
+    })
+    _rename_placeholder_pkg(target, model_slug)
+    click.echo(f"model scaffolded at {target}")
 
 
 if __name__ == "__main__":
