@@ -28,7 +28,6 @@ def _skill_files(plugin_root: Path) -> list[Path]:
     return sorted((plugin_root / "skills").glob("*/SKILL.md"))
 
 
-@pytest.mark.xfail(reason="skills added incrementally across milestones; xfail dropped in Task 26")
 def test_all_expected_skills_present(plugin_root):
     found = {p.parent.name for p in _skill_files(plugin_root)}
     missing = EXPECTED_SKILLS - found
