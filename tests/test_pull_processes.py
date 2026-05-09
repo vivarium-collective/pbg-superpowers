@@ -35,17 +35,15 @@ def test_install_fixture_wrapper_into_model(tmp_path, plugin_root, fixtures_dir)
          "--model-name", "m", "--model-slug", "m", "--target", str(model_dir)],
         check=True, cwd=plugin_root,
     )
-    # 2. Workspace venv + install the fake-tool fixture and the plugin.
-    #    The model package itself is NOT installed as a dist; its directory is
-    #    injected via PYTHONPATH so that `pbg_m` is importable. This avoids
-    #    setuptools flat-layout discovery errors from the model template's
-    #    pyproject.toml and matches how /pbg-pull-processes actually works
-    #    (wrapper packages are installed editably; model code is path-local).
+    # 2. Workspace venv + install the fake-tool fixture, the model (editable),
+    #    and the plugin. The model template uses hatchling with explicit packages,
+    #    so `uv pip install -e <model>` works without flat-layout discovery issues.
     subprocess.run(["uv", "venv", ".venv"], cwd=ws, check=True)
     venv_python = str(ws / ".venv" / "bin" / "python")
     fake = fixtures_dir / "pbg-fake-tool"
     subprocess.run(
-        ["uv", "pip", "install", "-e", str(fake), "-e", str(plugin_root)],
+        ["uv", "pip", "install",
+         "-e", str(fake), "-e", str(model_dir), "-e", str(plugin_root)],
         cwd=ws, check=True,
         env={**os.environ, "VIRTUAL_ENV": str(ws / ".venv")},
     )
@@ -79,20 +77,12 @@ def test_install_fixture_wrapper_into_model(tmp_path, plugin_root, fixtures_dir)
             core.register_link("FakeProcess", FakeProcess)
             return core
     """))
-    # 4. Verify build_core() registers FakeProcess via the plugin's introspector.
-    #    model_dir is added to PYTHONPATH so `pbg_m` is importable without
-    #    installing the model as a distribution package.
-    env = {
-        **os.environ,
-        "VIRTUAL_ENV": str(ws / ".venv"),
-        "PYTHONPATH": str(model_dir),
-    }
+    # 4. Verify build_core() registers FakeProcess via the plugin's introspector
     out = subprocess.run(
         [venv_python, "-c",
          "from pbg_m.core import build_core; "
          "from pbg_superpowers.core_introspection import list_processes; "
          "print(list_processes(build_core()))"],
         check=True, capture_output=True, text=True,
-        env=env,
     )
     assert "FakeProcess" in out.stdout
