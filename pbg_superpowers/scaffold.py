@@ -41,13 +41,20 @@ def _acquire(source: str, target: Path) -> None:
         src = Path(os.path.expanduser(source)).resolve()
         if not src.is_dir():
             raise click.ClickException(f"local template source not a directory: {src}")
-        # cp -R into target (target should not yet exist or must be empty)
-        shutil.copytree(src, target, dirs_exist_ok=False, ignore=shutil.ignore_patterns(".git"))
+        # Allow target to be a pre-existing empty dir (scaffold_workspace already
+        # rejected non-empty); dirs_exist_ok=True lets copytree overlay into it.
+        shutil.copytree(src, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
     else:
-        subprocess.run(
-            ["git", "clone", "--depth", "1", source, str(target)],
-            check=True,
-        )
+        try:
+            subprocess.run(
+                ["git", "clone", "--depth", "1", source, str(target)],
+                check=True,
+            )
+        except subprocess.CalledProcessError:
+            # Don't leave a partial clone on disk; subsequent runs would
+            # otherwise fail the "exists and is non-empty" guard.
+            shutil.rmtree(target, ignore_errors=True)
+            raise click.ClickException(f"git clone failed for source: {source}")
         # remove the cloned .git so the new workspace gets a fresh history
         shutil.rmtree(target / ".git", ignore_errors=True)
 
@@ -56,11 +63,16 @@ def _render(target: Path, workspace_name: str) -> None:
     init_script = target / "template-init.sh"
     if not init_script.exists():
         raise click.ClickException(f"template-init.sh missing in source: {init_script}")
-    subprocess.run(
-        ["bash", str(init_script)],
-        input=f"{workspace_name}\n",
-        text=True, cwd=target, check=True,
-    )
+    try:
+        subprocess.run(
+            ["bash", str(init_script)],
+            input=f"{workspace_name}\n",
+            text=True, cwd=target, check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise click.ClickException(
+            f"template-init.sh exited {e.returncode} (workspace name: {workspace_name})"
+        ) from e
 
 
 def scaffold_workspace(target: Path, workspace_name: str, source: str | None = None) -> Path:
