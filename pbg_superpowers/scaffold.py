@@ -17,7 +17,7 @@ from pathlib import Path
 import click
 
 
-DEFAULT_REMOTE = "https://github.com/eagmon/pbg-template.git"
+DEFAULT_REMOTE = "https://github.com/vivarium-collective/pbg-template.git"
 
 
 def _looks_like_path(s: str) -> bool:

@@ -24,7 +24,7 @@ jobs:
           # The integration tests skip cleanly when ~/code/pbg-template isn't
           # present, but in CI we want to actually run them. Clone the template
           # to the expected path before pytest collects.
-          PBG_TEMPLATE_REPO: https://github.com/eagmon/pbg-template.git
+          PBG_TEMPLATE_REPO: https://github.com/vivarium-collective/pbg-template.git
         run: |
           mkdir -p ~/code
           if [ ! -d ~/code/pbg-template ]; then

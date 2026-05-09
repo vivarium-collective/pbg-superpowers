@@ -38,7 +38,7 @@ Stage 0 of the canonical PR flow. Operates on a brand-new workspace directory.
 
 ## Source-of-template options
 
-- Default: clones `https://github.com/eagmon/pbg-template.git`.
+- Default: clones `https://github.com/vivarium-collective/pbg-template.git`.
 - Override via `--template-source <path-or-url>` or `$PBG_TEMPLATE` env var.
 - During development, point at `~/code/pbg-template/` to use the local copy.
 

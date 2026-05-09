@@ -31,7 +31,7 @@ Optional dashboard:
 
 ## Two repos
 
-This plugin works with a sibling repo, [`pbg-template`](https://github.com/eagmon/pbg-template),
+This plugin works with a sibling repo, [`pbg-template`](https://github.com/vivarium-collective/pbg-template),
 which `/pbg-workspace` clones to scaffold new workspaces. You can also use
 `pbg-template` directly via GitHub's "Use this template" button — the
 `template-init.sh` in that repo produces the same structure without
