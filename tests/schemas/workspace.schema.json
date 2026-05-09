@@ -7,7 +7,7 @@
     "schema_version": {"const": 1},
     "name": {"type": "string", "minLength": 1},
     "created": {"type": "string", "format": "date"},
-    "plugin_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+"},
+    "plugin_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
     "stages": {
       "type": "object",
       "required": ["workspace_bootstrap"],

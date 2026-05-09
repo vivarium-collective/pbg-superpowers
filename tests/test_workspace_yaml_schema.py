@@ -1,6 +1,5 @@
 import json
 import pytest
-import yaml
 from jsonschema import Draft7Validator, ValidationError
 
 
