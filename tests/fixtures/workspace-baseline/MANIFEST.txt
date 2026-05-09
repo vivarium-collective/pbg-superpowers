@@ -1,4 +1,5 @@
 ./.claude/settings.json
+./.github/workflows/workspace-ci.yml
 ./.gitignore
 ./.pbg/schemas/phase.schema.json
 ./.pbg/schemas/workspace.schema.json
