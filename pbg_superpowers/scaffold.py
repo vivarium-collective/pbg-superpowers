@@ -153,5 +153,85 @@ def model(model_name: str, model_slug: str, target: Path) -> None:
     click.echo(f"model scaffolded at {target}")
 
 
+@cli.command("import-model")
+@click.option("--workspace", required=True, type=click.Path(path_type=Path),
+              help="Workspace root (must contain workspace.yaml).")
+@click.option("--name", required=True, help="Catalog name for this import.")
+@click.option("--source", required=True, help="Git URL or local path of the external repo.")
+@click.option("--ref", default="main", help="Git ref (tag, branch, commit) to pin (default: main).")
+@click.option("--mode", required=True,
+              type=click.Choice(["reference", "fork-source", "in-place"]),
+              help="reference (read-only), fork-source (catalog only), or in-place (submodule under models/).")
+@click.option("--description", default=None, help="Optional human-readable description.")
+def import_model(workspace: Path, name: str, source: str, ref: str,
+                 mode: str, description: str | None) -> None:
+    """Register an external model in the workspace's imports catalog.
+
+    For mode='reference': also adds <source> as a submodule under external/<name>/
+    (or copies it if <source> is a local path).
+
+    For mode='fork-source': only registers the catalog entry; no checkout happens
+    until /pbg-add-model --from-import <name> consumes it.
+
+    For mode='in-place': adds <source> as a submodule under models/<name>/ and
+    marks the model entry external=true. Use this when you want to operate
+    on an existing model repo without forking.
+    """
+    from .imports import register_import
+    from .workspace_yaml import load_workspace, save_workspace
+
+    ws = workspace.resolve()
+    if not (ws / "workspace.yaml").exists():
+        raise click.ClickException(f"workspace.yaml missing at {ws}")
+
+    # Compute the path on disk (mode-dependent)
+    if mode == "reference":
+        path = f"external/{name}"
+    elif mode == "in-place":
+        path = f"models/{name}"
+    else:
+        path = None
+
+    # 1. Register in catalog (validates schema)
+    register_import(
+        ws, name=name, source=source, ref=ref, mode=mode,
+        path=path, description=description,
+    )
+
+    # 2. For reference + in-place modes: actually add the submodule
+    if mode in ("reference", "in-place"):
+        target_dir = ws / path
+        if target_dir.exists():
+            click.echo(f"target {path} already exists; skipping submodule add", err=True)
+        else:
+            target_dir.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["git", "-C", str(ws),
+                 "-c", "protocol.file.allow=always",
+                 "submodule", "add", source, path],
+                check=True,
+            )
+            # Pin to ref
+            subprocess.run(
+                ["git", "-C", str(target_dir), "checkout", ref],
+                check=True,
+            )
+
+    # 3. For in-place mode: also mark the model as external in workspace.yaml.models
+    if mode == "in-place":
+        ws_data = load_workspace(ws / "workspace.yaml")
+        models = ws_data.setdefault("models", {})
+        models[name] = {
+            "submodule_path": path,
+            "remote": source,
+            "pbg_processes": [],
+            "stages": {"add_model": {"status": "complete", "pr": None, "completed": "2026-05-09"}},
+            "external": True,
+        }
+        save_workspace(ws / "workspace.yaml", ws_data)
+
+    click.echo(f"import '{name}' registered (mode={mode})")
+
+
 if __name__ == "__main__":
     cli()

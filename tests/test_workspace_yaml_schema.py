@@ -69,3 +69,43 @@ def test_phase_n_must_be_positive(validator):
     }
     with pytest.raises(ValidationError):
         validator.validate(ws)
+
+
+def test_imports_validates(validator):
+    ws = _minimal_workspace()
+    ws["imports"] = {
+        "v2ecoli": {
+            "source": "https://github.com/eagmon/v2ecoli.git",
+            "ref": "v0.5.2",
+            "mode": "reference",
+            "path": "external/v2ecoli",
+            "description": "Whole-cell E. coli model",
+        },
+        "legacy-rep": {
+            "source": "git@github.com:lab/replication-old.git",
+            "ref": "main",
+            "mode": "fork-source",
+        },
+    }
+    validator.validate(ws)
+
+
+def test_import_invalid_mode_fails(validator):
+    ws = _minimal_workspace()
+    ws["imports"] = {"x": {"source": "u", "ref": "r", "mode": "BOGUS"}}
+    with pytest.raises(ValidationError):
+        validator.validate(ws)
+
+
+def test_external_model_validates(validator):
+    ws = _minimal_workspace()
+    ws["models"] = {
+        "v2ecoli-mirror": {
+            "submodule_path": "models/v2ecoli-mirror",
+            "remote": "https://github.com/eagmon/v2ecoli.git",
+            "pbg_processes": [],
+            "stages": {"add_model": {"status": "complete", "pr": None}},
+            "external": True,
+        }
+    }
+    validator.validate(ws)
