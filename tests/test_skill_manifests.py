@@ -10,7 +10,7 @@ import yaml
 REQUIRED_FIELDS = {"name", "description"}
 EXPECTED_SKILLS = {
     "pbg-workspace", "pbg-server", "pbg-report", "pbg-phase",
-    "pbg-expert", "pbg-composer",
+    "pbg-viz", "pbg-expert", "pbg-composer",
 }
 
 

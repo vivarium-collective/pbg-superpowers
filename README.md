@@ -13,17 +13,23 @@ extensions, and produce interactive HTML reports.
 
 ## Quick start
 
+(inside Claude Code:)
+
+    /plugin install pbg-superpowers
+    /reload-plugins
     /pbg-workspace my-research-workspace
     cd ~/code/my-research-workspace
-    # Open the dashboard — register imports, datasets, references, expert docs, observables, visualizations
-    bash scripts/serve.sh
-    # When ready to build a phase, use the skill:
-    /pbg-phase 1
+    bash scripts/serve.sh    # opens the 5-tab dashboard
 
-Optional dashboard server (for live phase-tracker updates):
+In the dashboard:
 
-    /pbg-server start
-    # open the printed URL — live guidance + phase tracker
+1. **Workspace inputs** — drop in datasets, references (PDFs auto-extract metadata), and expert docs.
+2. **Registry** — browse curated pbg-* modules, click Install on the ones you want. Each install adds a submodule, pip-installs into the venv, appends to pyproject.toml deps, and shows up in the Discovered Processes/Types tables.
+3. **Simulation Setup** — pick observables to track and define simulation run configs.
+4. **Visualizations** — write a name + natural-language description; click Create to invoke `/pbg-viz <name>`, which generates a Plotly/matplotlib function. Stage with "Add to project", commit when ready.
+5. **Build Model** — start phases, drive each with `/pbg-phase <n>` from Claude Code, evaluate gates, accumulate commits on a single workstream branch.
+
+Every dashboard mutation lands on your **active workstream branch** (one branch per workstream). When you're ready to share, click **Push** and **Create PR** in the sticky strip at the top — your co-workers review the whole accumulated change in one PR.
 
 ## Two repos
 
@@ -38,21 +44,21 @@ requiring this plugin.
 | Skill | Stage | Repo target | Responsibility |
 |---|---|---|---|
 | `/pbg-workspace` | bootstrap | workspace | Scaffold a workspace by cloning `pbg-template` |
-| `/pbg-server [start\|stop\|status]` | any | workspace | Local dashboard (opt-in; opens browser-based UI for inputs + lifecycle) |
-| `/pbg-report` | any | workspace | Regenerate dashboard `reports/index.html` after manual state changes |
-| `/pbg-phase <n>` | per phase | workspace | Drive phase n: walk Implementation Tasks, dispatch /pbg-expert if needed, write code + tests, run gate |
+| `/pbg-server [start\|stop\|status]` | any | workspace | Local dashboard (5 tabs + workstream strip + branch timeline) |
+| `/pbg-report` | any | workspace | Regenerate `reports/index.html` after manual state changes |
+| `/pbg-phase <n>` | per phase | workspace | Drive phase n: walk Implementation Tasks, write code + tests, run gate |
+| `/pbg-viz <name>` | per viz | workspace | Read `.pbg/viz-requests/<name>.md` and generate a Plotly/matplotlib `visualize()` function |
 | `/pbg-expert <tool>` *(vendored)* | aux | sibling pbg-* repo | Wrap a single simulator as `pbg-<tool>` |
 | `/pbg-composer <name> <tools…>` *(vendored)* | aux | sibling pbg-composite repo | Compose pbg-* wrappers |
 
 ## Architecture
 
-- **Workspace IS the model.** The workspace root contains `pbg_<slug>/`, `tests/`, `phases/`, and `workspace.yaml` directly — no per-model submodule nesting. The workspace owns datasets, references, decision log, and the dashboard.
-- **Dashboard is the primary UI for data inputs.** Loading imports, datasets, references, expert docs, observables, and visualizations all happen in the browser dashboard (`bash scripts/serve.sh`). Skills are reserved for code-writing work that benefits from Claude's assistance.
-- **Reports are progressive enhancement.** `<workspace>/reports/index.html` works as a static page; if `/pbg-server` is running, the same file gains live phase-tracker updates.
-- **Phase template is first-class.** Each phase lives in `phases/phase-N.md` at the workspace root with YAML frontmatter (`status`, `prereq_phases`, `gate_passed`, `acceptance_tests`, `parameters_added`, `deliverables`, `open_questions`). The body uses your Phase Template format verbatim.
-- **Core/type registry is tested AND reported.** The workspace has tests that assert `build_core()` registers expected processes/types and a registry-snapshot drift detector. The same data drives the dashboard's Process Registry and Type Registry panels.
-- **Auto-discovery is the registration model.** `pbg-*` packages don't need
-  manual `register_link()` boilerplate — see [docs/conventions/discovery.md](docs/conventions/discovery.md).
+- **Workspace IS the model.** The workspace root contains `pbg_<slug>/`, `tests/`, `phases/`, and `workspace.yaml` directly. The workspace owns datasets, references, decision log, and the dashboard.
+- **5-tab dashboard.** `Workspace inputs · Registry · Simulation Setup · Visualizations · Build Model`. Each tab is the canonical UI for that part of the workflow. Skills are the alternative for code-writing tasks that benefit from Claude.
+- **Active-branch workstream model.** Click *Start workstream* in the sticky strip below the menu; every dashboard mutation commits to that branch. *Push* + *Create PR* one-click via the strip. One PR per workstream, many commits — co-workers review the whole accumulated change in one place.
+- **Registry as catalog.** `scripts/_catalog/modules.json` lists curated pbg-* packages. Install adds a submodule, pip-installs into `.venv`, and appends to `pyproject.toml` `[project.dependencies]`. The Discovered Processes/Types tables read live from `bigraph_schema.package.discover` — no manual `register_link()` boilerplate needed. See [docs/conventions/discovery.md](docs/conventions/discovery.md).
+- **Visualization-as-description.** A visualization is `{name, description}` in `workspace.yaml`. Create writes a request file; `/pbg-viz <name>` generates a Plotly/matplotlib `visualize()` function with a `_demo()` helper; Add to project stages it; Commit lands `pbg_<slug>/visualizations/<name>.py` on the active branch.
+- **Phase template is first-class.** Each phase lives in `phases/phase-N.md` at the workspace root with YAML frontmatter (`status`, `prereq_phases`, `gate_passed`, `acceptance_tests`, …). The body uses your Phase Template format verbatim. The Build Model tab renders each phase with a Start phase / Evaluate gate action button.
 
 ## Tests
 

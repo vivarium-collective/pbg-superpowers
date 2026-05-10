@@ -14,16 +14,16 @@ phase entry exists in `workspace.yaml.phases` and the corresponding
 
 ## Prerequisites
 
-- For phase 1: workspace bootstrap complete; observables and visualizations registered (Setup section of the dashboard)
+- For phase 1: workspace bootstrap complete; observables and visualizations registered (Simulation Setup and Visualizations tabs of the dashboard)
 - For phase n>1: `phases/phase-(n-1).md` has `gate_passed: true`
-- Working tree clean
+- Active workstream branch started (click *Start workstream* in the dashboard's Build Model tab sticky strip, or confirm the user has one open)
 
 ## Lifecycle
 
 1. **Pre-flight** — verify prerequisites; refuse if working tree dirty.
-2. **Branch** — `phase/<n>` (or `phase/<n>-revision-<k>` if reopening complete phase).
+2. **Active branch** — confirm which active workstream branch is checked out (do NOT create a new per-phase branch; all phase commits land on the current workstream branch).
 3. **Read context** — parse `phases/phase-<n>.md` frontmatter and body. Read `workspace.yaml` for the related observables, visualizations, and registered processes.
-4. **Mark in_progress** — update phase frontmatter status; commit.
+4. **Mark in_progress** — update phase frontmatter status; commit to the active workstream branch.
 5. **Walk Implementation Tasks** one at a time:
    - Each task = code edits in `pbg_<workspace_slug>/` + at least one test in `tests/` + commit.
    - If a missing pbg-* wrapper is discovered: dispatch `/pbg-expert <tool>` (Agent tool, general-purpose). On success, install editably + register in `pbg_<workspace_slug>/core.py`.
@@ -40,15 +40,14 @@ phase entry exists in `workspace.yaml.phases` and the corresponding
    The user (with Claude's help) implements each placeholder.
 7. **Run pytest** — record per-acceptance-test pass/fail; update each test's `status` field in the phase frontmatter.
 8. **Persist deliverables** — code-diff summary, parameter table, plots (if visualizations are configured), test report — under `phases/deliverables/phase-<n>-*`.
-9. **Run gate evaluation** — if all acceptance_tests passing AND custom gate items checked off, set `status: complete, gate_passed: true`. Otherwise `gate_pending`.
+9. **Run gate evaluation** — if all acceptance_tests passing AND custom gate items checked off, set `status: complete, gate_passed: true`. Otherwise `gate_pending`. Commit to the active workstream branch.
 10. **Update workspace.yaml** to mirror the phase frontmatter status. Commit.
-11. **Refresh the dashboard** by calling `python3 scripts/render-dashboard.py` (no arg — single dashboard in v0.3.0).
-12. **PR_BODY.md** at workspace root: code changes summary, parameters added, deliverables, gate-evaluation result, open questions. If gate didn't pass, list failing acceptance entries.
-13. **gh handoff** — print `gh pr create --base main --head phase/<n>`; offer to run with explicit consent. NEVER force-push, push to main, or skip PR review.
+11. **Refresh the dashboard** by calling `/pbg-report`.
+12. **Handoff** — remind the user that the commits are on the active workstream branch. When the workstream is ready, use the dashboard's *Push* and *Create PR* buttons (or `gh pr create`) to open one PR for the whole accumulated set of changes. NEVER force-push, push to main, or skip PR review.
 
 ## Revision protocol
 
-Re-running on a complete phase opens `phase/<n>-revision-<k>`; gate must pass before promoting back to `complete`.
+Re-running on a complete phase reopens it as `gate_pending`; the user should start a new workstream (or continue the current one) and drive the revision through `/pbg-phase <n>` again. Gate must pass before setting back to `complete`.
 
 ## Sub-skill dispatch
 

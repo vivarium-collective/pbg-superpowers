@@ -1,6 +1,6 @@
 ---
 name: pbg-workspace
-description: Scaffold a process-bigraph research workspace by cloning the pbg-template repo and initialising it. Runs the workspace_bootstrap stage end-to-end with a clean PR-flow contract.
+description: Scaffold a process-bigraph research workspace by cloning the pbg-template repo and initialising it. Bootstraps a new workspace directory ready for the 5-tab dashboard and active-branch workstream flow.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: <workspace-name> [target-dir]
@@ -8,7 +8,7 @@ argument-hint: <workspace-name> [target-dir]
 
 # pbg-workspace
 
-Stage 0 of the canonical PR flow. Operates on a brand-new workspace directory.
+Bootstrap stage. Operates on a brand-new workspace directory.
 
 ## Prerequisites
 - Target directory must not exist or must be empty.
@@ -31,10 +31,8 @@ Stage 0 of the canonical PR flow. Operates on a brand-new workspace directory.
    workspace `.venv`. The workspace `.venv` only needs to install the workspace's own
    `pyproject.toml` deps for `pytest` and model imports.
 5. **Verify** — `python scripts/lint-workspace.py` must print `workspace lint: OK`.
-6. **PR_BODY.md** — write at workspace root with the bootstrap checklist.
-7. **Update workspace.yaml** — already marked complete by `template-init.sh`; nothing to do.
-8. **Report refresh** — `/pbg-report` (deferred until Tasks 20-21 land).
-9. **gh handoff** — print exact `gh pr create` command and offer to run (only with explicit user approval).
+6. **Report refresh** — `/pbg-report` to generate the initial `reports/index.html`.
+7. **Next steps** — print a brief summary: workspace is ready; open the dashboard with `bash scripts/serve.sh`. From the dashboard, use the **Registry** tab to install pbg-* modules, **Simulation Setup** to configure observables, and **Build Model** to start a workstream branch and drive phases.
 
 ## Source-of-template options
 

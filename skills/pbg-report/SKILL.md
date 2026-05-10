@@ -12,16 +12,13 @@ Transversal skill (no stage). Called by other stage skills at end-of-stage and r
 
 ## What it produces
 
-- `<workspace>/reports/index.html` — workspace dashboard: model registry, recent decisions, links into per-model reports
-- `<workspace>/models/<model>/reports/index.html` — per-model deep-dive: phase tracker, process registry, type registry, per-phase deep-dive sections, browsable composite document
+- `<workspace>/reports/index.html` — workspace dashboard: phase tracker, process registry, type registry, recent decisions, browsable composite document
 
-Both files include CSS + JS in `<reports>/assets/` (copied from the plugin's `templates/_assets/` and, if present, `server/client.js` for the live-dashboard mode).
+The file includes CSS + JS in `<reports>/assets/` (copied from the plugin's `templates/_assets/` and, if present, `server/client.js` for the live-dashboard mode).
 
 ## Operation
 
-- **No args** → regenerate workspace report only.
-- **`/pbg-report <model>`** → regenerate workspace report + that model's report.
-- **`/pbg-report --all`** → regenerate workspace report + every registered model's report.
+- **No args** → regenerate workspace report.
 
 Internally:
 
@@ -31,18 +28,7 @@ python -c "from pathlib import Path; \
            render_workspace_report(Path('.'))"
 ```
 
-For each model:
-
-```bash
-python -c "from pathlib import Path; \
-           from pbg_superpowers.report import render_model_report; \
-           from pbg_superpowers.core_introspection import registry_snapshot; \
-           from pbg_<slug>.core import build_core; \
-           reg = registry_snapshot(build_core()); \
-           render_model_report(Path('.'), '<model-name>', reg)"
-```
-
-The skill auto-detects each model's slug from `workspace.yaml.models.<name>.submodule_path`. Builds `pbg_doc` from `pbg_<slug>.document.build_document()` if available; falls back to an empty dict.
+The skill reads `workspace.yaml` for the workspace slug, then builds `pbg_doc` from `pbg_<slug>.document.build_document()` if available; falls back to an empty dict.
 
 ## Idempotency
 

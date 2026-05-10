@@ -1,6 +1,6 @@
 ---
 name: pbg-server
-description: Manage the local HTTP server that backs the live dashboard. Subcommands start, stop, status. The server is opt-in — every other skill works without it.
+description: Manage the local HTTP server that backs the 5-tab dashboard (Workspace inputs, Registry, Simulation Setup, Visualizations, Build Model). Subcommands start, stop, status. The server is opt-in — every other skill works without it.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
 argument-hint: start|stop|status
@@ -9,6 +9,14 @@ argument-hint: start|stop|status
 # pbg-server
 
 Transversal skill (no stage). Operates on the workspace's `.pbg/server/` directory.
+
+The dashboard exposes five tabs:
+
+- **Workspace inputs** — datasets, references (PDFs auto-extract metadata), expert docs.
+- **Registry** — browse the curated pbg-* module catalog (`scripts/_catalog/modules.json`); Install adds a submodule, pip-installs into `.venv`, appends to `pyproject.toml` deps, and refreshes the Discovered Processes/Types tables.
+- **Simulation Setup** — observables to track and simulation run configurations.
+- **Visualizations** — name + natural-language description; Create writes a request file and prompts the user to run `/pbg-viz <name>`; Add to project stages the generated file; Commit lands it on the active workstream branch.
+- **Build Model** — workstream management strip (active branch, Push, Create PR, End), phase list with Start phase / Evaluate gate buttons.
 
 ## Subcommands
 

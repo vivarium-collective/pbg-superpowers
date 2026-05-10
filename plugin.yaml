@@ -1,9 +1,10 @@
 name: pbg-superpowers
-version: 0.3.0
+version: 0.4.3
 description: |
   Process-bigraph project workflow plugin: scaffold a research workspace,
-  orchestrate stage-by-stage PRs, run multi-phase model extensions,
-  and produce interactive HTML reports.
+  drive a single-PR active workstream, browse the pbg-* module catalog,
+  generate visualization functions from descriptions, and run multi-phase
+  model extensions.
 authors:
   - eagmon
 skills:
@@ -11,6 +12,6 @@ skills:
   - pbg-server
   - pbg-report
   - pbg-phase
+  - pbg-viz
   - pbg-expert
   - pbg-composer
-  - pbg-viz

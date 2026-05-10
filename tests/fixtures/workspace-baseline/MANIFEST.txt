@@ -3,6 +3,10 @@
 ./.gitignore
 ./.pbg/schemas/phase.schema.json
 ./.pbg/schemas/workspace.schema.json
+./.pytest_cache/.gitignore
+./.pytest_cache/CACHEDIR.TAG
+./.pytest_cache/README.md
+./.pytest_cache/v/cache/nodeids
 ./NEXT_STEPS.md
 ./README.md
 ./datasets/README.md
@@ -20,6 +24,7 @@
 ./references/papers/.keep
 ./reports/assets/.keep
 ./reports/index.html
+./scripts/_catalog/modules.json
 ./scripts/_lib/__init__.py
 ./scripts/_lib/_root.py
 ./scripts/_lib/bibtex.py
@@ -28,7 +33,9 @@
 ./scripts/_lib/phase_files.py
 ./scripts/_lib/phase_gate.py
 ./scripts/_lib/phase_md.py
+./scripts/_lib/pyproject_edit.py
 ./scripts/_lib/report.py
+./scripts/_lib/work_state.py
 ./scripts/_lib/workspace_yaml.py
 ./scripts/_migrate_v1_to_v2.py
 ./scripts/_server/client.js
@@ -46,4 +53,5 @@
 ./scripts/render-dashboard.py
 ./scripts/serve.sh
 ./scripts/start-phase.sh
+./tests/test_pyproject_edit.py
 ./workspace.yaml
