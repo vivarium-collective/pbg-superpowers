@@ -4,5 +4,8 @@ from process_bigraph import allocate_core
 
 def build_core():
     core = allocate_core()
-    # /pbg-pull-processes will populate this with core.register_link(...) calls.
+    # Imports declared in workspace.yaml are auto-discovered by allocate_core()
+    # once they're pip-installed in the workspace venv. Use the dashboard's
+    # "Install" button on the Imports panel, or run `.venv/bin/pip install -e <path>`
+    # manually. No manual register_link() needed for standard pbg-* packages.
     return core
