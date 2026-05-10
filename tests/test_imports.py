@@ -16,10 +16,10 @@ def _bootstrap_workspace(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     ws.mkdir()
     save_workspace(ws / "workspace.yaml", {
-        "schema_version": 1,
+        "schema_version": 2,
         "name": "test",
         "created": "2026-05-09",
-        "plugin_version": "0.1.1",
+        "plugin_version": "0.3.0",
         "stages": {
             "workspace_bootstrap": {"status": "complete", "pr": None, "completed": "2026-05-09"}
         },
