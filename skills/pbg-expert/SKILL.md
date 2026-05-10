@@ -130,6 +130,28 @@ The completed repo must include:
 8. A self-contained `demo/report.html`
 9. A local git commit
 
+## Auto-Discovery Convention
+
+Every `pbg-*` package scaffolded by this skill must be auto-discoverable by
+`allocate_core()`. See
+[docs/conventions/discovery.md](../../docs/conventions/discovery.md) for the
+full reference. The short version:
+
+1. `pyproject.toml` must list `bigraph-schema` and `process-bigraph` in
+   `dependencies`.
+2. Process/Step classes must inherit from `process_bigraph.Process` or
+   `process_bigraph.Step` (which inherit `bigraph_schema.Edge`). Stub classes
+   that merely duck-type the interface are invisible to discovery.
+3. `pbg_<tool>/__init__.py` must import and re-export process classes via
+   `__all__`.
+
+Once the package is installed with `pip install -e .`, calling `allocate_core()`
+registers all processes automatically. **Do not add `core.register_link()` calls
+in `core.py`, `composites.py`, or test setup for classes that live in the
+installed package** — that is redundant boilerplate and an anti-pattern. Manual
+`register_link()` is only appropriate for classes defined inline in test files
+(which are not pip-installed and therefore not auto-discoverable).
+
 ## Process-Bigraph API Essentials
 
 Use `Step` for event-driven or stateless transformations. Use `Process` for time-driven simulation logic.
@@ -256,9 +278,13 @@ class TissueSim(Process):
 
 ## Composite Assembly
 
+For pip-installed `pbg-*` packages, `allocate_core()` registers all processes
+automatically via `bigraph_schema.package.discover`. No `register_link()` is
+needed:
+
 ```python
+# MyProcess is in a pip-installed pbg-* package — already registered.
 core = allocate_core()
-core.register_link("MyProcess", MyProcess)
 
 document = {
     "my_process": {
@@ -311,7 +337,8 @@ Examples:
 {"_type": "map", "_key": "string", "_value": "float"}
 ```
 
-Custom type registration:
+Custom type registration (expose as a module-level function named
+`register_types`; `recursive_dynamic_import` calls it automatically):
 
 ```python
 def register_types(core):
@@ -319,6 +346,7 @@ def register_types(core):
         "_inherit": "float",
         "_default": 0.0,
     })
+    return core  # required — must hand core back
 ```
 
 Useful core methods:
@@ -477,6 +505,80 @@ Implement:
 - package exports in `__init__.py`
 - `pyproject.toml`
 
+**`pyproject.toml` template** — always include `bigraph-schema` and
+`process-bigraph` in `dependencies` so the package is auto-discoverable:
+
+```toml
+[project]
+name = "pbg-<tool>"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "bigraph-schema",
+    "process-bigraph",
+    # add the wrapped tool here, e.g.:
+    # "cobra>=0.29",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pbg_<tool>"]
+```
+
+**`pbg_<tool>/processes.py` template** — process classes must inherit from
+`process_bigraph.Process` (or `Step`) so discovery can find them:
+
+```python
+"""<ToolName> process-bigraph wrapper."""
+
+from process_bigraph import Process
+
+
+class <ToolName>Process(Process):
+    """Time-stepped wrapper for <ToolName>.
+
+    Inputs
+    ------
+    <input_port> : float
+        <description>
+
+    Outputs
+    -------
+    <output_port> : float
+        Delta emitted per interval; accumulates additively with sibling processes.
+    """
+
+    config_schema = {
+        "rate": {"_type": "float", "_default": 0.1},
+    }
+
+    def inputs(self):
+        return {"<input_port>": "float"}
+
+    def outputs(self):
+        return {"<output_port>": "float"}
+
+    def initial_state(self):
+        return {"<input_port>": 0.0}
+
+    def update(self, state, interval):
+        return {"<output_port>": state["<input_port>"] * self.config["rate"] * interval}
+```
+
+**`pbg_<tool>/__init__.py` template** — import and re-export all process
+classes via `__all__` so discovery and users see a clean surface:
+
+```python
+"""pbg-<tool>: process-bigraph wrapper for <ToolName>."""
+
+from .processes import <ToolName>Process
+
+__all__ = ["<ToolName>Process"]
+```
+
 Use full type annotations where practical.
 
 ### Phase 4: Test
@@ -495,8 +597,11 @@ Example:
 
 ```python
 def test_my_process_update():
+    # If the package is pip-installed, allocate_core() registers it
+    # automatically via bigraph_schema.package.discover — no register_link needed.
+    # For classes defined inline in test files (not pip-installed), use
+    # core.register_link() only in that narrow case.
     core = allocate_core()
-    core.register_link("MyProcess", MyProcess)
 
     proc = MyProcess(config={"rate": 0.5}, core=core)
     result = proc.update({"level": 10.0}, interval=1.0)
@@ -675,7 +780,10 @@ after the final report is generated.
 Include:
 
 1. What the wrapper does
-2. Installation
+2. Installation — include a note on auto-discovery:
+   > Once installed via `pip install -e .`, processes register automatically
+   > via `bigraph_schema.package.discover` — no manual `register_link()` calls
+   > are needed.
 3. Quick start
 4. API reference table
 5. Architecture mapping
@@ -690,6 +798,8 @@ After implementation:
 
 ```bash
 source .venv/bin/activate
+# Install the package in editable mode so allocate_core() discovers it:
+pip install -e .
 python demo/demo_report.py
 pytest
 git add -A

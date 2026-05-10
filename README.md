@@ -51,6 +51,8 @@ requiring this plugin.
 - **Reports are progressive enhancement.** `<workspace>/reports/index.html` works as a static page; if `/pbg-server` is running, the same file gains live phase-tracker updates.
 - **Phase template is first-class.** Each phase lives in `phases/phase-N.md` at the workspace root with YAML frontmatter (`status`, `prereq_phases`, `gate_passed`, `acceptance_tests`, `parameters_added`, `deliverables`, `open_questions`). The body uses your Phase Template format verbatim.
 - **Core/type registry is tested AND reported.** The workspace has tests that assert `build_core()` registers expected processes/types and a registry-snapshot drift detector. The same data drives the dashboard's Process Registry and Type Registry panels.
+- **Auto-discovery is the registration model.** `pbg-*` packages don't need
+  manual `register_link()` boilerplate — see [docs/conventions/discovery.md](docs/conventions/discovery.md).
 
 ## Tests
 
