@@ -1,11 +1,12 @@
 name: pbg-superpowers
-version: 0.4.6
+version: 0.4.8
 description: |
   Process-bigraph project workflow plugin (in development).
 
   Stable skills: /pbg-expert wraps a simulator into a sibling pbg-* repo
   (or composes multiple); /pbg-wrapper and /pbg-composer are lightweight
-  in-workspace counterparts.
+  in-workspace counterparts. /pbg-suggest drafts repo names, PR titles,
+  and PR bodies in response to dashboard Suggest button requests.
 
   In-development skills handle workspace scaffolding, the interactive
   dashboard, multi-phase model development, and visualization codegen.
@@ -15,6 +16,7 @@ skills:
   - pbg-expert
   - pbg-wrapper
   - pbg-composer
+  - pbg-suggest
   - pbg-workspace
   - pbg-server
   - pbg-report

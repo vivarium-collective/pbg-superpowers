@@ -53,6 +53,7 @@ requiring this plugin.
 | `/pbg-expert <name> <tools…>` | new `pbg-<name>-composite/` sibling | Compose two or more wrapped simulators into a sibling composite repo, with HTML report and PR. Same heavy flow as the single-tool form. |
 | `/pbg-wrapper <tool>` | current workspace | Lightweight in-workspace wrap. Writes `pbg_<slug>/processes/<tool>.py` + a test stub. No sibling repo, no report — good for incremental experimentation. |
 | `/pbg-composer <name> <tools…>` | current workspace | Lightweight in-workspace composite. Writes `pbg_<slug>/composites/<name>.py` + test stub referencing already-installed wrapper packages. |
+| `/pbg-suggest <request-id>` | current workspace | Draft a Claude-suggested repo name, PR title, or PR body in response to a dashboard Suggest button request. Writes the response to `.pbg/agent-responses/<id>.json`; dashboard polls and fills the input automatically. |
 
 ### In development
 
