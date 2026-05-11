@@ -1,5 +1,5 @@
 name: pbg-superpowers
-version: 0.4.8
+version: 0.4.10
 description: |
   Process-bigraph project workflow plugin (in development).
 
@@ -10,6 +10,10 @@ description: |
 
   In-development skills handle workspace scaffolding, the interactive
   dashboard, multi-phase model development, and visualization codegen.
+
+  v0.4.10 adds a standardized composite spec convention: *.composite.yaml /
+  *.composite.json files that declare composite state + parameters, with
+  discovery across installed packages and full parameter substitution support.
 authors:
   - eagmon
 skills:
