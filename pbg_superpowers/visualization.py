@@ -1,17 +1,28 @@
-"""Visualization Step base class — discoverable, renderable.
+"""Visualization Step base class — discoverable AND wireable into Composites.
 
-A Visualization is a process-bigraph Step whose job is to render emitter
-output (typically a gathered trajectory) into HTML or a PNG. By subclassing
-Step, Visualization participates in bigraph-schema's discovery: any
-installed package containing a Visualization subclass auto-registers it in
-`core.link_registry` when `allocate_core()` runs.
+A Visualization is a process_bigraph.Step whose job is to consume observable
+streams (via inputs() — the same pattern Emitters use) and produce a rendered
+HTML/PNG via update() returning {'html': ...} (or whatever outputs() declares).
 
-This puts visualizations on the same footing as Emitters / Processes /
-Types for discovery + tracking, while keeping their semantics simple:
-- update() defaults to a no-op (visualizations don't transform sim state)
-- render(results) is the actual work, called by the dashboard post-run
+Subclasses MUST override:
+- inputs():  declare which observables this viz consumes
+- update():  return a dict matching outputs(); typically {'html': '<rendered>'}
 
-A subclass may opt INTO incremental rendering by overriding update().
+Subclasses MAY override:
+- outputs():  default is {'html': 'string'}; extend if you also emit PNG, JSON, etc.
+- config_schema: extend the default {'title': string}
+- __init__: set up internal state (e.g., self.history = []) for accumulating
+  per-step values across update() calls
+
+Render timing convention: Visualizations re-render the full trajectory each
+update() call. Subclasses accumulate state in instance attributes (self.history,
+self.frames, etc.) and produce a fresh figure each step. Plotly + matplotlib
+both handle the resulting recomputation fine for typical workspace sims.
+
+Discovery: Visualization extends Step extends Edge, so subclasses are picked
+up by bigraph_schema.package.discover and registered in core.link_registry
+alongside Emitter and Process subclasses. The dashboard filters them via
+issubclass checks (see docs/conventions/visualizations.md).
 """
 from __future__ import annotations
 from typing import Any
@@ -22,24 +33,8 @@ from process_bigraph import Step
 class Visualization(Step):
     """Base class for renderable visualization Steps.
 
-    Subclasses must implement `render(results) -> str | bytes`.
-
-    Example:
-
-        class DnaATrajectory(Visualization):
-            config_schema = {
-                'title':     {'_type': 'string', '_default': 'DnaA over time'},
-                'threshold': {'_type': 'float',  '_default': 50.0},
-            }
-
-            def render(self, results):
-                import plotly.graph_objects as go
-                series = results.get(('emitter',), [])
-                ys = [s.get('free_DnaA', 0.0) for s in series]
-                fig = go.Figure(go.Scatter(y=ys, mode='lines'))
-                fig.add_hline(y=self.config['threshold'], line_dash='dash')
-                fig.update_layout(title=self.config['title'])
-                return fig.to_html(full_html=False, include_plotlyjs='cdn')
+    Subclasses must implement inputs() and update(). Default outputs() exposes
+    an 'html' string port that Composites can wire to a store.
     """
 
     config_schema = {
@@ -47,24 +42,37 @@ class Visualization(Step):
     }
 
     def inputs(self) -> dict[str, Any]:
-        """Default: no inputs. Subclasses can declare wiring if they want."""
+        """Subclasses MUST override.
+
+        Returns a dict of {wire_name: type} declaring the observables this viz
+        consumes. The composite spec wires these to store paths.
+
+        Example:
+            return {'free_DnaA': 'float', 'oriC_state': 'string'}
+        """
         return {}
 
     def outputs(self) -> dict[str, Any]:
-        """Default: no outputs."""
-        return {}
+        """Default: 'html' string output. Subclasses MAY extend.
 
-    def update(self, state: dict, interval: float) -> dict:
-        """Default no-op. Visualizations render post-simulation, not per-step."""
-        return {}
+        Example: subclass that also emits a PNG path
+            return {'html': 'string', 'png_path': 'string'}
+        """
+        return {'html': 'string'}
 
-    def render(self, results: dict) -> str:
-        """Render gathered emitter results. Return HTML (str) or base64 PNG.
+    def update(self, state: dict, interval: float = 1.0) -> dict:
+        """Subclasses MUST override.
 
-        Subclasses MUST override.
+        `state` is a dict keyed by inputs() wire names; values are the current
+        store values via the wires declared in the composite spec.
+
+        Return a dict matching outputs() — typically {'html': '<rendered HTML>'}.
         """
         raise NotImplementedError(
-            f"{type(self).__name__} must implement render(results)"
+            f"{type(self).__name__} must implement update(state, interval). "
+            f"Subclasses of Visualization override update() to consume per-step "
+            f"state and return {{'html': '<rendered figure>'}}. See "
+            f"pbg_superpowers.visualization.Visualization for the contract."
         )
 
     @classmethod
