@@ -48,6 +48,7 @@ requiring this plugin.
 | `/pbg-report` | any | workspace | Regenerate `reports/index.html` after manual state changes |
 | `/pbg-phase <n>` | per phase | workspace | Drive phase n: walk Implementation Tasks, write code + tests, run gate |
 | `/pbg-viz <name>` | per viz | workspace | Read `.pbg/viz-requests/<name>.md` and generate a Plotly/matplotlib `visualize()` function |
+| `/pbg-package <repo>` | aux | any pbg-* repo | Audit a pbg-* repo for discovery-contract compliance (pyproject.toml, deps, subclasses, install smoke) |
 | `/pbg-expert <tool>` *(vendored)* | aux | sibling pbg-* repo | Wrap a single simulator as `pbg-<tool>` |
 | `/pbg-composer <name> <tools…>` *(vendored)* | aux | sibling pbg-composite repo | Compose pbg-* wrappers |
 
