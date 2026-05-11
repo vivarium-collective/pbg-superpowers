@@ -45,13 +45,10 @@
 ./scripts/_templates/_assets/style.css
 ./scripts/_templates/index.html.j2
 ./scripts/add-dataset.sh
-./scripts/add-phase-plan.sh
 ./scripts/add-reference.sh
 ./scripts/compare-runs.py
-./scripts/evaluate-phase-gate.sh
 ./scripts/lint-workspace.py
 ./scripts/render-dashboard.py
 ./scripts/serve.sh
-./scripts/start-phase.sh
 ./tests/test_pyproject_edit.py
 ./workspace.yaml
