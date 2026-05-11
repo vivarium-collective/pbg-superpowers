@@ -65,7 +65,7 @@ These ship today but their interfaces are still moving:
 | `/pbg-server [start\|stop\|status]` | Local dashboard (5 tabs + workstream strip + branch timeline) |
 | `/pbg-report` | Regenerate `reports/index.html` after manual state changes |
 | `/pbg-phase <n>` | Drive phase n inside a workspace |
-| `/pbg-viz <name>` | Generate a Plotly/matplotlib `visualize()` function from a description |
+| `/pbg-viz <name>` | Generate a `Visualization` subclass from a description (v0.4.11+: class form, auto-discoverable) |
 | `/pbg-package <repo>` | Audit a pbg-* repo for discovery-convention compliance |
 
 ## Architecture
@@ -74,9 +74,13 @@ These ship today but their interfaces are still moving:
 - **5-tab dashboard.** `Workspace inputs · Registry · Simulation Setup · Visualizations · Build Model`. Each tab is the canonical UI for that part of the workflow. Skills are the alternative for code-writing tasks that benefit from Claude.
 - **Active-branch workstream model.** Click *Start workstream* in the sticky strip below the menu; every dashboard mutation commits to that branch. *Push* + *Create PR* one-click via the strip. One PR per workstream, many commits — co-workers review the whole accumulated change in one place.
 - **Registry as catalog.** `scripts/_catalog/modules.json` lists curated pbg-* packages. Install adds a submodule, pip-installs into `.venv`, and appends to `pyproject.toml` `[project.dependencies]`. The Discovered Processes/Types tables read live from `bigraph_schema.package.discover` — no manual `register_link()` boilerplate needed. See [docs/conventions/discovery.md](docs/conventions/discovery.md).
-- **Visualization-as-description.** A visualization is `{name, description}` in `workspace.yaml`. Create writes a request file; `/pbg-viz <name>` generates a Plotly/matplotlib `visualize()` function with a `_demo()` helper; Add to project stages it; Commit lands `pbg_<slug>/visualizations/<name>.py` on the active branch.
+- **Visualization-as-description.** A visualization is `{name, description}` in `workspace.yaml`. Create writes a request file; `/pbg-viz <name>` generates a `Visualization` subclass (auto-discoverable via bigraph-schema) with a `_demo()` helper; Add to project stages it; Commit lands `pbg_<slug>/visualizations/<name>.py` on the active branch.
 - **Phase template is first-class.** Each phase lives in `phases/phase-N.md` at the workspace root with YAML frontmatter (`status`, `prereq_phases`, `gate_passed`, `acceptance_tests`, …). The body uses your Phase Template format verbatim. The Build Model tab renders each phase with a Start phase / Evaluate gate action button.
 - **Composite spec convention.** Composites are DATA, not code. Any `*.composite.yaml` or `*.composite.json` file in an installed bigraph-schema-dependent package is a composite spec — a declarative state document with optional typed parameters that support `${name}` substitution. `pbg_superpowers.composite_spec.build_composite_from_spec` turns a parsed spec into a runnable `Composite`; `pbg_superpowers.composite_discovery.discover_composites` walks all installed packages (and optional local search paths) to find every registered spec without importing any simulator code. See [docs/conventions/composites.md](docs/conventions/composites.md) for the full reference.
+- **Visualization Step base class** — `pbg_superpowers.visualization.Visualization`
+  is a `process_bigraph.Step` subclass; visualization subclasses are
+  auto-discovered alongside Processes / Emitters / Types. See
+  [docs/conventions/visualizations.md](docs/conventions/visualizations.md).
 
 ## Tests
 

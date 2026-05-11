@@ -1,5 +1,5 @@
 name: pbg-superpowers
-version: 0.4.10
+version: 0.4.11
 description: |
   Process-bigraph project workflow plugin (in development).
 
@@ -14,6 +14,10 @@ description: |
   v0.4.10 adds a standardized composite spec convention: *.composite.yaml /
   *.composite.json files that declare composite state + parameters, with
   discovery across installed packages and full parameter substitution support.
+
+  v0.4.11 adds a Visualization(Step) base class (pbg_superpowers.visualization)
+  so visualization subclasses are auto-discovered via bigraph-schema's discovery
+  walker alongside Processes / Emitters / Types.
 authors:
   - eagmon
 skills:
