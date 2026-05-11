@@ -1,5 +1,9 @@
 # pbg-superpowers
 
+> **🚧 In development.** This plugin is evolving rapidly. The skills marked **Stable** below
+> are usable today; the rest (workspace bootstrap, dashboard, phases, visualization codegen,
+> package audit) are under active iteration and may change shape between minor versions.
+
 A Claude Code plugin for building **process-bigraph research projects**.
 Scaffold a workspace, walk a canonical PR flow, plan multi-phase model
 extensions, and produce interactive HTML reports.
@@ -13,23 +17,23 @@ extensions, and produce interactive HTML reports.
 
 ## Quick start
 
-(inside Claude Code:)
+Wrap a simulator as a standalone pbg-* package:
 
-    /plugin install pbg-superpowers
-    /reload-plugins
-    /pbg-workspace my-research-workspace
-    cd ~/code/my-research-workspace
-    bash scripts/serve.sh    # opens the 5-tab dashboard
+    /pbg-expert tellurium
 
-In the dashboard:
+Or wrap it lightly inside an existing workspace:
 
-1. **Workspace inputs** — drop in datasets, references (PDFs auto-extract metadata), and expert docs.
-2. **Registry** — browse curated pbg-* modules, click Install on the ones you want. Each install adds a submodule, pip-installs into the venv, appends to pyproject.toml deps, and shows up in the Discovered Processes/Types tables.
-3. **Simulation Setup** — pick observables to track and define simulation run configs.
-4. **Visualizations** — write a name + natural-language description; click Create to invoke `/pbg-viz <name>`, which generates a Plotly/matplotlib function. Stage with "Add to project", commit when ready.
-5. **Build Model** — start phases, drive each with `/pbg-phase <n>` from Claude Code, evaluate gates, accumulate commits on a single workstream branch.
+    cd ~/code/my-workspace
+    /pbg-wrapper tellurium
 
-Every dashboard mutation lands on your **active workstream branch** (one branch per workstream). When you're ready to share, click **Push** and **Create PR** in the sticky strip at the top — your co-workers review the whole accumulated change in one PR.
+Compose multiple wrappers:
+
+    /pbg-expert metabolism cobra tellurium       # heavy: new sibling composite repo
+    /pbg-composer metabolism cobra tellurium     # light: inside current workspace
+
+The workspace-bootstrap + dashboard skills (`/pbg-workspace`, `/pbg-server`,
+`/pbg-report`, `/pbg-phase`, `/pbg-viz`, `/pbg-package`) are still in development
+— see the table above.
 
 ## Two repos
 
@@ -41,16 +45,27 @@ requiring this plugin.
 
 ## Skills
 
-| Skill | Stage | Repo target | Responsibility |
-|---|---|---|---|
-| `/pbg-workspace` | bootstrap | workspace | Scaffold a workspace by cloning `pbg-template` |
-| `/pbg-server [start\|stop\|status]` | any | workspace | Local dashboard (5 tabs + workstream strip + branch timeline) |
-| `/pbg-report` | any | workspace | Regenerate `reports/index.html` after manual state changes |
-| `/pbg-phase <n>` | per phase | workspace | Drive phase n: walk Implementation Tasks, write code + tests, run gate |
-| `/pbg-viz <name>` | per viz | workspace | Read `.pbg/viz-requests/<name>.md` and generate a Plotly/matplotlib `visualize()` function |
-| `/pbg-package <repo>` | aux | any pbg-* repo | Audit a pbg-* repo for discovery-contract compliance (pyproject.toml, deps, subclasses, install smoke) |
-| `/pbg-expert <tool>` *(vendored)* | aux | sibling pbg-* repo | Wrap a single simulator as `pbg-<tool>` |
-| `/pbg-composer <name> <tools…>` *(vendored)* | aux | sibling pbg-composite repo | Compose pbg-* wrappers |
+### Stable — recommended for current use
+
+| Skill | Repo target | What it does |
+|---|---|---|
+| `/pbg-expert <tool>` | new `pbg-<tool>/` sibling | Wrap a simulator as a process-bigraph Process: scaffolds a full sibling repo with Process class, tests, README, HTML report, and an open PR. The heavy/canonical wrap. |
+| `/pbg-expert <name> <tools…>` | new `pbg-<name>-composite/` sibling | Compose two or more wrapped simulators into a sibling composite repo, with HTML report and PR. Same heavy flow as the single-tool form. |
+| `/pbg-wrapper <tool>` | current workspace | Lightweight in-workspace wrap. Writes `pbg_<slug>/processes/<tool>.py` + a test stub. No sibling repo, no report — good for incremental experimentation. |
+| `/pbg-composer <name> <tools…>` | current workspace | Lightweight in-workspace composite. Writes `pbg_<slug>/composites/<name>.py` + test stub referencing already-installed wrapper packages. |
+
+### In development
+
+These ship today but their interfaces are still moving:
+
+| Skill | What it does |
+|---|---|
+| `/pbg-workspace <name>` | Scaffold a workspace by cloning pbg-template |
+| `/pbg-server [start\|stop\|status]` | Local dashboard (5 tabs + workstream strip + branch timeline) |
+| `/pbg-report` | Regenerate `reports/index.html` after manual state changes |
+| `/pbg-phase <n>` | Drive phase n inside a workspace |
+| `/pbg-viz <name>` | Generate a Plotly/matplotlib `visualize()` function from a description |
+| `/pbg-package <repo>` | Audit a pbg-* repo for discovery-convention compliance |
 
 ## Architecture
 

@@ -1,15 +1,36 @@
 ---
 name: pbg-expert
-description: Process-bigraph API expert for wrapping simulation tools as process-bigraph Steps or Processes. Creates local pbg-* wrapper repos with package structure, tests, README, demo reports, architecture diagrams, visualizations, and GitHub-ready commits.
+description: >
+  Process-bigraph API expert for wrapping simulation tools as process-bigraph Steps or Processes,
+  OR composing multiple wrapped simulators into a sibling composite repo.
+  Single-tool form (/pbg-expert <tool>): creates a sibling pbg-<tool>/ repo with Process class,
+  tests, README, HTML report, and a local commit.
+  Composite form (/pbg-expert <name> <tool1> <tool2> ...): creates a sibling
+  pbg-<name>-composite/ repo wiring the listed wrappers, with HTML report and local commit.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob Grep Agent WebFetch WebSearch
 effort: high
-argument-hint: <tool-name or GitHub URL>
+argument-hint: <tool-name> | <composite-name> <tool1> <tool2> [tool3 ...]
 ---
 
 # pbg-expert
 
 You are a process-bigraph API expert. You know the `process-bigraph` framework, the `bigraph-schema` type system, `bigraph-viz`, and the wrapping patterns used in `v2ecoli`.
+
+## Mode Detection
+
+Inspect `$ARGUMENTS` to determine which mode to run:
+
+- **Single-tool mode** (`/pbg-expert <tool>`): exactly one argument. Wrap a single simulator as `pbg-<tool>/`.
+- **Composite mode** (`/pbg-expert <name> <tool1> <tool2> [...]`): two or more arguments. The first argument is the composite name; the remaining arguments are simulator/wrapper names that should already be installable (as local sibling repos `pbg-<tool>/` or via PyPI).
+
+In single-tool mode, proceed to **Initial Repo Setup** below.
+
+In composite mode, jump to **Composite Mode** section below.
+
+---
+
+## Single-Tool Mode
 
 Your task is to take a simulation tool -- by name, GitHub URL, or description -- and create a complete, publication-ready process-bigraph wrapper package in a new local repository.
 
@@ -867,6 +888,161 @@ Optional wrapper-pattern references (study their bridge implementations and demo
 
 If you have local clones of any of the above, prefer reading them directly. Otherwise, work from the patterns documented in this skill.
 
+---
+
+## Composite Mode
+
+When `$ARGUMENTS` contains two or more tokens, the first token is `<name>` (the composite name) and the remaining tokens are the simulator/wrapper names to compose.
+
+### Target directory
+
+```bash
+COMPOSITE_NAME="<name>"
+WORKSPACE="${PBG_WORKSPACE:-$HOME/code}"
+REPO_DIR="${WORKSPACE}/pbg-${COMPOSITE_NAME}-composite"
+```
+
+Check whether the directory already exists. If it does, stop and ask the user to overwrite, use a suffix, or abort.
+
+### Repo setup
+
+```bash
+mkdir -p "$REPO_DIR"
+cd "$REPO_DIR"
+git init
+
+uv venv .venv
+source .venv/bin/activate
+uv pip install process-bigraph bigraph-schema bigraph-viz pytest matplotlib plotly
+```
+
+Install each wrapper from a local sibling clone (preferred) or PyPI:
+
+```bash
+uv pip install -e "${WORKSPACE}/pbg-<tool1>"   # editable local clone
+uv pip install pbg-<tool2>                     # or from PyPI if published
+```
+
+Write `.gitignore` (same as single-tool mode — exclude `.venv/`, `__pycache__/`, `*.egg-info/`, `dist/`, `build/`, `*.pyc`, `.pytest_cache/`, `demo/*.png`, `output/`, `.idea/`; do NOT ignore `demo/*.html`).
+
+### Deliverables for composite mode
+
+```text
+pbg-<name>-composite/
+├── pyproject.toml
+├── README.md
+├── .gitignore
+├── pbg_<name>_composite/
+│   ├── __init__.py
+│   ├── core.py          # build_core() registering all wrappers + adapters + stubs + emitter
+│   ├── wiring.py        # WIRING dict: (process, port) → store path
+│   ├── adapters.py      # Step adapters for schema/unit mismatches (may be empty)
+│   ├── stubs.py         # stub Processes for missing inputs (may be empty)
+│   ├── document.py      # build_document() returning the full Composite document
+│   └── types.py         # cross-tool custom types, if needed
+├── tests/
+│   ├── test_assembly.py
+│   ├── test_adapters.py
+│   └── test_run.py
+└── demo/
+    └── demo_report.py
+```
+
+### Workflow (composite mode)
+
+#### Step 1: Inventory the wrappers
+
+For each `pbg-<tool>`, read its `processes.py` and record:
+
+- Class name and registered link string.
+- All `inputs()` ports and schemas.
+- All `outputs()` ports and schemas.
+- Whether it exposes `register_types(core)`.
+- Natural time scale (from its demo's `interval`).
+
+Produce a markdown table for the user to review:
+
+| Tool | Class | Port | Direction | Schema |
+|---|---|---|---|---|
+
+#### Step 2: Classify every cross-process connection
+
+Enumerate every (producer-port, consumer-port) pair and classify each into one of:
+
+| Case | When | Action |
+|---|---|---|
+| **Pass-through** | Same logical quantity, same schema after `core.resolve` | Wire both to the same store path — no adapter. |
+| **Adapter** | Same logical quantity, different units/keying/shape | Insert a `Step` adapter with two stores. |
+| **Stub source** | Consumer needs an input no wrapped process produces | Add a stub Process/Step. |
+| **Sink** | Producer's output has no consumer | Wire to `_sinks` store + emitter; do not drop silently. |
+
+Present the connection table to the user before writing code. Never mark a row "pass-through" if schemas differ.
+
+Encode the table in `wiring.py` as a `WIRING` dict (see the /pbg-composer SKILL.md for the dict format).
+
+#### Step 3: Build core and document
+
+`core.py` exposes `build_core()` that calls `allocate_core()` and registers all wrappers, adapters, stubs, and `RAMEmitter`. See wiring and composition patterns in the /pbg-composer SKILL.md.
+
+`document.py` exposes `build_document()` that returns the full Composite document using paths from `WIRING`.
+
+#### Step 4: Validate
+
+```python
+from process_bigraph import Composite
+from pbg_<name>_composite.core import build_core
+from pbg_<name>_composite.document import build_document
+
+core = build_core()
+sim = Composite({"state": build_document()}, core=core)
+sim.run(1.0)
+```
+
+If `Composite()` raises, schemas didn't reconcile — report the offending store path. If `run()` raises, wiring is wrong.
+
+#### Step 5: Tests
+
+Three test files:
+
+- `test_adapters.py` — unit-test each adapter and stub directly (no Composite).
+- `test_assembly.py` — instantiate the Composite without error (schema-reconciliation check).
+- `test_run.py` — run for the largest declared interval and assert state propagated through every adapter chain.
+
+#### Step 6: Demo report
+
+The HTML report for composite mode must include:
+
+1. **Architecture diagram** using `bigraph-viz` (PNG embedded) showing every process node, shared store, and wire. Distinct accent colors per tool.
+2. **Cross-process metrics** — plot the shared stores, not just per-tool internals.
+3. **Coupling visualization** — at least one chart with two tools' outputs on the same time axis.
+4. **Three configurations**: decoupled baseline, coupled, and stressed (one parameter pushed to a demanding regime).
+
+Use the same report structure as single-tool mode (sticky nav, metrics cards, Plotly charts, PBG document viewer, responsive layout).
+
+Open the report in the default browser after generation.
+
+#### Step 7: README
+
+Include: science motivation, which tools are composed and where to find their wrappers, installation (including editable-local-clone install), wiring diagram (PNG), wiring table, quick start, demo instructions, and known limitations.
+
+#### Step 8: Commit
+
+```bash
+source .venv/bin/activate
+python demo/demo_report.py
+pytest
+git add -A
+git commit -m "Initial pbg-<name>-composite: <tool-a> + <tool-b> wired and validated"
+python -c "import os, webbrowser; webbrowser.open('file://' + os.path.abspath('demo/report.html'))"
+```
+
+Do not push.
+
+---
+
 ## Start
 
-Given `$ARGUMENTS`, study the tool, create the wrapper repo, implement the package, test it, generate the report, commit locally, and open the report in Safari.
+Given `$ARGUMENTS`:
+
+- If one argument: study the tool, create `pbg-<tool>/`, implement the package, test it, generate the report, commit locally, and open the report.
+- If two or more arguments: inventory the listed wrappers, design the wiring table, build `pbg-<name>-composite/`, validate, test, generate the composite report, commit locally, and open the report.
