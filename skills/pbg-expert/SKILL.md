@@ -126,7 +126,11 @@ Create this package structure:
 pbg-<tool>/
 ├── pyproject.toml
 ├── README.md
+├── CONTRIBUTING.md
 ├── .gitignore
+├── .github/
+│   └── workflows/
+│       └── release.yml
 ├── pbg_<tool>/
 │   ├── __init__.py
 │   ├── processes.py
@@ -527,27 +531,46 @@ Implement:
 - `pyproject.toml`
 
 **`pyproject.toml` template** — always include `bigraph-schema` and
-`process-bigraph` in `dependencies` so the package is auto-discoverable:
+`process-bigraph` in `dependencies` so the package is auto-discoverable.
+Follow the full PyPI-ready convention from
+[docs/conventions/distribution.md](../../docs/conventions/distribution.md):
 
 ```toml
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
 [project]
 name = "pbg-<tool>"
 version = "0.1.0"
-requires-python = ">=3.11"
+description = "Process-bigraph wrapper for <Tool>"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [{name = "Your Name", email = "you@example.com"}]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 dependencies = [
-    "bigraph-schema",
-    "process-bigraph",
+    "bigraph-schema>=0.0.60",
+    "process-bigraph>=0.0.66",
     # add the wrapped tool here, e.g.:
     # "cobra>=0.29",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[project.urls]
+Homepage = "https://github.com/vivarium-collective/pbg-<tool>"
+Issues = "https://github.com/vivarium-collective/pbg-<tool>/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pbg_<tool>"]
 ```
+
+**PyPI trusted publishing setup is required before the first release.**
+See https://docs.pypi.org/trusted-publishers/ for the one-time PyPI + GitHub
+configuration. Once set up, pushing a `v*` tag triggers the release workflow.
 
 **`pbg_<tool>/processes.py` template** — process classes must inherit from
 `process_bigraph.Process` (or `Step`) so discovery can find them:
@@ -588,6 +611,36 @@ class <ToolName>Process(Process):
     def update(self, state, interval):
         return {"<output_port>": state["<input_port>"] * self.config["rate"] * interval}
 ```
+
+**`.github/workflows/release.yml`** — create this file to enable automated
+PyPI publishing on version tags. See
+[docs/conventions/distribution.md](../../docs/conventions/distribution.md)
+for the complete workflow and trusted-publisher setup instructions:
+
+```yaml
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  id-token: write   # for PyPI trusted publishing
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install uv
+        run: pip install uv
+      - name: Build
+        run: uv build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+```
+
+Add `.github/workflows/release.yml` to the deliverables directory structure
+and to `git add` during the final commit.
 
 **`pbg_<tool>/__init__.py` template** — import and re-export all process
 classes via `__all__` so discovery and users see a clean surface:
@@ -801,9 +854,20 @@ after the final report is generated.
 Include:
 
 1. What the wrapper does
-2. Installation — include a note on auto-discovery:
-   > Once installed via `pip install -e .`, processes register automatically
-   > via `bigraph_schema.package.discover` — no manual `register_link()` calls
+2. Installation — PyPI is the primary install path; editable install for development:
+   ```
+   # From PyPI (recommended):
+   pip install pbg-<tool>
+   # or with uv:
+   uv pip install pbg-<tool>
+
+   # For development (editable):
+   uv venv .venv && source .venv/bin/activate
+   uv pip install -e ".[dev]"
+   ```
+   Include a note on auto-discovery:
+   > Once installed, processes register automatically via
+   > `bigraph_schema.package.discover` — no manual `register_link()` calls
    > are needed.
 3. Quick start
 4. API reference table
@@ -812,6 +876,33 @@ Include:
 7. Expected outputs
 8. Notes on authentication, if relevant
 9. Limitations and assumptions
+
+## CONTRIBUTING.md Requirements
+
+Include a `CONTRIBUTING.md` with at minimum:
+
+```markdown
+# Contributing to pbg-<tool>
+
+## Development setup
+
+uv is required. Install with `brew install uv` or `pip install uv`.
+
+    uv venv .venv
+    source .venv/bin/activate
+    uv pip install -e ".[dev]"
+    pytest
+
+## Releasing to PyPI
+
+Tag a commit with `git tag v<VERSION>` and push the tag. The
+`.github/workflows/release.yml` workflow publishes to PyPI automatically
+using trusted publishing (no tokens needed after initial setup).
+
+PyPI trusted publishing must be configured once per repo. See
+https://docs.pypi.org/trusted-publishers/ and
+[docs/conventions/distribution.md](https://github.com/vivarium-collective/pbg-superpowers/blob/main/docs/conventions/distribution.md).
+```
 
 ## Final Validation and Commit
 

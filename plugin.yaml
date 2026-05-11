@@ -1,5 +1,5 @@
 name: pbg-superpowers
-version: 0.4.11
+version: 0.5.0
 description: |
   Process-bigraph project workflow plugin (in development).
 
@@ -18,6 +18,19 @@ description: |
   v0.4.11 adds a Visualization(Step) base class (pbg_superpowers.visualization)
   so visualization subclasses are auto-discovered via bigraph-schema's discovery
   walker alongside Processes / Emitters / Types.
+
+  v0.4.15 makes Visualization Steps wireable into Composites, not just
+  discoverable. Subclasses now override update() (the standard Step contract)
+  instead of a separate render() method. inputs() declares consumed observables;
+  outputs() exposes an html port; update() accumulates history and re-renders
+  the full trajectory each step.
+
+  v0.5.0 establishes the PyPI publishing convention for pbg-* repos: every
+  wrapper package SHOULD publish to PyPI. /pbg-expert scaffolds PyPI-ready
+  repos (full pyproject.toml with classifiers/URLs/license + release.yml).
+  /pbg-package audit gains a "published on PyPI" check. Catalog install
+  branches on pypi_name (PyPI path vs git-submodule fallback). uv is now
+  enforced in pbg-template workspaces.
 authors:
   - eagmon
 skills:

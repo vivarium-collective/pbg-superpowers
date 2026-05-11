@@ -41,6 +41,30 @@ def _has_dep(deps: list[str], pkg: str) -> bool:
     return any(pat.match(d) for d in deps)
 
 
+def _check_pypi(name: str) -> tuple[str, str]:
+    """Check if a distribution exists on PyPI. Returns (status, detail).
+
+    Fails gracefully when offline (5 s timeout). Absent distributions
+    produce WARN (not FAIL) so audit reports stay informational.
+    """
+    try:
+        import urllib.request
+        import json as _json
+        with urllib.request.urlopen(f"https://pypi.org/pypi/{name}/json", timeout=5) as resp:
+            data = _json.loads(resp.read().decode())
+        version = data.get("info", {}).get("version", "?")
+        return "PASS", f"published on PyPI as {name} (latest: {version})"
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return "WARN", (
+                f"NOT published on PyPI — recommend publishing; "
+                f"see docs/conventions/distribution.md"
+            )
+        return "WARN", f"PyPI check failed: HTTP {e.code}"
+    except Exception as e:
+        return "WARN", f"PyPI check failed: {e}"
+
+
 def audit_repo(repo_path: Path, run_install: bool = True) -> AuditReport:
     report = AuditReport(target=str(repo_path))
 
@@ -95,7 +119,21 @@ def audit_repo(repo_path: Path, run_install: bool = True) -> AuditReport:
             fix='Add `requires-python = ">=3.10"` (or tighter based on your wheel availability) to [project]',
         )
 
-    # 5. Process/Step subclasses present
+    # 5. Published on PyPI
+    project_name = project.get("name")
+    if project_name:
+        status, detail = _check_pypi(project_name)
+        report.add(
+            "published on PyPI",
+            status,
+            detail,
+            fix=(
+                "See docs/conventions/distribution.md for trusted-publishing setup"
+                if status == "WARN" else ""
+            ),
+        )
+
+    # 6. Process/Step subclasses present
     package_dirs = []
     for child in repo_path.iterdir():
         if child.is_dir() and not child.name.startswith(".") and not child.name.startswith("_"):

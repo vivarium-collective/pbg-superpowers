@@ -1,10 +1,12 @@
 """Tests for pbg_superpowers.package_audit."""
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 import textwrap
+import urllib.error
 
 import pytest
 
-from pbg_superpowers.package_audit import audit_repo, _has_dep, render_report
+from pbg_superpowers.package_audit import audit_repo, _has_dep, _check_pypi, render_report
 
 
 def test_has_dep_matches_with_versions():
@@ -83,3 +85,89 @@ def test_render_report_includes_fixes(tmp_path):
     assert "FAIL" in rendered
     # Fixes should appear since bigraph-schema is missing
     assert "bigraph-schema" in rendered
+
+
+# ---------------------------------------------------------------------------
+# _check_pypi tests (network calls mocked)
+# ---------------------------------------------------------------------------
+
+def _make_urlopen_ctx(data: bytes):
+    """Build a mock context-manager response for urllib.request.urlopen."""
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = data
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    return mock_resp
+
+
+def test_check_pypi_published():
+    import json
+    payload = json.dumps({"info": {"version": "1.2.3"}}).encode()
+    with patch("urllib.request.urlopen", return_value=_make_urlopen_ctx(payload)):
+        status, detail = _check_pypi("pbg-foo")
+    assert status == "PASS"
+    assert "1.2.3" in detail
+    assert "pbg-foo" in detail
+
+
+def test_check_pypi_not_found():
+    err = urllib.error.HTTPError(url="", code=404, msg="Not Found", hdrs=None, fp=None)
+    with patch("urllib.request.urlopen", side_effect=err):
+        status, detail = _check_pypi("pbg-notreal")
+    assert status == "WARN"
+    assert "NOT published on PyPI" in detail
+
+
+def test_check_pypi_server_error():
+    err = urllib.error.HTTPError(url="", code=503, msg="Service Unavailable", hdrs=None, fp=None)
+    with patch("urllib.request.urlopen", side_effect=err):
+        status, detail = _check_pypi("pbg-foo")
+    assert status == "WARN"
+    assert "503" in detail
+
+
+def test_check_pypi_offline():
+    """Network timeout / connection error should produce WARN, not crash."""
+    with patch("urllib.request.urlopen", side_effect=OSError("Network unreachable")):
+        status, detail = _check_pypi("pbg-foo")
+    assert status == "WARN"
+    assert "PyPI check failed" in detail
+
+
+def test_audit_includes_pypi_check(tmp_path):
+    """audit_repo() should include a 'published on PyPI' check when [project].name is set."""
+    (tmp_path / "pyproject.toml").write_text(textwrap.dedent("""
+        [project]
+        name = "pbg-testpkg"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["bigraph-schema>=0.0.60", "process-bigraph>=0.0.66"]
+    """))
+    import json
+    payload = json.dumps({"info": {"version": "0.1.0"}}).encode()
+    with patch("urllib.request.urlopen", return_value=_make_urlopen_ctx(payload)):
+        report = audit_repo(tmp_path, run_install=False)
+    names = [c.name for c in report.checks]
+    assert "published on PyPI" in names
+    pypi_check = next(c for c in report.checks if c.name == "published on PyPI")
+    assert pypi_check.status == "PASS"
+
+
+def test_audit_pypi_check_not_published(tmp_path):
+    """WARN (not FAIL) when the package is absent from PyPI."""
+    (tmp_path / "pyproject.toml").write_text(textwrap.dedent("""
+        [project]
+        name = "pbg-notpublished"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["bigraph-schema>=0.0.60", "process-bigraph>=0.0.66"]
+    """))
+    err = urllib.error.HTTPError(url="", code=404, msg="Not Found", hdrs=None, fp=None)
+    with patch("urllib.request.urlopen", side_effect=err):
+        report = audit_repo(tmp_path, run_install=False)
+    pypi_check = next((c for c in report.checks if c.name == "published on PyPI"), None)
+    assert pypi_check is not None
+    assert pypi_check.status == "WARN"
+    # A WARN on the PyPI check must NOT be counted as a FAIL
+    fails = [c for c in report.checks if c.status == "FAIL"]
+    assert not fails, f"unexpected FAILs: {fails}"
