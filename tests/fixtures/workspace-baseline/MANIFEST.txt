@@ -30,6 +30,7 @@
 ./scripts/_lib/imports.py
 ./scripts/_lib/install_errors.py
 ./scripts/_lib/investigations.py
+./scripts/_lib/migrations.py
 ./scripts/_lib/pdf_metadata.py
 ./scripts/_lib/pyproject_edit.py
 ./scripts/_lib/report.py
