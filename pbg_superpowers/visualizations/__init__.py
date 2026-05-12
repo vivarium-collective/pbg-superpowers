@@ -12,5 +12,6 @@ Usage (from a composite or investigation spec):
         config: {observable: free_DnaA, sources: [baseline]}
 """
 from pbg_superpowers.visualizations.time_series import TimeSeriesPlot
+from pbg_superpowers.visualizations.param_vs_observable import ParamVsObservable
 
-__all__ = ["TimeSeriesPlot"]
+__all__ = ["TimeSeriesPlot", "ParamVsObservable"]

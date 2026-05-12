@@ -91,3 +91,44 @@ def test_time_series_plot_missing_observable_in_state():
         config={"observable": "level", "sources": ["baseline"], "title": ""},
     )
     assert "Plotly.newPlot" in html
+
+
+from pbg_superpowers.visualizations import ParamVsObservable
+
+
+def _sweep_fixture_results():
+    """Sweep over rate=[0.1, 0.5, 1.0]; observable 'level' rises monotonically.
+    Final values: 1.5, 7.5, 15.0."""
+    runs = []
+    for rate in [0.1, 0.5, 1.0]:
+        traj = [{"step": i, "time": float(i),
+                  "state": {"level": rate * (i + 1) * 3}}
+                for i in range(5)]
+        runs.append({"run_id": f"r-{rate}", "params": {"rate": rate},
+                     "trajectory": traj})
+    return {"rate-sweep": {"runs": runs}}
+
+
+def test_param_vs_observable_final_reduce():
+    inst = ParamVsObservable.__new__(ParamVsObservable)
+    inst.config = {}
+    html = inst.render_final(
+        _sweep_fixture_results(),
+        config={"sweep": "rate-sweep", "sweep_param": "rate",
+                "observable": "level", "reduce": "final", "title": ""},
+    )
+    assert "Plotly.newPlot" in html
+    # The y values for the three rates should appear (1.5, 7.5, 15.0)
+    assert "1.5" in html
+    assert "15" in html
+
+
+def test_param_vs_observable_mean_reduce():
+    inst = ParamVsObservable.__new__(ParamVsObservable)
+    inst.config = {}
+    html = inst.render_final(
+        _sweep_fixture_results(),
+        config={"sweep": "rate-sweep", "sweep_param": "rate",
+                "observable": "level", "reduce": "mean", "title": ""},
+    )
+    assert "Plotly.newPlot" in html
