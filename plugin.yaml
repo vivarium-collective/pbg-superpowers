@@ -31,6 +31,9 @@ description: |
   /pbg-package audit gains a "published on PyPI" check. Catalog install
   branches on pypi_name (PyPI path vs git-submodule fallback). uv is now
   enforced in pbg-template workspaces.
+
+  /pbg-explore opens the dashboard's Composite Explorer focused on a single
+  composite spec id, starting the dashboard server automatically if needed.
 authors:
   - eagmon
 skills:
@@ -44,3 +47,4 @@ skills:
   - pbg-phase
   - pbg-viz
   - pbg-package
+  - pbg-explore
