@@ -74,3 +74,19 @@ def test_phase_space():
     state = {'x': [0.0, 1.0, 2.0, 3.0], 'y': [0.0, 1.0, 4.0, 9.0]}
     out = inst.update(state)
     assert 'Plotly.newPlot' in out['html']
+
+
+from pbg_superpowers.visualizations import Heatmap
+
+
+def test_heatmap():
+    inst = object.__new__(Heatmap)
+    inst.config = {'title': 'Grid'}
+    state = {
+        'x_params': [1.0, 2.0, 3.0],
+        'y_params': [10.0, 20.0],
+        'z_values': [[10.0, 20.0, 30.0], [20.0, 40.0, 60.0]],
+    }
+    out = inst.update(state)
+    assert 'Plotly.newPlot' in out['html']
+    assert 'heatmap' in out['html'].lower()
