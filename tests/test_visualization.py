@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.visualization.Visualization (v0.4.15: update-based)."""
+"""Tests for pbg_superpowers.visualization.Visualization (v0.5.0: final-mode required, streaming opt-in)."""
 import pytest
 
 from pbg_superpowers.visualization import Visualization
