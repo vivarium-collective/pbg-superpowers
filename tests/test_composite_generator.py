@@ -141,3 +141,23 @@ def test_discover_generators_finds_decorated_function_in_installed_pkg(
     entry = found[expected_id]
     assert entry.name == "demo"
     assert entry.parameters == {"x": {"type": "int", "default": 7}}
+
+
+def test_discover_all_merges_specs_and_generators(tmp_path, installed_fake_pkg):
+    # Create a tiny static spec in a tmp dir so discover_composites picks it up
+    spec_file = tmp_path / "baseline.composite.yaml"
+    spec_file.write_text("name: baseline\nstate: {}\n")
+
+    from pbg_superpowers.composite_discovery import discover_all
+    _REGISTRY.clear()
+    merged = discover_all(extra_search_paths=[tmp_path])
+
+    # Spec entry tagged spec
+    spec_keys = [k for k, v in merged.items() if v.get("kind") == "spec"]
+    assert any(k.endswith(".baseline") for k in spec_keys)
+
+    # Generator entry tagged generator
+    gen_id = "fake_generator_pkg.composites.demo"
+    assert gen_id in merged
+    assert merged[gen_id]["kind"] == "generator"
+    assert merged[gen_id]["name"] == "demo"
