@@ -6,26 +6,8 @@ the input store; this Step just plots ``y vs x`` as a line+marker chart.
 from __future__ import annotations
 import html as _html
 import json
-import statistics
 
 from pbg_superpowers.visualization import Visualization
-
-
-# Kept for backward compatibility (Heatmap imports this until Task 7)
-def _reduce(values: list[float], how: str) -> float:
-    if not values:
-        return float("nan")
-    if how == "final":
-        return values[-1]
-    if how == "mean":
-        return statistics.fmean(values)
-    if how == "max":
-        return max(values)
-    if how == "min":
-        return min(values)
-    if how == "integral":
-        return sum((values[i] + values[i + 1]) / 2 for i in range(len(values) - 1))
-    return values[-1]
 
 
 class ParamVsObservable(Visualization):
