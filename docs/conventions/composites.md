@@ -61,9 +61,33 @@ parameters:
 | Field | Type | Description |
 |---|---|---|
 | `description` | string | Human-readable summary |
+| `tags` | list[str] | Semantic category labels for dashboard filtering (see taxonomy below) |
 | `requires.processes` | list[str] | Process class names that must be in `core.link_registry` |
 | `requires.types` | list[str] | Custom type names that must be in `core.registry` |
 | `parameters` | dict | Named parameters with `type`, `default`, and optional `description` |
+
+### Tags
+
+The optional `tags:` field is a flat list of lowercase strings used by the dashboard's
+card-browse toolbar to filter and group composites. Tags are free-form, but the
+following values form the recommended taxonomy so chips cluster meaningfully across packages.
+
+Recommended values: `agent-based`, `binding-kinetics`, `cells`, `cellular-potts`,
+`chromosome`, `coarse-grained`, `cytoskeleton`, `demo`, `dna`, `fba`, `geometry`,
+`kinetics`, `lammps`, `mass-transfer`, `mechanics`, `membranes`, `mesoscale`,
+`molecular-dynamics`, `multi-cell`, `ode`, `packing`, `particles`, `pde`,
+`polymers`, `reaction-diffusion`, `rule-based`, `sbml`, `systems-biology`,
+`tissue`, `vcell`, `visualization`, `whole-cell`.
+
+Example:
+
+```yaml
+name: dnaa-binding-baseline
+description: "Minimal DnaA-oriC binding kinetics using v2ecoli's DnaABinder."
+tags: [chromosome, binding-kinetics, dna]
+requires:
+  processes: [DnaABinder, RAMEmitter]
+```
 
 ## Parameter substitution
 
