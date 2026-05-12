@@ -34,6 +34,9 @@ description: |
 
   /pbg-explore opens the dashboard's Composite Explorer focused on a single
   composite spec id, starting the dashboard server automatically if needed.
+
+  /pbg-investigate launches or re-runs an Investigation in the dashboard,
+  starting the server if needed and opening the Investigations tab in focus mode.
 authors:
   - eagmon
 skills:
@@ -44,7 +47,7 @@ skills:
   - pbg-workspace
   - pbg-server
   - pbg-report
-  - pbg-phase
+  - pbg-investigate
   - pbg-viz
   - pbg-package
   - pbg-explore
