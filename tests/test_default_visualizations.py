@@ -51,3 +51,15 @@ def test_param_vs_observable():
     assert 'html' in out
     assert 'Plotly.newPlot' in out['html']
     assert '15' in out['html']
+
+
+from pbg_superpowers.visualizations import Distribution
+
+
+def test_distribution_histogram():
+    inst = object.__new__(Distribution)
+    inst.config = {'title': 'Hist'}
+    state = {'samples': [10.0, 10.3, 10.6, 10.9, 11.2]}
+    out = inst.update(state)
+    assert 'Plotly.newPlot' in out['html']
+    assert 'histogram' in out['html'].lower()
