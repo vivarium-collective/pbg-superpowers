@@ -1,3 +1,4 @@
+./.claude/settings.json
 ./.github/workflows/workspace-ci.yml
 ./.gitignore
 ./.pbg/schemas/workspace.schema.json
@@ -6,13 +7,6 @@
 ./datasets/README.md
 ./docs/README.md
 ./docs/decisions.yaml
-./docs/superpowers/plans/2026-05-11-composite-explorer-workbench.md
-./docs/superpowers/plans/2026-05-11-v0.5.0-tasks.md
-./docs/superpowers/plans/2026-05-12-investigations.md
-./docs/superpowers/plans/2026-05-12-visualization-v2.md
-./docs/superpowers/specs/2026-05-11-composite-explorer-workbench-design.md
-./docs/superpowers/specs/2026-05-11-investigations-design.md
-./docs/superpowers/specs/2026-05-12-visualization-v2-design.md
 ./experiments/README.md
 ./experiments/_runs.yaml
 ./pbg_snap/__init__.py
@@ -55,16 +49,4 @@
 ./scripts/lint-workspace.py
 ./scripts/render-dashboard.py
 ./scripts/serve.sh
-./tests/_fixtures/ws_increase_demo/investigations/baseline/data/.keep
-./tests/_fixtures/ws_increase_demo/investigations/baseline/spec.yaml
-./tests/_fixtures/ws_increase_demo/pbg_ws_increase_demo/__init__.py
-./tests/_fixtures/ws_increase_demo/pbg_ws_increase_demo/composites/increase-demo.composite.yaml
-./tests/_fixtures/ws_increase_demo/pbg_ws_increase_demo/core.py
-./tests/_fixtures/ws_increase_demo/pbg_ws_increase_demo/processes.py
-./tests/_fixtures/ws_increase_demo/workspace.yaml
-./tests/test_composite_explorer_api.py
-./tests/test_composite_runs.py
-./tests/test_investigation_run_e2e.py
-./tests/test_investigations.py
-./tests/test_pyproject_edit.py
 ./workspace.yaml

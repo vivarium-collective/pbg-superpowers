@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 
-PBG_TEMPLATE = Path(os.path.expanduser("~/code/pbg-template")).resolve()
+PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser().resolve()
 
 
 @pytest.fixture(autouse=True)
@@ -62,6 +62,20 @@ def test_scaffold_workspace_yaml_validates(tmp_path, plugin_root):
     assert ws["name"] == "my-research"
     assert ws["schema_version"] == 2
     assert ws["plugin_version"] == "0.4.16"
+
+
+def test_scaffold_does_not_leak_template_dev_infra(tmp_path, plugin_root):
+    """Regression: pbg-template's own dev infra must never appear in a workspace."""
+    target = _scaffold(tmp_path, plugin_root)
+    must_not_exist = [
+        "tests",                          # pbg-template's own pytest suite
+        "docs/superpowers",               # pbg-template's design docs
+        ".superpowers/brainstorm",        # transient session cruft
+        "use-this-template-init.sh",      # GitHub-flow entry point, plugin path skips it
+        "template",                       # subdir name itself
+    ]
+    for p in must_not_exist:
+        assert not (target / p).exists(), f"leaked dev infra: {p}"
 
 
 def test_lint_passes_on_freshly_scaffolded(tmp_path, plugin_root):

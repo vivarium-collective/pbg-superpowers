@@ -17,6 +17,9 @@ from pathlib import Path
 import click
 
 
+# Requires pbg-template at the payload-boundary restructure (commit on or
+# after 2026-05-12) or later — earlier versions lack the template/ subdir
+# and will fail with "missing template/ payload subdir".
 DEFAULT_REMOTE = "https://github.com/vivarium-collective/pbg-template.git"
 
 
@@ -42,22 +45,31 @@ def _acquire(source: str, target: Path) -> None:
         src = Path(os.path.expanduser(source)).resolve()
         if not src.is_dir():
             raise click.ClickException(f"local template source not a directory: {src}")
-        # Allow target to be a pre-existing empty dir (scaffold_workspace already
-        # rejected non-empty); dirs_exist_ok=True lets copytree overlay into it.
-        shutil.copytree(src, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
-    else:
-        try:
-            subprocess.run(
-                ["git", "clone", "--depth", "1", source, str(target)],
-                check=True,
+        payload = src / "template"
+        if not payload.is_dir():
+            raise click.ClickException(
+                f"local template source missing template/ payload subdir: {src}. "
+                "Update pbg-template to v0.5+ which separates payload from dev infra."
             )
-        except subprocess.CalledProcessError:
-            # Don't leave a partial clone on disk; subsequent runs would
-            # otherwise fail the "exists and is non-empty" guard.
-            shutil.rmtree(target, ignore_errors=True)
-            raise click.ClickException(f"git clone failed for source: {source}")
-        # remove the cloned .git so the new workspace gets a fresh history
-        shutil.rmtree(target / ".git", ignore_errors=True)
+        shutil.copytree(payload, target, dirs_exist_ok=True)
+    else:
+        # Git URL — clone the whole repo to a tmp dir, then copy just template/.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp) / "checkout"
+            try:
+                subprocess.run(
+                    ["git", "clone", "--depth", "1", source, str(tmp_path)],
+                    check=True,
+                )
+            except subprocess.CalledProcessError:
+                raise click.ClickException(f"git clone failed for source: {source}")
+            payload = tmp_path / "template"
+            if not payload.is_dir():
+                raise click.ClickException(
+                    f"remote template {source} missing template/ payload subdir."
+                )
+            shutil.copytree(payload, target, dirs_exist_ok=True)
 
 
 def _render(target: Path, workspace_name: str) -> None:
