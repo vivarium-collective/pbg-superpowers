@@ -159,3 +159,24 @@ def test_distribution_histogram_at_final():
     )
     assert "Plotly.newPlot" in html
     assert "histogram" in html.lower()
+
+
+from pbg_superpowers.visualizations import PhaseSpace
+
+
+def _phase_space_fixture():
+    """One run with two observables (x, y) traced over 5 steps."""
+    traj = [{"step": i, "time": float(i),
+              "state": {"x": float(i), "y": i * i}} for i in range(5)]
+    return {"single": {"runs": [{"run_id": "r1", "params": {}, "trajectory": traj}]}}
+
+
+def test_phase_space_xy_trajectory():
+    inst = PhaseSpace.__new__(PhaseSpace)
+    inst.config = {}
+    html = inst.render_final(
+        _phase_space_fixture(),
+        config={"x_observable": "x", "y_observable": "y",
+                 "sources": ["single"], "title": ""},
+    )
+    assert "Plotly.newPlot" in html

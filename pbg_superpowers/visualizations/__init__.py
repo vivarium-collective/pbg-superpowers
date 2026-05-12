@@ -14,5 +14,6 @@ Usage (from a composite or investigation spec):
 from pbg_superpowers.visualizations.time_series import TimeSeriesPlot
 from pbg_superpowers.visualizations.param_vs_observable import ParamVsObservable
 from pbg_superpowers.visualizations.distribution import Distribution
+from pbg_superpowers.visualizations.phase_space import PhaseSpace
 
-__all__ = ["TimeSeriesPlot", "ParamVsObservable", "Distribution"]
+__all__ = ["TimeSeriesPlot", "ParamVsObservable", "Distribution", "PhaseSpace"]
