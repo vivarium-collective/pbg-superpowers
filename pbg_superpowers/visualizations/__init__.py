@@ -13,5 +13,6 @@ Usage (from a composite or investigation spec):
 """
 from pbg_superpowers.visualizations.time_series import TimeSeriesPlot
 from pbg_superpowers.visualizations.param_vs_observable import ParamVsObservable
+from pbg_superpowers.visualizations.distribution import Distribution
 
-__all__ = ["TimeSeriesPlot", "ParamVsObservable"]
+__all__ = ["TimeSeriesPlot", "ParamVsObservable", "Distribution"]

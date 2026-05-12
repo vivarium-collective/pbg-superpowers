@@ -132,3 +132,30 @@ def test_param_vs_observable_mean_reduce():
                 "observable": "level", "reduce": "mean", "title": ""},
     )
     assert "Plotly.newPlot" in html
+
+
+from pbg_superpowers.visualizations import Distribution
+
+
+def _seeds_fixture_results():
+    """5 seed runs of the same sim; observable 'level' has noise around 10."""
+    runs = []
+    for k in range(5):
+        traj = [{"step": i, "time": float(i),
+                  "state": {"level": 10.0 + k * 0.3}}  # different terminal value per seed
+                for i in range(3)]
+        runs.append({"run_id": f"r-seed-{k}", "params": {"seed": k},
+                     "trajectory": traj})
+    return {"replicates": {"runs": runs}}
+
+
+def test_distribution_histogram_at_final():
+    inst = Distribution.__new__(Distribution)
+    inst.config = {}
+    html = inst.render_final(
+        _seeds_fixture_results(),
+        config={"observable": "level", "sources": ["replicates"],
+                 "at_step": "final", "kind": "histogram", "title": ""},
+    )
+    assert "Plotly.newPlot" in html
+    assert "histogram" in html.lower()
