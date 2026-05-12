@@ -35,3 +35,19 @@ def test_time_series_plot_multi_run():
     assert 'Plotly.newPlot' in html['html']
     assert 'rate=1.0' in html['html']
     assert 'rate=3.0' in html['html']
+
+
+from pbg_superpowers.visualizations import ParamVsObservable
+
+
+def test_param_vs_observable():
+    inst = object.__new__(ParamVsObservable)
+    inst.config = {'title': 'Sweep'}
+    state = {
+        'sweep_param_values': [0.1, 0.5, 1.0],
+        'reduced_observable':  [3.0, 7.5, 15.0],
+    }
+    out = inst.update(state)
+    assert 'html' in out
+    assert 'Plotly.newPlot' in out['html']
+    assert '15' in out['html']
