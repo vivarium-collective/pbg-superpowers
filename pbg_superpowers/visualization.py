@@ -1,28 +1,13 @@
-"""Visualization Step base class — discoverable AND wireable into Composites.
+"""Visualization Step base class — final-mode (default) + opt-in streaming.
 
-A Visualization is a process_bigraph.Step whose job is to consume observable
-streams (via inputs() — the same pattern Emitters use) and produce a rendered
-HTML/PNG via update() returning {'html': ...} (or whatever outputs() declares).
+A Visualization is a process_bigraph.Step. Subclasses always implement
+``render_final(results, config)`` (called once at end of an Investigation,
+given the full results dict). Subclasses MAY also implement ``update()``
+for per-step streaming mode by setting ``supports_streaming = True``.
 
-Subclasses MUST override:
-- inputs():  declare which observables this viz consumes
-- update():  return a dict matching outputs(); typically {'html': '<rendered>'}
-
-Subclasses MAY override:
-- outputs():  default is {'html': 'string'}; extend if you also emit PNG, JSON, etc.
-- config_schema: extend the default {'title': string}
-- __init__: set up internal state (e.g., self.history = []) for accumulating
-  per-step values across update() calls
-
-Render timing convention: Visualizations re-render the full trajectory each
-update() call. Subclasses accumulate state in instance attributes (self.history,
-self.frames, etc.) and produce a fresh figure each step. Plotly + matplotlib
-both handle the resulting recomputation fine for typical workspace sims.
-
-Discovery: Visualization extends Step extends Edge, so subclasses are picked
-up by bigraph_schema.package.discover and registered in core.link_registry
-alongside Emitter and Process subclasses. The dashboard filters them via
-issubclass checks (see docs/conventions/visualizations.md).
+Discovery: Visualization extends Step extends Edge, so subclasses are
+auto-discovered via bigraph_schema.package.discover and registered in
+``core.link_registry`` alongside Emitters / Processes / Types.
 """
 from __future__ import annotations
 from typing import Any
@@ -31,54 +16,56 @@ from process_bigraph import Step
 
 
 class Visualization(Step):
-    """Base class for renderable visualization Steps.
+    """Base class for renderable Visualization Steps.
 
-    Subclasses must implement inputs() and update(). Default outputs() exposes
-    an 'html' string port that Composites can wire to a store.
+    Subclasses MUST implement ``render_final(results, *, config)``.
+    Subclasses MAY implement ``update(state, interval)`` and set
+    ``supports_streaming = True`` for per-step rendering inside Composites.
     """
+
+    supports_streaming: bool = False
 
     config_schema = {
         'title': {'_type': 'string', '_default': ''},
     }
 
     def inputs(self) -> dict[str, Any]:
-        """Subclasses MUST override.
-
-        Returns a dict of {wire_name: type} declaring the observables this viz
-        consumes. The composite spec wires these to store paths.
-
-        Example:
-            return {'free_DnaA': 'float', 'oriC_state': 'string'}
-        """
+        """Default empty. Streaming subclasses override to declare consumed
+        observables via wires (per the existing Composite Step contract)."""
         return {}
 
     def outputs(self) -> dict[str, Any]:
-        """Default: 'html' string output. Subclasses MAY extend.
-
-        Example: subclass that also emits a PNG path
-            return {'html': 'string', 'png_path': 'string'}
-        """
+        """Default: single ``html`` string output. Used by both modes."""
         return {'html': 'string'}
 
-    def update(self, state: dict, interval: float = 1.0) -> dict:
-        """Subclasses MUST override.
+    def render_final(self, results: dict, *, config: dict) -> str:
+        """Render the visualization once given the full results dict.
 
-        `state` is a dict keyed by inputs() wire names; values are the current
-        store values via the wires declared in the composite spec.
+        ``results`` shape:
+            {<sim_name>: {"runs": [{"run_id", "params", "trajectory"}, ...]}, ...}
 
-        Return a dict matching outputs() — typically {'html': '<rendered HTML>'}.
+        ``config`` is whatever the Investigation spec passed under ``config:``,
+        plus a special ``_overlays`` key that the orchestrator injects with
+        resolved overlay payloads (experimental-points, reference-range,
+        cross-investigation-series).
+
+        Returns a self-contained HTML fragment (Plotly figure typically).
         """
         raise NotImplementedError(
-            f"{type(self).__name__} must implement update(state, interval). "
-            f"Subclasses of Visualization override update() to consume per-step "
-            f"state and return {{'html': '<rendered figure>'}}. See "
-            f"pbg_superpowers.visualization.Visualization for the contract."
+            f"{type(self).__name__} must implement render_final(results, *, config). "
+            f"See pbg_superpowers.visualization.Visualization for the contract."
         )
+
+    def update(self, state: dict, interval: float = 1.0) -> dict:
+        """Optional per-step rendering for streaming mode.
+
+        Default returns ``{'html': ''}`` (no-op) so that Visualization
+        subclasses that only do final-mode rendering still satisfy the
+        Step contract when accidentally wired into a Composite.
+        """
+        return {'html': ''}
 
     @classmethod
     def is_visualization(cls) -> bool:
-        """Marker for dashboard filtering: distinguish viz Steps from Emitters etc.
-
-        Use: `[c for c in core.link_registry.values() if hasattr(c, 'is_visualization') and c.is_visualization()]`
-        """
+        """Marker for dashboard filtering."""
         return True

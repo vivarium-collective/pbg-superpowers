@@ -42,10 +42,10 @@ def test_visualization_marker():
     assert CounterRenderer.is_visualization() is True
 
 
-def test_base_update_raises_not_implemented():
-    """Base class update() raises so subclasses are forced to override."""
-    with pytest.raises(NotImplementedError, match="update"):
-        Visualization.update(None, {}, 1.0)  # type: ignore[arg-type]
+def test_base_render_final_raises_not_implemented():
+    """Base class render_final() raises so subclasses are forced to override."""
+    with pytest.raises(NotImplementedError, match="render_final"):
+        Visualization.render_final(None, {}, config={})  # type: ignore[arg-type]
 
 
 def test_subclass_inputs_outputs():
@@ -136,3 +136,25 @@ def test_visualization_wired_into_composite():
     assert '2 steps' in htmls[1]
     assert '3 steps' in htmls[2]
     assert 'sum=5.0' in htmls[2]  # 0 + 1 + 4
+
+
+# ---------------------------------------------------------------------------
+# v0.5.0 contract: render_final required, update opt-in via supports_streaming
+# ---------------------------------------------------------------------------
+
+def test_visualization_render_final_raises_by_default():
+    """Base class render_final must raise NotImplementedError so subclasses must override."""
+    with pytest.raises(NotImplementedError, match="render_final"):
+        Visualization.render_final(None, {}, config={})
+
+
+def test_visualization_supports_streaming_default_false():
+    """Default class attribute is False — subclasses opt in to streaming."""
+    assert Visualization.supports_streaming is False
+
+
+def test_visualization_update_default_returns_empty_html():
+    """Base update is a no-op for final-mode visualizations."""
+    inst = object.__new__(Visualization)
+    out = inst.update({}, 1.0)
+    assert out == {'html': ''}
