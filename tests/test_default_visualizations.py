@@ -180,3 +180,30 @@ def test_phase_space_xy_trajectory():
                  "sources": ["single"], "title": ""},
     )
     assert "Plotly.newPlot" in html
+
+
+from pbg_superpowers.visualizations import Heatmap
+
+
+def _heatmap_fixture():
+    """2D sweep: 3x3 grid over (a, b). Observable 'z' = a * b."""
+    runs = []
+    for a in [1, 2, 3]:
+        for b in [10, 20, 30]:
+            traj = [{"step": i, "time": float(i),
+                      "state": {"z": float(a * b)}} for i in range(2)]
+            runs.append({"run_id": f"r-{a}-{b}", "params": {"a": a, "b": b},
+                         "trajectory": traj})
+    return {"grid": {"runs": runs}}
+
+
+def test_heatmap_renders_2d():
+    inst = Heatmap.__new__(Heatmap)
+    inst.config = {}
+    html = inst.render_final(
+        _heatmap_fixture(),
+        config={"sweep": "grid", "x_param": "a", "y_param": "b",
+                 "observable": "z", "reduce": "final", "title": ""},
+    )
+    assert "Plotly.newPlot" in html
+    assert "heatmap" in html.lower()
