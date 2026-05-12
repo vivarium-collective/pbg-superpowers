@@ -78,6 +78,50 @@ def discover_composites(extra_search_paths: list[Path] | None = None) -> dict[st
     return specs
 
 
+def discover_all(
+    extra_search_paths: list[Path] | None = None,
+    extra_packages: list[str] | None = None,
+) -> dict[str, dict]:
+    """Return both static specs and composite generators, tagged with ``kind``.
+
+    Spec entries get ``kind: spec`` and pass through the existing spec
+    payload. Generator entries get ``kind: generator`` and a compact dict
+    {name, description, parameters, module} so dashboards can render them
+    without holding a reference to the live function object.
+
+    Discovery imports the host packages of every generator (see
+    :func:`pbg_superpowers.composite_generator.discover_generators`). If
+    you need the no-import safety property, call ``discover_composites``
+    directly.
+    """
+    # Deferred: discover_generators triggers package imports as a
+    # side-effect. Keeping it local ensures that cost is paid only when
+    # discover_all is explicitly called.
+    from pbg_superpowers.composite_generator import discover_generators
+
+    specs = discover_composites(extra_search_paths=extra_search_paths)
+    out: dict[str, dict] = {
+        sid: {"kind": "spec", **s} for sid, s in specs.items()
+    }
+    for gid, entry in discover_generators(
+            extra_packages=extra_packages).items():
+        if gid in out:
+            import warnings
+            warnings.warn(
+                f"discover_all: generator {gid!r} collides with a spec of "
+                "the same id; generator wins. Rename one to avoid ambiguity.",
+                stacklevel=2,
+            )
+        out[gid] = {
+            "kind": "generator",
+            "name": entry.name,
+            "description": entry.description,
+            "parameters": entry.parameters,
+            "module": entry.module,
+        }
+    return out
+
+
 def _make_spec_id(pkg_name: str, pkg_root: Path, file_path: Path) -> str:
     """Stable identifier for a composite spec: 'pkg.subdir.subdir.stem'."""
     rel = file_path.relative_to(pkg_root)

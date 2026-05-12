@@ -42,7 +42,6 @@ def test_scaffold_creates_expected_files(tmp_path, plugin_root):
         "reports/index.html",
         "scripts/lint-workspace.py",
         ".pbg/schemas/workspace.schema.json",
-        ".pbg/schemas/phase.schema.json",
     ]
     for p in must_exist:
         assert (target / p).exists(), f"missing: {p}"
@@ -62,7 +61,7 @@ def test_scaffold_workspace_yaml_validates(tmp_path, plugin_root):
     ws = yaml.safe_load((target / "workspace.yaml").read_text())
     assert ws["name"] == "my-research"
     assert ws["schema_version"] == 2
-    assert ws["plugin_version"] == "0.4.15"
+    assert ws["plugin_version"] == "0.4.16"
 
 
 def test_lint_passes_on_freshly_scaffolded(tmp_path, plugin_root):

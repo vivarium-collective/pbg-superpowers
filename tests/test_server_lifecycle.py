@@ -20,7 +20,10 @@ def _check_template_exists():
         pytest.skip(f"pbg-template not found at {PBG_TEMPLATE}")
 
 
-@pytest.mark.timeout(30)
+# macOS GHA runners are noticeably slower at cold subprocess Python
+# startup; the 30s budget that worked locally and on Ubuntu times out
+# there. 60s is comfortably above the Ubuntu wall-clock.
+@pytest.mark.timeout(60)
 def test_server_serves_workspace_report(tmp_path, plugin_root):
     ws = tmp_path / "ws"
     # Scaffold workspace
