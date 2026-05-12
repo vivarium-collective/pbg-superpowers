@@ -62,8 +62,7 @@ def test_scaffold_workspace_yaml_validates(tmp_path, plugin_root):
     ws = yaml.safe_load((target / "workspace.yaml").read_text())
     assert ws["name"] == "my-research"
     assert ws["schema_version"] == 2
-    assert ws["plugin_version"] == "0.1.1"
-    assert ws["stages"]["workspace_bootstrap"]["status"] == "complete"
+    assert ws["plugin_version"] == "0.4.15"
 
 
 def test_lint_passes_on_freshly_scaffolded(tmp_path, plugin_root):

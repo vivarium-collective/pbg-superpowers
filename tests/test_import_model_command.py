@@ -31,7 +31,10 @@ def _scaffold_workspace(target: Path, plugin_root: Path):
          "--template-source", str(PBG_TEMPLATE)],
         check=True, cwd=plugin_root,
     )
-    _git("init", "-q", cwd=target)
+    # `-b main` is required: tests pass `--ref main` to import-model,
+    # which clones and runs `git checkout main`. Without -b, CI git
+    # creates `master` by default and the checkout fails.
+    _git("init", "-q", "-b", "main", cwd=target)
     _git("add", "-A", cwd=target)
     _git("commit", "-qm", "init", cwd=target)
 
@@ -40,7 +43,7 @@ def _make_external_repo(target: Path):
     """Create a tiny git repo to use as a fake external import source."""
     target.mkdir()
     (target / "README.md").write_text("# fake external repo\n")
-    _git("init", "-q", cwd=target)
+    _git("init", "-q", "-b", "main", cwd=target)
     _git("add", "-A", cwd=target)
     _git("commit", "-qm", "init", cwd=target)
 

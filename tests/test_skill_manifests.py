@@ -11,7 +11,7 @@ REQUIRED_FIELDS = {"name", "description"}
 EXPECTED_SKILLS = {
     "pbg-workspace", "pbg-server", "pbg-report", "pbg-phase",
     "pbg-viz", "pbg-package", "pbg-expert", "pbg-composer", "pbg-wrapper",
-    "pbg-suggest",
+    "pbg-suggest", "pbg-explore",
 }
 
 
