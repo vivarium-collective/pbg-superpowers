@@ -28,7 +28,7 @@ def test_scaffold_matches_manifest(tmp_path, plugin_root, fixtures_dir):
     # template when pytest or python has been run locally there — those
     # are gitignored upstream but the scaffolder copies whatever is on
     # disk. Filtering here keeps the test stable across dev machines.
-    _IGNORED = ("__pycache__", ".pytest_cache")
+    _IGNORED = ("__pycache__", ".pytest_cache", ".superpowers", ".claude")
     actual = sorted(
         "./" + str(p.relative_to(target))
         for p in target.rglob("*")

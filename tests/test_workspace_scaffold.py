@@ -42,7 +42,6 @@ def test_scaffold_creates_expected_files(tmp_path, plugin_root):
         "reports/index.html",
         "scripts/lint-workspace.py",
         ".pbg/schemas/workspace.schema.json",
-        ".pbg/schemas/phase.schema.json",
     ]
     for p in must_exist:
         assert (target / p).exists(), f"missing: {p}"
