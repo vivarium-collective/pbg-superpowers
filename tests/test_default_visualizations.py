@@ -63,3 +63,14 @@ def test_distribution_histogram():
     out = inst.update(state)
     assert 'Plotly.newPlot' in out['html']
     assert 'histogram' in out['html'].lower()
+
+
+from pbg_superpowers.visualizations import PhaseSpace
+
+
+def test_phase_space():
+    inst = object.__new__(PhaseSpace)
+    inst.config = {'title': 'XY'}
+    state = {'x': [0.0, 1.0, 2.0, 3.0], 'y': [0.0, 1.0, 4.0, 9.0]}
+    out = inst.update(state)
+    assert 'Plotly.newPlot' in out['html']
