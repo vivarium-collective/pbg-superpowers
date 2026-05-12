@@ -9,7 +9,7 @@ maintain a separate list.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 
 @dataclass
@@ -56,3 +56,28 @@ def composite_generator(
         fn._composite_generator_entry = entry  # introspection sidecar
         return fn
     return decorate
+
+
+def build_generator(
+    entry: GeneratorEntry,
+    overrides: dict[str, Any] | None = None,
+    core: Any = None,
+) -> dict:
+    """Call the wrapped function with merged defaults + overrides.
+
+    Unknown override keys raise ValueError so dashboards / callers can't
+    silently smuggle in parameters that the generator doesn't declare.
+    """
+    overrides = overrides or {}
+    unknown = set(overrides) - set(entry.parameters)
+    if unknown:
+        raise ValueError(
+            f"unknown parameter(s) for {entry.id}: {sorted(unknown)}"
+        )
+    kwargs: dict[str, Any] = {}
+    for pname, pdecl in entry.parameters.items():
+        if pname in overrides:
+            kwargs[pname] = overrides[pname]
+        elif "default" in pdecl:
+            kwargs[pname] = pdecl["default"]
+    return entry.func(core=core, **kwargs)

@@ -222,7 +222,7 @@ def test_build_generator_rejects_unknown_overrides():
         {"rate": {"type": "float", "default": 0.25}},
         lambda **kw: {"got": kw},
     )
-    with pytest.raises(KeyError, match="bogus"):
+    with pytest.raises(ValueError, match="bogus"):
         build_generator(entry, overrides={"bogus": 1})
 
 
@@ -259,13 +259,13 @@ def build_generator(
 ) -> dict:
     """Call the wrapped function with merged defaults + overrides.
 
-    Unknown override keys raise KeyError so dashboards / callers can't
+    Unknown override keys raise ValueError so dashboards / callers can't
     silently smuggle in parameters that the generator doesn't declare.
     """
     overrides = overrides or {}
     unknown = set(overrides) - set(entry.parameters)
     if unknown:
-        raise KeyError(
+        raise ValueError(
             f"unknown parameter(s) for {entry.id}: {sorted(unknown)}"
         )
     kwargs: dict[str, Any] = {}
@@ -2617,7 +2617,7 @@ doc = build_generator(entry, overrides={"rate": 2.5})
 ```
 
 `build_generator` validates that every key in `overrides` is declared in
-`entry.parameters` and raises `KeyError` otherwise. Defaults from
+`entry.parameters` and raises `ValueError` otherwise. Defaults from
 `parameters` fill in anything the caller didn't override.
 
 ## Auto-registration
