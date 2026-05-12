@@ -1,4 +1,4 @@
-"""Local HTTP server: serves reports/, exposes /api/state, /api/events SSE, /api/guidance, /api/click."""
+"""Local HTTP server: serves reports/, exposes /api/state, /api/events SSE, /api/guidance, /api/click, /api/composites."""
 from __future__ import annotations
 import argparse
 import json
@@ -27,6 +27,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_events_sse()
         if self.path.startswith("/api/guidance"):
             return self._serve_guidance()
+        if self.path.startswith("/api/composites"):
+            return self._serve_composites()
         # Default: serve under reports/
         rel = self.path.lstrip("/")
         path = WORKSPACE / "reports" / rel
@@ -87,6 +89,30 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         return self._serve_file(files[0], "text/html")
+
+    def _serve_composites(self):
+        from pbg_superpowers.composite_discovery import discover_all
+        extra_search_paths: list[Path] = []
+        local_composites = WORKSPACE / "composites"
+        if local_composites.is_dir():
+            extra_search_paths.append(local_composites)
+        try:
+            result = discover_all(extra_search_paths=extra_search_paths or None)
+        except Exception as exc:
+            body = json.dumps({"error": str(exc)}).encode()
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        body = json.dumps(result).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _serve_events_sse(self):
         self.send_response(200)
