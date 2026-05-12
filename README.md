@@ -65,7 +65,7 @@ These ship today but their interfaces are still moving:
 | `/pbg-server [start\|stop\|status]` | Local dashboard (5 tabs + workstream strip + branch timeline) |
 | `/pbg-report` | Regenerate `reports/index.html` after manual state changes |
 | `/pbg-phase <n>` | Drive phase n inside a workspace |
-| `/pbg-viz <name>` | Generate a `Visualization` subclass from a description (v0.4.11+: class form, auto-discoverable) |
+| `/pbg-viz <name>` | Generate a `Visualization` subclass from a description (v0.4.15+: update()-based, wireable into Composites) |
 | `/pbg-package <repo>` | Audit a pbg-* repo for discovery-convention compliance |
 
 ## Architecture
@@ -78,8 +78,10 @@ These ship today but their interfaces are still moving:
 - **Phase template is first-class.** Each phase lives in `phases/phase-N.md` at the workspace root with YAML frontmatter (`status`, `prereq_phases`, `gate_passed`, `acceptance_tests`, …). The body uses your Phase Template format verbatim. The Build Model tab renders each phase with a Start phase / Evaluate gate action button.
 - **Composite spec convention.** Composites are DATA, not code. Any `*.composite.yaml` or `*.composite.json` file in an installed bigraph-schema-dependent package is a composite spec — a declarative state document with optional typed parameters that support `${name}` substitution. `pbg_superpowers.composite_spec.build_composite_from_spec` turns a parsed spec into a runnable `Composite`; `pbg_superpowers.composite_discovery.discover_composites` walks all installed packages (and optional local search paths) to find every registered spec without importing any simulator code. See [docs/conventions/composites.md](docs/conventions/composites.md) for the full reference.
 - **Visualization Step base class** — `pbg_superpowers.visualization.Visualization`
-  is a `process_bigraph.Step` subclass; visualization subclasses are
-  auto-discovered alongside Processes / Emitters / Types. See
+  is a `process_bigraph.Step` subclass that is both auto-discovered alongside
+  Processes / Emitters / Types AND wireable into Composite specs via the standard
+  `inputs() / outputs() / update()` Step contract. Its `html` output port carries
+  the latest rendered HTML into a store each step. See
   [docs/conventions/visualizations.md](docs/conventions/visualizations.md).
 
 ## Tests

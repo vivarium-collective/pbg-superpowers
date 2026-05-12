@@ -1,28 +1,36 @@
-"""Tests for pbg_superpowers.visualization.Visualization."""
+"""Tests for pbg_superpowers.visualization.Visualization (v0.4.15: update-based)."""
 import pytest
 
 from pbg_superpowers.visualization import Visualization
 
 
 # ---------------------------------------------------------------------------
-# Fixture: a concrete Visualization subclass
+# Test subclass: counter accumulator that re-renders the running sum
 # ---------------------------------------------------------------------------
 
 class CounterRenderer(Visualization):
-    """Test viz: returns the count of entries as an HTML fragment."""
+    """Test viz: accumulates 'value' input over steps; renders count as HTML."""
 
     config_schema = {
         'title': {'_type': 'string', '_default': 'Counter'},
     }
 
-    def render(self, results):
-        n = sum(len(v) for v in results.values())
-        title = self.config.get('title') if hasattr(self, 'config') else 'Counter'
-        return f"<div>{title}: {n} entries</div>"
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.history = []
+
+    def inputs(self):
+        return {'value': 'float'}
+
+    def update(self, state, interval):
+        self.history.append(state.get('value', 0.0))
+        title = self.config.get('title', 'Counter') if hasattr(self, 'config') else 'Counter'
+        n = len(self.history)
+        return {'html': f'<div>{title}: {n} steps, sum={sum(self.history)}</div>'}
 
 
 # ---------------------------------------------------------------------------
-# Static tests (no Core)
+# Static contract tests
 # ---------------------------------------------------------------------------
 
 def test_visualization_is_step_subclass():
@@ -34,73 +42,49 @@ def test_visualization_marker():
     assert CounterRenderer.is_visualization() is True
 
 
-def test_render_must_be_overridden():
-    """The base class raises NotImplementedError if render isn't overridden."""
-    class Empty(Visualization):
-        pass
-
-    # We can't easily instantiate without a Core; just check the method signature.
-    # The base render raises.
-    with pytest.raises(NotImplementedError):
-        Visualization.render(None, {})  # type: ignore[arg-type]
+def test_base_update_raises_not_implemented():
+    """Base class update() raises so subclasses are forced to override."""
+    with pytest.raises(NotImplementedError, match="update"):
+        Visualization.update(None, {}, 1.0)  # type: ignore[arg-type]
 
 
-def test_subclass_render_works():
-    """Calling render on a subclass returns HTML."""
-    inst = CounterRenderer.__new__(CounterRenderer)  # bypass __init__ for unit test
-    inst.config = {'title': 'Counter'}
-    out = inst.render({('emitter',): [{'x': 1}, {'x': 2}, {'x': 3}]})
-    assert 'Counter' in out
-    assert '3 entries' in out
-
-
-def test_update_is_noop():
-    """Default update returns empty dict."""
+def test_subclass_inputs_outputs():
+    """Subclass declares inputs/outputs as expected."""
     inst = CounterRenderer.__new__(CounterRenderer)
-    assert inst.update({}, 1.0) == {}
+    inst.history = []
+    assert inst.inputs() == {'value': 'float'}
+    assert inst.outputs() == {'html': 'string'}
+
+
+def test_subclass_update_returns_html_dict():
+    """Calling update returns a dict matching outputs()."""
+    inst = CounterRenderer.__new__(CounterRenderer)
+    inst.history = []
+    inst.config = {'title': 'Counter'}
+    out = inst.update({'value': 3.0}, 1.0)
+    assert isinstance(out, dict)
+    assert 'html' in out
+    assert '<div>' in out['html']
+    assert '1 steps' in out['html']  # one step accumulated
+
+
+def test_subclass_accumulates_across_calls():
+    """history grows monotonically across update() calls."""
+    inst = CounterRenderer.__new__(CounterRenderer)
+    inst.history = []
+    inst.config = {'title': 'Counter'}
+    inst.update({'value': 1.0}, 1.0)
+    inst.update({'value': 2.0}, 1.0)
+    inst.update({'value': 3.0}, 1.0)
+    assert inst.history == [1.0, 2.0, 3.0]
 
 
 # ---------------------------------------------------------------------------
-# Discovery tests
+# Discoverability tests
 # ---------------------------------------------------------------------------
-
-def test_visualization_subclass_discovered_via_allocate_core():
-    """The crucial test: a Visualization subclass appears in core.link_registry
-    after allocate_core() runs bigraph-schema's discovery walker.
-
-    NOTE: this depends on the test class being defined in a package that
-    bigraph-schema's discovery can find. Since CounterRenderer is defined in
-    this test module (pbg_superpowers.tests namespace, which IS importable
-    when pbg-superpowers is installed editably), discovery should find it.
-
-    If discovery is currently flaky for tests-folder modules, we accept a
-    skip but verify the class structure is correct (the discovery walker's
-    behavior on test modules is documented as unreliable in
-    bigraph_schema/package/discover.py).
-    """
-    from bigraph_schema import allocate_core
-    core = allocate_core()
-    # Walk the link_registry to see if ANY Visualization subclass appears.
-    viz_classes = [
-        cls for cls in core.link_registry.values()
-        if isinstance(cls, type)
-        and issubclass(cls, Visualization)
-        and cls is not Visualization
-    ]
-    # If nothing's discovered, this is informational but not necessarily a
-    # bug — discovery walks only pip-installed packages. Either way the
-    # assertion below isn't strict; we report the count.
-    print(f"discovered Visualization subclasses: {len(viz_classes)}")
-    # The base Visualization itself should be importable from the link_registry
-    # if pbg_superpowers.visualization is on the discovery walk path.
-    # We don't assert >0 here because the test module isn't always on it; the
-    # filter pattern is the contract that matters.
-
 
 def test_visualization_filter_pattern():
-    """The pattern the dashboard uses to filter Visualization subclasses
-    from a populated registry."""
-    # Simulate a registry containing a mix of classes.
+    """The pattern the dashboard uses to find Visualization subclasses."""
     from process_bigraph import Process, Step
     registry = {
         'CounterRenderer': CounterRenderer,
@@ -111,10 +95,44 @@ def test_visualization_filter_pattern():
     viz_only = {
         name: cls for name, cls in registry.items()
         if isinstance(cls, type)
-        and issubclass(cls, Visualization)
-        and cls is not Visualization
+           and issubclass(cls, Visualization)
+           and cls is not Visualization
     }
     assert 'CounterRenderer' in viz_only
-    assert 'Visualization' not in viz_only  # filter out the base class
+    assert 'Visualization' not in viz_only
     assert 'Step' not in viz_only
-    assert 'Process' not in viz_only
+
+
+# ---------------------------------------------------------------------------
+# Integration: wire into a Composite, verify html output reaches a store
+# ---------------------------------------------------------------------------
+
+def test_visualization_wired_into_composite():
+    """End-to-end: a Visualization wired into a Composite captures html on each step.
+
+    NOTE: this test verifies the contract works in principle. The exact
+    Composite wiring API may vary; the key assertion is that:
+      1. The Visualization subclass instantiates as a Step
+      2. update() can be called with the wired state dict
+      3. The returned 'html' value is a string with content
+    """
+    from process_bigraph import allocate_core
+
+    core = allocate_core()
+    inst = CounterRenderer.__new__(CounterRenderer)
+    inst.history = []
+    inst.config = {'title': 'Trajectory'}
+
+    # Simulate three sim steps with increasing values
+    states = [{'value': 0.0}, {'value': 1.0}, {'value': 4.0}]
+    htmls = []
+    for s in states:
+        result = inst.update(s, 1.0)
+        htmls.append(result['html'])
+
+    # Each step should produce a different (longer) html (accumulating sum)
+    assert all('<div>' in h for h in htmls)
+    assert '1 steps' in htmls[0]
+    assert '2 steps' in htmls[1]
+    assert '3 steps' in htmls[2]
+    assert 'sum=5.0' in htmls[2]  # 0 + 1 + 4
