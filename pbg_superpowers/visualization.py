@@ -20,6 +20,11 @@ Two use modes both call the same ``update`` method:
 Discovery: Visualization extends Step extends Edge, so subclasses are
 auto-discovered via ``bigraph_schema.package.discover`` and registered in
 ``core.link_registry``.
+
+This module also exposes :func:`render_results`, the visualization analogue
+of ``process_bigraph.emitter.gather_emitter_results``: it walks a Composite's
+state for Visualization instances and returns a path-keyed dict of their
+rendered HTML.
 """
 from __future__ import annotations
 from typing import Any
@@ -112,3 +117,82 @@ def as_visualization(inputs, name=None, demo=None, aliases=None):
         FunctionVisualization.__pb_wrapped__ = func
         return FunctionVisualization
     return decorator
+
+
+def render_results(composite, results=None):
+    """Gather rendered HTML from every Visualization step in ``composite``.
+
+    Returns a dict ``{step_path: {'html': '<rendered>'}}`` mirroring the shape
+    of ``process_bigraph.emitter.gather_emitter_results``.
+
+    Two modes:
+
+    - ``results=None`` — return each viz's most recently-produced output
+      (whatever ``update(state)`` last wrote to its ``html`` port during the
+      run). Cheap; no re-execution.
+
+    - ``results=<dict>`` — replay mode. For each viz, call
+      ``instance.update(results)`` directly with the passed-in data,
+      bypassing the bigraph wiring. Useful for re-rendering against a saved
+      SQLiteEmitter dump.
+    """
+    from process_bigraph.composite import find_instance_paths
+
+    viz_paths = find_instance_paths(
+        composite.state,
+        'pbg_superpowers.visualization.Visualization',
+    )
+    out = {}
+    for path in viz_paths:
+        node = _get_path(composite.state, path)
+        if node is None:
+            continue
+        instance = node.get('instance') if isinstance(node, dict) else None
+        if instance is None:
+            continue
+        if results is not None:
+            # Replay mode — call update directly. The function is expected
+            # to return {'html': str}.
+            try:
+                rendered = instance.update(results) or {}
+            except Exception as e:  # noqa: BLE001
+                rendered = {'html': f'<pre style="color:#c00">render failed: {e}</pre>'}
+        else:
+            # Read the last output value the runtime stored on the html port.
+            # bigraph stores outputs as the same dict the update() returned.
+            rendered = {'html': _read_last_html(composite, path) or ''}
+        out[path] = rendered
+    return out
+
+
+def _get_path(state, path_tuple):
+    node = state
+    for p in path_tuple:
+        if not isinstance(node, dict) or p not in node:
+            return None
+        node = node[p]
+    return node
+
+
+def _read_last_html(composite, path_tuple):
+    """Best-effort: walk the composite's bigraph for the html output store
+    wired to this visualization, and return its current value (string).
+
+    bigraph wires ``outputs.html`` to a store somewhere in the composite. The
+    Visualization step's node has an ``outputs: {html: <store-path>}`` mapping
+    we can use to look up the value. If the wiring isn't found or the store
+    doesn't hold a string, returns None.
+    """
+    node = _get_path(composite.state, path_tuple)
+    if not isinstance(node, dict):
+        return None
+    outputs = node.get('outputs') or {}
+    html_target = outputs.get('html')
+    if html_target is None:
+        return None
+    # html_target is a path (list of strings) into the state tree.
+    if isinstance(html_target, (list, tuple)):
+        value = _get_path(composite.state, tuple(html_target))
+    else:
+        value = None
+    return value if isinstance(value, str) else None
