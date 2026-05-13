@@ -111,8 +111,31 @@ def cli() -> None:
     pass
 
 
+def _normalize_workspace_name(raw: str) -> str:
+    """Strip a leading `pbg-` / `pbg_` prefix from the workspace name.
+
+    The downstream template-init produces a python package `pbg_<name>`. If
+    the user already prefixed the name with `pbg-` (perfectly natural — every
+    sibling `pbg-*` repo is named that way), we'd end up with `pbg_pbg_<rest>`.
+    Strip the prefix instead and emit a warning so the user is aware.
+    """
+    stripped = raw
+    for prefix in ("pbg-", "pbg_"):
+        if stripped.lower().startswith(prefix):
+            stripped = stripped[len(prefix):]
+            click.echo(
+                f"warning: --name '{raw}' starts with '{prefix}'; using "
+                f"'{stripped}' so the python package is pbg_{stripped} "
+                "(not pbg_pbg_…). Pass --name without the pbg- prefix to "
+                "silence this warning.",
+                err=True,
+            )
+            break
+    return stripped
+
+
 @cli.command()
-@click.option("--name", required=True, help="Workspace name")
+@click.option("--name", required=True, help="Workspace name (without pbg- prefix; the python package will be pbg_<name>)")
 @click.option("--target", required=True, type=click.Path(path_type=Path), help="Target directory (must not exist or be empty)")
 @click.option("--template-source", default=None, help="Path or git URL of pbg-template (default: $PBG_TEMPLATE or upstream)")
 @click.option("--in-place", "in_place", is_flag=True, default=False,
@@ -138,6 +161,7 @@ def workspace(name: str, target: Path, template_source: str | None,
             "('In-place mode') until this is implemented. "
             "Tracked as a follow-up task."
         )
+    name = _normalize_workspace_name(name)
     out = scaffold_workspace(target, name, template_source)
     click.echo(f"workspace scaffolded at {out}")
 
