@@ -1,8 +1,12 @@
-"""Scaffold a workspace by cloning/copying pbg-template and rendering it.
+"""Scaffold a workspace by copying pbg-template's payload and rendering it.
+
+pbg-template nests its scaffold payload under a `template/` subdir; the repo
+root holds only pbg-template's own dev infra and the GitHub "Use this template"
+entry point. The plugin scaffolder copies `template/`'s contents directly.
 
 Two modes:
-- Local source (path) — copies the directory tree
-- Remote source (git URL) — git clone --depth 1
+- Local source (path) — copies `<source>/template/`
+- Remote source (git URL) — git clone --depth 1, then copies `template/`
 
 After source acquisition, runs template-init.sh non-interactively with the
 workspace name piped on stdin.
@@ -12,6 +16,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import click
@@ -38,26 +43,37 @@ def _resolve_source(source: str | None) -> str:
 
 
 def _acquire(source: str, target: Path) -> None:
+    """Land the contents of pbg-template's `template/` subdir into `target`."""
     if _looks_like_path(source):
         src = Path(os.path.expanduser(source)).resolve()
         if not src.is_dir():
             raise click.ClickException(f"local template source not a directory: {src}")
+        payload = src / "template"
+        if not payload.is_dir():
+            raise click.ClickException(f"template/ subdir missing in source: {payload}")
         # Allow target to be a pre-existing empty dir (scaffold_workspace already
         # rejected non-empty); dirs_exist_ok=True lets copytree overlay into it.
-        shutil.copytree(src, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
+        shutil.copytree(payload, target, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns(".git"))
     else:
-        try:
-            subprocess.run(
-                ["git", "clone", "--depth", "1", source, str(target)],
-                check=True,
-            )
-        except subprocess.CalledProcessError:
-            # Don't leave a partial clone on disk; subsequent runs would
-            # otherwise fail the "exists and is non-empty" guard.
-            shutil.rmtree(target, ignore_errors=True)
-            raise click.ClickException(f"git clone failed for source: {source}")
-        # remove the cloned .git so the new workspace gets a fresh history
-        shutil.rmtree(target / ".git", ignore_errors=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            clone_dir = Path(tmp) / "pbg-template"
+            try:
+                subprocess.run(
+                    ["git", "clone", "--depth", "1", source, str(clone_dir)],
+                    check=True,
+                )
+            except subprocess.CalledProcessError:
+                raise click.ClickException(f"git clone failed for source: {source}")
+            payload = clone_dir / "template"
+            if not payload.is_dir():
+                raise click.ClickException(
+                    f"template/ subdir missing in cloned source: {source}"
+                )
+            # Copy only the payload — the clone's .git stays in the temp dir,
+            # so the new workspace gets a fresh history.
+            shutil.copytree(payload, target, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns(".git"))
 
 
 def _render(target: Path, workspace_name: str) -> None:
