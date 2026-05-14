@@ -68,6 +68,7 @@ Inside Claude Code:
   `process_bigraph.Step` subclass: auto-discovered alongside Processes and Types,
   and wireable into Composite specs via the standard `inputs()/outputs()/update()`
   contract. See [docs/conventions/visualizations.md](docs/conventions/visualizations.md).
+
 ## Two repos
 
 This plugin works with a sibling repo,
