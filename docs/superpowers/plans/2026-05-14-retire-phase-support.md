@@ -34,7 +34,7 @@
 - `tests/test_workspace_yaml_schema.py` — drop the "Top-level phases" test section + phase block in `test_full_workspace_validates`
 - `tests/test_report_render.py` — drop `phases` fixture key + `"Phase tracker"` assertion
 - `tests/test_model_scaffold.py` — drop `phases/plan.md` + `phases/deliverables/.keep` from `must_exist`
-- `tests/test_skill_manifests.py` — drop `pbg-phase` from `EXPECTED_SKILLS`
+- `tests/test_skill_manifests.py` — drop `pbg-phase` from `EXPECTED_SKILLS` (done in Task 6, atomically with deleting the skill dir)
 - `pbg_superpowers/schemas/workspace.schema.json` — remove top-level `phases` property, the `phase` definition, and the `phases` field in the `visualization` and `simulation` definitions
 - `pbg_superpowers/report.py` — drop `phases=model.get("phases", [])` from `render_model_report`
 - `templates/model/reports/index.html.j2` — remove the Phase tracker panel + per-phase deep-dive loop
@@ -54,7 +54,8 @@ Remove every phase reference from tests that ALSO cover non-phase behavior, so t
 - Modify: `tests/test_workspace_yaml_schema.py`
 - Modify: `tests/test_report_render.py`
 - Modify: `tests/test_model_scaffold.py`
-- Modify: `tests/test_skill_manifests.py`
+
+> **Note:** `tests/test_skill_manifests.py` is intentionally NOT touched here. `test_all_expected_skills_present` also rejects *extra* skills, so removing `pbg-phase` from `EXPECTED_SKILLS` while `skills/pbg-phase/` still exists breaks the suite. That edit moves to Task 6, atomic with deleting the skill directory.
 
 - [ ] **Step 1: `tests/test_failure_modes.py` — remove phase imports**
 
@@ -228,37 +229,15 @@ Remove these two entries from the `must_exist` list (currently lines 37–38):
         "phases/deliverables/.keep",
 ```
 
-- [ ] **Step 12: `tests/test_skill_manifests.py` — drop `pbg-phase` from `EXPECTED_SKILLS`**
-
-Replace the `EXPECTED_SKILLS` set (currently lines 11–15):
-
-```python
-EXPECTED_SKILLS = {
-    "pbg-workspace", "pbg-server", "pbg-report", "pbg-phase",
-    "pbg-viz", "pbg-package", "pbg-expert", "pbg-composer", "pbg-wrapper",
-    "pbg-suggest", "pbg-explore",
-}
-```
-
-with:
-
-```python
-EXPECTED_SKILLS = {
-    "pbg-workspace", "pbg-server", "pbg-report",
-    "pbg-viz", "pbg-package", "pbg-expert", "pbg-composer", "pbg-wrapper",
-    "pbg-suggest", "pbg-explore",
-}
-```
-
-- [ ] **Step 13: Run the suite — phase modules still present, so this must stay green**
+- [ ] **Step 12: Run the suite — phase modules still present, so this must stay green**
 
 Run: `cd ~/code/pbg-superpowers && source .venv/bin/activate && pytest -q`
 Expected: PASS (the `test_phase_*.py` files and phase modules still exist; we only removed *references* from shared tests, plus phase test functions). The count drops by the 5 deleted `test_failure_modes` tests + 5 deleted `test_workspace_yaml_schema` tests.
 
-- [ ] **Step 14: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
-git add tests/test_failure_modes.py tests/test_e2e_happy_path.py tests/test_workspace_yaml_schema.py tests/test_report_render.py tests/test_model_scaffold.py tests/test_skill_manifests.py
+git add tests/test_failure_modes.py tests/test_e2e_happy_path.py tests/test_workspace_yaml_schema.py tests/test_report_render.py tests/test_model_scaffold.py
 git commit -m "test: drop phase references from shared test files"
 ```
 
@@ -497,16 +476,37 @@ git commit -m "feat: drop phase tracker from model report + template"
 
 **Files:**
 - Delete: `skills/pbg-phase/` (directory)
+- Modify: `tests/test_skill_manifests.py`
 - Modify: `plugin.yaml`
 - Modify: `skills/pbg-report/SKILL.md`
 - Modify: `skills/pbg-server/SKILL.md`
 - Modify: `skills/pbg-viz/SKILL.md`
 - Modify: `skills/pbg-workspace/SKILL.md`
 
-- [ ] **Step 1: Delete the skill directory**
+- [ ] **Step 1: Delete the skill directory and drop it from `EXPECTED_SKILLS`**
 
+These two changes are atomic — `test_skill_manifests.py::test_all_expected_skills_present` rejects both missing AND extra skills, so the directory deletion and the `EXPECTED_SKILLS` edit must land together.
+
+Delete the directory:
 ```bash
 git rm -r skills/pbg-phase
+```
+
+Then in `tests/test_skill_manifests.py`, replace the `EXPECTED_SKILLS` set (currently lines 11–15):
+```python
+EXPECTED_SKILLS = {
+    "pbg-workspace", "pbg-server", "pbg-report", "pbg-phase",
+    "pbg-viz", "pbg-package", "pbg-expert", "pbg-composer", "pbg-wrapper",
+    "pbg-suggest", "pbg-explore",
+}
+```
+with:
+```python
+EXPECTED_SKILLS = {
+    "pbg-workspace", "pbg-server", "pbg-report",
+    "pbg-viz", "pbg-package", "pbg-expert", "pbg-composer", "pbg-wrapper",
+    "pbg-suggest", "pbg-explore",
+}
 ```
 
 - [ ] **Step 2: `plugin.yaml` — remove `pbg-phase` from the skills list**
@@ -608,7 +608,7 @@ Expected: PASS — `test_skill_manifests.py::test_all_expected_skills_present` n
 - [ ] **Step 10: Commit**
 
 ```bash
-git add plugin.yaml skills/
+git add plugin.yaml skills/ tests/test_skill_manifests.py
 git commit -m "feat: remove /pbg-phase skill + scrub phase refs from other skills"
 ```
 
