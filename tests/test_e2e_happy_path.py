@@ -6,7 +6,6 @@ This synthesizes what every stage skill does in production, using the
 programmatic helpers directly (no Agent dispatches, no walkthroughs)."""
 import json
 import os
-import re
 import subprocess
 import sys
 import textwrap
@@ -116,7 +115,7 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
     snap = json.loads((model / "tests" / "registry-snapshot.json").read_text())
     assert snap["processes"] == ["FakeProcess"]
 
-    # 13. Render reports (simulates /pbg-report step)
+    # 7. Render reports (simulates /pbg-report step)
     _run([venv_python, "-c",
           "from pathlib import Path; "
           "from pbg_superpowers.report import render_workspace_report, render_model_report; "
@@ -126,7 +125,7 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
           "render_model_report(Path('.'), 'm', registry_snapshot(build_core()), today='2026-05-09')"],
          cwd=ws)
 
-    # 14. Assertions on the rendered reports
+    # 8. Assertions on the rendered reports
     assert (ws / "reports" / "index.html").exists()
     assert (ws / "models" / "m" / "reports" / "index.html").exists()
     workspace_html = (ws / "reports" / "index.html").read_text()
@@ -135,6 +134,6 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
     model_html = (ws / "models" / "m" / "reports" / "index.html").read_text()
     assert "FakeProcess" in model_html
 
-    # 15. lint-workspace.py passes -- workspace yaml + cross-references valid
+    # 9. lint-workspace.py passes -- workspace yaml + cross-references valid
     r = _run([venv_python, "scripts/lint-workspace.py"], cwd=ws)
     assert "OK" in r.stdout

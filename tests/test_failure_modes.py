@@ -3,12 +3,14 @@
 Many of the §13 error modes are runtime-only (gh CLI, network, dashboard server,
 submodule pointer divergence) and are exercised by the SKILL.md walkthroughs at
 runtime, not by L1 tests. The cases below are the ones with pure-Python entry
-points: schema corruption, frontmatter malformations, gate evaluation gaps."""
+points: schema corruption."""
 import pytest
 
 from pbg_superpowers.workspace_yaml import (
     load_workspace, save_workspace, WorkspaceValidationError,
 )
+
+
 def test_save_refuses_malformed_workspace_yaml(tmp_path):
     """Per spec §13: 'workspace.yaml malformed' → refuse to mutate; preserve invalid file."""
     p = tmp_path / "workspace.yaml"
