@@ -1,6 +1,6 @@
 [project]
 name = "pbg-superpowers"
-version = "0.8.0"
+version = "0.8.1"
 description = "Plugin Python helpers for the pbg-superpowers skills"
 requires-python = ">=3.11"
 dependencies = [
