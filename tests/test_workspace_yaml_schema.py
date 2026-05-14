@@ -216,7 +216,8 @@ def test_migrate_v1_to_v2_lifts_first_model():
     import sys
     from pathlib import Path
     # Import migration helper from pbg-template scripts.
-    template_dir = Path.home() / "code" / "pbg-template"
+    import os
+    template_dir = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser()
     if not template_dir.exists():
         pytest.skip("pbg-template not found")
     scripts_dir = str(template_dir / "template")
@@ -259,7 +260,8 @@ def test_migrate_v2_is_idempotent():
     """Migrating a v2 workspace is a no-op."""
     import sys
     from pathlib import Path
-    template_dir = Path.home() / "code" / "pbg-template"
+    import os
+    template_dir = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser()
     if not template_dir.exists():
         pytest.skip("pbg-template not found")
     scripts_dir = str(template_dir / "template")

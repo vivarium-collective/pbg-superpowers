@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 
-PBG_TEMPLATE = Path(os.path.expanduser("~/code/pbg-template")).resolve()
+PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser().resolve()
 
 
 @pytest.fixture(autouse=True)

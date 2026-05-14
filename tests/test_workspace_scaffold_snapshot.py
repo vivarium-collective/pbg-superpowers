@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 
-PBG_TEMPLATE = Path(os.path.expanduser("~/code/pbg-template")).resolve()
+PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser().resolve()
 
 
 @pytest.fixture(autouse=True)
@@ -17,6 +17,10 @@ def _check_template_exists():
 
 
 def test_scaffold_matches_manifest(tmp_path, plugin_root, fixtures_dir):
+    # To regenerate MANIFEST.txt after an intentional pbg-template change:
+    #     python scripts/update-scaffold-snapshot.py
+    # (Honors $PBG_TEMPLATE env var; defaults to ~/code/pbg-template.)
+    # Review the diff and commit.
     target = tmp_path / "ws"
     subprocess.run(
         [sys.executable, "-m", "pbg_superpowers.scaffold", "workspace",
@@ -24,11 +28,10 @@ def test_scaffold_matches_manifest(tmp_path, plugin_root, fixtures_dir):
          "--template-source", str(PBG_TEMPLATE)],
         check=True, cwd=plugin_root,
     )
-    # Exclude transient cache directories that may exist in the source
-    # template when pytest or python has been run locally there — those
-    # are gitignored upstream but the scaffolder copies whatever is on
-    # disk. Filtering here keeps the test stable across dev machines.
-    _IGNORED = ("__pycache__", ".pytest_cache", ".superpowers", ".claude")
+    # Exclude transient pytest/python caches that may exist in the source
+    # template when it's been run locally — those are gitignored upstream
+    # but the scaffolder copies whatever is on disk.
+    _IGNORED = ("__pycache__", ".pytest_cache")
     actual = sorted(
         "./" + str(p.relative_to(target))
         for p in target.rglob("*")
