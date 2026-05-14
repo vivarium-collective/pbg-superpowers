@@ -42,6 +42,26 @@ def test_decorator_registers_function():
     assert builder._composite_generator_entry is entry
 
 
+def test_decorator_accepts_default_n_steps():
+    @composite_generator(
+        name="dn", description="", parameters={}, default_n_steps=200,
+    )
+    def builder(core=None):
+        return {}
+
+    entry = _REGISTRY[f"{builder.__module__}.dn"]
+    assert entry.default_n_steps == 200
+
+
+def test_decorator_default_n_steps_optional():
+    @composite_generator(name="dn-opt", description="", parameters={})
+    def builder(core=None):
+        return {}
+
+    entry = _REGISTRY[f"{builder.__module__}.dn-opt"]
+    assert entry.default_n_steps is None
+
+
 def _make_entry(parameters, body):
     @composite_generator(name="t", description="", parameters=parameters)
     def _fn(core=None, **kw):
@@ -161,3 +181,5 @@ def test_discover_all_merges_specs_and_generators(tmp_path, installed_fake_pkg):
     assert gen_id in merged
     assert merged[gen_id]["kind"] == "generator"
     assert merged[gen_id]["name"] == "demo"
+    # default_n_steps is always propagated (None when the generator omits it).
+    assert "default_n_steps" in merged[gen_id]

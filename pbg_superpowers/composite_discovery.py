@@ -118,6 +118,7 @@ def discover_all(
             "description": entry.description,
             "parameters": entry.parameters,
             "module": entry.module,
+            "default_n_steps": entry.default_n_steps,
         }
     return out
 

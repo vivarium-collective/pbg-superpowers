@@ -22,6 +22,7 @@ class GeneratorEntry:
     parameters: dict[str, dict]       # {name: {type, default, description?}}
     func: Callable[..., dict]
     module: str
+    default_n_steps: int | None = None  # framework-owned runtime knob; UI pre-fill
 
 
 # Process-level registry. Populated by @composite_generator on import.
@@ -33,6 +34,7 @@ def composite_generator(
     name: str,
     description: str = "",
     parameters: dict[str, dict] | None = None,
+    default_n_steps: int | None = None,
 ) -> Callable[[Callable[..., dict]], Callable[..., dict]]:
     """Decorator: register a doc-building function.
 
@@ -42,6 +44,10 @@ def composite_generator(
     `parameters` declares each kwarg in the same shape that *.composite.yaml
     uses, so the dashboard's parameter-form code is shared across both
     conventions.
+
+    `default_n_steps` (optional) is a UI hint for the Composite Explorer's
+    ``steps`` pre-fill. It is NOT a composite-builder kwarg — runtime knobs
+    are framework-owned and live next to the generator entry.
     """
     def decorate(fn: Callable[..., dict]) -> Callable[..., dict]:
         entry = GeneratorEntry(
@@ -51,6 +57,7 @@ def composite_generator(
             parameters=parameters or {},
             func=fn,
             module=fn.__module__,
+            default_n_steps=default_n_steps,
         )
         _REGISTRY[entry.id] = entry
         fn._composite_generator_entry = entry  # introspection sidecar
