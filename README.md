@@ -15,10 +15,26 @@ boilerplate by hand.
 
 ## Install
 
-Inside Claude Code:
+Installing has **two parts** — the Claude Code plugin (the `/pbg-*` skills) and
+the `pbg-superpowers` Python package the skills call into. You need both.
 
+**1. The plugin.** Add this repo as a marketplace, then install:
+
+    /plugin marketplace add vivarium-collective/pbg-superpowers
     /plugin install pbg-superpowers
     /reload-plugins
+
+For local development, skip the marketplace and load the working tree directly:
+
+    claude --plugin-dir /path/to/pbg-superpowers
+
+**2. The Python package.** The skills shell out to `pbg_superpowers` — install it
+into the Python environment Claude Code runs commands in:
+
+    pip install pbg-superpowers          # from PyPI
+    pip install -e /path/to/pbg-superpowers   # editable, for development
+
+Verify with `/help` — the `/pbg-*` skills should be listed.
 
 ## Quick start
 
