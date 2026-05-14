@@ -32,7 +32,7 @@ Bootstrap stage. Operates on a brand-new workspace directory.
    `pyproject.toml` deps for `pytest` and model imports.
 5. **Verify** — `python scripts/lint-workspace.py` must print `workspace lint: OK`.
 6. **Report refresh** — `/pbg-report` to generate the initial `reports/index.html`.
-7. **Next steps** — print a brief summary: workspace is ready; open the dashboard with `bash scripts/serve.sh`. From the dashboard, use the **Registry** tab to install pbg-* modules, **Simulation Setup** to configure observables, and **Build Model** to start a workstream branch and drive phases.
+7. **Next steps** — print a brief summary: workspace is ready; open the dashboard with `bash scripts/serve.sh`. From the dashboard, use the **Registry** tab to install pbg-* modules, **Simulation Setup** to configure observables, and **Build Model** to start a workstream branch.
 
 ## Source-of-template options
 

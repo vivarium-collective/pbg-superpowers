@@ -31,7 +31,7 @@ are acceptable but must be explicit.
 
 ## Steps
 
-1. Read `.pbg/viz-requests/<visualization-name>.md` from the current workspace. It contains the user's natural-language description plus workspace context (observables, simulations, phases). If the file doesn't exist, abort and tell the user to click **Create** in the dashboard first.
+1. Read `.pbg/viz-requests/<visualization-name>.md` from the current workspace. It contains the user's natural-language description plus workspace context (observables, simulations). If the file doesn't exist, abort and tell the user to click **Create** in the dashboard first.
 
 2. Choose a visualization library based on the description:
    - **Plotly** for interactive plots, dashboards, hover tooltips
