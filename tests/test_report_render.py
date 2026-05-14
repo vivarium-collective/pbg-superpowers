@@ -51,8 +51,6 @@ def test_render_model_report_with_registry(tmp_path, plugin_root):
             "submodule_path": "models/ecoli-rep", "remote": "x",
             "pbg_processes": ["pbg-cobra"],
             "stages": {"add_model": {"status": "complete", "pr": 2}},
-            "phases": [{"n": 1, "name": "DnaA accumulation",
-                        "status": "complete", "pr": 8, "gate_passed": True}],
         }
     }
     (ws / "workspace.yaml").write_text(yaml.safe_dump(wsdata, sort_keys=False))
@@ -72,7 +70,6 @@ def test_render_model_report_with_registry(tmp_path, plugin_root):
     html = out.read_text()
     assert "FakeProcess" in html
     assert "my_type" in html
-    assert "Phase tracker" in html
     assert "Composite document" in html
     # Per-model assets copied
     assets = ws / "models" / "ecoli-rep" / "reports" / "assets"
