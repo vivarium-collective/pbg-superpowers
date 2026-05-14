@@ -758,3 +758,59 @@ Expected: every path reports "No such file or directory".
 
 Run: `git status`
 Expected: working tree clean, all task commits present.
+
+---
+
+## Task 9: Scrub phase refs from workspace report template + model README (plan gap)
+
+> **Added during Task 8 execution.** The planning-stage survey grep did not include `*.j2` files, so two phase references were missed in the original File Structure map. Task 8 Step 2's verification grep (which *does* include `*.j2`) caught them. This task closes the gap; re-run Task 8 afterward.
+
+**Files:**
+- Modify: `templates/workspace/reports/index.html.j2`
+- Modify: `templates/model/README.md.j2`
+
+- [ ] **Step 1: `templates/workspace/reports/index.html.j2` — remove the "Phases" column from the Models table**
+
+The Models table has a `Phases` column showing each model's phase count. Remove it.
+
+Replace the header row:
+```html
+<table><thead><tr><th>Model</th><th>Stages complete</th><th>Phases</th><th>Report</th></tr></thead><tbody>
+```
+with:
+```html
+<table><thead><tr><th>Model</th><th>Stages complete</th><th>Report</th></tr></thead><tbody>
+```
+
+And delete this cell line from the per-model `{% for %}` row:
+```html
+<td>{{ (m.phases or [])|length }}</td>
+```
+
+After the edit the row has three `<td>` cells (model name, stages, report link) matching the three-column header. Leave the `Stages complete` / `m.stages` content untouched — stages are a separate legacy field, not part of phase removal.
+
+- [ ] **Step 2: `templates/model/README.md.j2` — remove the `phases/` layout line**
+
+In the `## Layout` list, delete this line (the `phases/` directory it documents was deleted in Task 5):
+```
+- `phases/` — multi-phase plan + per-phase deliverables
+```
+
+- [ ] **Step 3: Verify no phase refs remain in `templates/`**
+
+Run: `grep -rn -i "phase" templates/`
+Expected: no matches.
+
+- [ ] **Step 4: Run the full suite**
+
+Run: `cd ~/code/pbg-superpowers && source .venv/bin/activate && pytest -q`
+Expected: PASS — `test_render_workspace_report_smoke` and `test_model_scaffold` do not assert on the removed content.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add templates/workspace/reports/index.html.j2 templates/model/README.md.j2
+git commit -m "feat: drop phase column + phases/ doc line from workspace report and model README"
+```
+
+- [ ] **Step 6: Re-run Task 8 verification** (Steps 1–4 above) to confirm the live surface is now phase-free.
