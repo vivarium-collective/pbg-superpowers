@@ -1,4 +1,3 @@
-./.claude/settings.json
 ./.github/workflows/workspace-ci.yml
 ./.gitignore
 ./.pbg/schemas/workspace.schema.json
