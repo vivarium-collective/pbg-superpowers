@@ -1,0 +1,17 @@
+{
+  "name": "pbg-superpowers",
+  "description": "Claude Code plugin for building process-bigraph research projects: wrap simulators as composable process-bigraph units, compose them into larger models, and organize the work into research workspaces with a dashboard and HTML reports.",
+  "version": "0.8.1",
+  "author": {
+    "name": "eagmon"
+  },
+  "homepage": "https://github.com/vivarium-collective/pbg-superpowers",
+  "repository": "https://github.com/vivarium-collective/pbg-superpowers",
+  "keywords": [
+    "process-bigraph",
+    "bigraph-schema",
+    "simulation",
+    "systems-biology",
+    "research-workflow"
+  ]
+}

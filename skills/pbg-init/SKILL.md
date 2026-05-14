@@ -86,7 +86,7 @@ need a refresh — restart the conversation.
 
 ## Reference
 
-- Plugin root: the directory containing `plugin.yaml` and `skills/`.
+- Plugin root: the directory containing `.claude-plugin/` and `skills/`.
 - Claude's per-user skill directory: `~/.claude/skills/`.
 - All other `pbg-*` skills read `.pbg/server/server-info` for the running
   dashboard URL and POST/GET against its API — they have no other runtime
