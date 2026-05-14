@@ -34,8 +34,6 @@ def test_scaffold_creates_expected_files(tmp_path, plugin_root):
         "tests/test_run.py",
         "tests/test_core_integration.py",
         "tests/registry-snapshot.json",
-        "phases/plan.md",
-        "phases/deliverables/.keep",
         "reports/index.html",
         "reports/assets/.keep",
     ]

@@ -74,7 +74,6 @@ def render_model_report(
     out.write_text(tpl.render(
         model_name=model_name,
         generated_at=today,
-        phases=model.get("phases", []),
         registry=registry,
         pbg_doc_json=json.dumps(pbg_doc or {}, indent=2),
     ))

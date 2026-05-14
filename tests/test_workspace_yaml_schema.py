@@ -31,14 +31,10 @@ def test_minimal_workspace_validates(validator):
 
 
 def test_full_workspace_validates(validator):
-    """Full v2 workspace with phases/observables/visualizations at top-level."""
+    """Full v2 workspace with observables/visualizations at top-level."""
     ws = _minimal_workspace()
     ws["package_path"] = "pbg_chromosome_rep1"
     ws["pbg_processes"] = ["pbg-cobra", "pbg-smoldyn"]
-    ws["phases"] = [
-        {"n": 1, "name": "DnaA accumulation", "status": "complete", "gate_passed": True},
-        {"n": 2, "name": "Replication extension", "status": "planned"},
-    ]
     ws["observables"] = [
         {"name": "DnaA", "store_path": "chromosome.DnaA_count", "units": "molecules"},
         {"name": "cell_mass", "store_path": "cell.mass"},
@@ -46,7 +42,7 @@ def test_full_workspace_validates(validator):
     ws["visualizations"] = [
         {"name": "dnaA-trajectory", "type": "time-series", "observables": ["DnaA"]},
     ]
-    ws["datasets"] = [{"name": "bremer-1996", "path": "datasets/bremer-1996/", "claims": ["phase-1.dnaA-accumulation"]}]
+    ws["datasets"] = [{"name": "bremer-1996", "path": "datasets/bremer-1996/", "claims": ["dnaA-accumulation"]}]
     ws["references_bib"] = "references/papers.bib"
     ws["server"] = {"enabled": False}
     validator.validate(ws)
@@ -60,64 +56,6 @@ def test_no_models_field_in_v2(validator):
     """Schema v2 does not define models — workspace without models validates."""
     ws = _minimal_workspace()
     # No 'models' key — should validate cleanly.
-    validator.validate(ws)
-
-
-# ---------------------------------------------------------------------------
-# Top-level phases
-# ---------------------------------------------------------------------------
-
-def test_phase_n_must_be_positive(validator):
-    ws = _minimal_workspace()
-    ws["phases"] = [{"n": 0, "name": "x", "status": "planned"}]
-    with pytest.raises(ValidationError):
-        validator.validate(ws)
-
-
-def test_phase_invalid_status_fails(validator):
-    ws = _minimal_workspace()
-    ws["phases"] = [{"n": 1, "name": "x", "status": "BOGUS"}]
-    with pytest.raises(ValidationError):
-        validator.validate(ws)
-
-
-def test_source_artifact_in_phase_validates(validator):
-    """phase with optional source_artifact field validates."""
-    ws = _minimal_workspace()
-    ws["phases"] = [
-        {
-            "n": 1,
-            "name": "DnaA accumulation",
-            "status": "planned",
-            "source_artifact": {
-                "kind": "expert_doc",
-                "ref": "replication-review-2025",
-            },
-        },
-    ]
-    validator.validate(ws)
-
-
-def test_source_artifact_invalid_kind_fails(validator):
-    ws = _minimal_workspace()
-    ws["phases"] = [
-        {
-            "n": 1,
-            "name": "DnaA accumulation",
-            "status": "planned",
-            "source_artifact": {"kind": "bogus-kind", "ref": "some-doc"},
-        },
-    ]
-    with pytest.raises(ValidationError):
-        validator.validate(ws)
-
-
-def test_phase_prereq_phases_validates(validator):
-    ws = _minimal_workspace()
-    ws["phases"] = [
-        {"n": 1, "name": "Phase A", "status": "complete", "gate_passed": True},
-        {"n": 2, "name": "Phase B", "status": "planned", "prereq_phases": [1]},
-    ]
     validator.validate(ws)
 
 
@@ -281,7 +219,7 @@ def test_migrate_v1_to_v2_lifts_first_model():
     template_dir = Path.home() / "code" / "pbg-template"
     if not template_dir.exists():
         pytest.skip("pbg-template not found")
-    scripts_dir = str(template_dir)
+    scripts_dir = str(template_dir / "template")
     if scripts_dir not in sys.path:
         sys.path.insert(0, scripts_dir)
     from scripts._migrate_v1_to_v2 import migrate_v1_to_v2
@@ -324,7 +262,7 @@ def test_migrate_v2_is_idempotent():
     template_dir = Path.home() / "code" / "pbg-template"
     if not template_dir.exists():
         pytest.skip("pbg-template not found")
-    scripts_dir = str(template_dir)
+    scripts_dir = str(template_dir / "template")
     if scripts_dir not in sys.path:
         sys.path.insert(0, scripts_dir)
     from scripts._migrate_v1_to_v2 import migrate_v1_to_v2

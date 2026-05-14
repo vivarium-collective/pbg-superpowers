@@ -9,13 +9,6 @@
 <main>
 <div id="guidance" class="guidance panel"></div>
 
-<div class="panel"><h2>Phase tracker</h2>
-{% if phases %}<div class="tracker">
-{% for p in phases %}<div class="pill {{ p.status }}"><strong>{{ p.n }} · {{ p.name }}</strong><br>{{ p.status }}</div>{% endfor %}
-</div>
-{% else %}<p>No phases yet. <code>/pbg-phase-plan {{ model_name }}</code></p>{% endif %}
-</div>
-
 <div class="panel"><h2>Process registry</h2>
 {% if registry.processes %}<table><thead><tr><th>Name</th></tr></thead><tbody>
 {% for proc in registry.processes %}<tr><td><code>{{ proc }}</code></td></tr>{% endfor %}
@@ -29,16 +22,6 @@
 </tbody></table>
 {% else %}<p>No custom types yet.</p>{% endif %}
 </div>
-
-{% for p in phases if p.status == 'complete' %}
-<div class="panel"><h3>Phase {{ p.n }} · {{ p.name }} — deep dive</h3>
-{% if p.deliverables and p.deliverables.plots %}{% for plot in p.deliverables.plots %}<img src="../phases/{{ plot }}" alt="">{% endfor %}{% endif %}
-<h4>Acceptance tests</h4>
-<table><thead><tr><th>ID</th><th>Description</th><th>Status</th></tr></thead><tbody>
-{% for t in (p.acceptance_tests or []) %}<tr><td><code>{{ t.id }}</code></td><td>{{ t.desc }}</td><td>{{ t.status }}</td></tr>{% endfor %}
-</tbody></table>
-</div>
-{% endfor %}
 
 <div class="panel"><h2>Composite document</h2>
 <div id="pbg-tree" class="json-tree"></div>

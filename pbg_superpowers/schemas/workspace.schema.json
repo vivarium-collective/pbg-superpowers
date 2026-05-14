@@ -20,10 +20,6 @@
         "workspace_bootstrap": {"$ref": "#/definitions/stageStatus"}
       }
     },
-    "phases": {
-      "type": "array",
-      "items": {"$ref": "#/definitions/phase"}
-    },
     "observables": {
       "type": "array",
       "items": {"$ref": "#/definitions/observable"}
@@ -91,26 +87,6 @@
         }
       }
     },
-    "phase": {
-      "type": "object",
-      "required": ["n", "name", "status"],
-      "properties": {
-        "n": {"type": "integer", "minimum": 1},
-        "name": {"type": "string"},
-        "status": {"enum": ["planned", "in_progress", "gate_pending", "complete"]},
-        "pr": {"type": ["integer", "null"]},
-        "gate_passed": {"type": "boolean"},
-        "opened_pr": {"type": ["integer", "null"]},
-        "prereq_phases": {"type": "array", "items": {"type": "integer"}},
-        "source_artifact": {
-          "type": "object",
-          "properties": {
-            "kind": {"enum": ["expert_doc", "dataset", "reference", "claim"]},
-            "ref": {"type": "string"}
-          }
-        }
-      }
-    },
     "observable": {
       "type": "object",
       "required": ["name", "store_path"],
@@ -130,7 +106,6 @@
         "description": {"type": "string"},
         "type": {"enum": ["time-series", "phase-space", "heatmap", "histogram"]},
         "observables": {"type": "array", "items": {"type": "string"}},
-        "phases": {"type": "array", "items": {"type": "integer", "minimum": 1}},
         "simulation": {"type": "string"},
         "config": {"type": "object"}
       }
@@ -147,7 +122,6 @@
         "initial_state": {"type": "object", "description": "Path-keyed initial values; structure free-form"},
         "parameter_overrides": {"type": "object", "description": "Process-config overrides; structure free-form"},
         "emitter_config": {"type": "object", "description": "Emitter settings (paths to record, sample interval, etc.)"},
-        "phases": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "Phase numbers this simulation belongs to (empty = global)"},
         "processes": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Names of processes from the registry that this simulation expects (declarative tag — does not drive composite construction)"},
         "composite": {
           "type": "string",

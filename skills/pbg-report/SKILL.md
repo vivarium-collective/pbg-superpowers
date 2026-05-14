@@ -1,6 +1,6 @@
 ---
 name: pbg-report
-description: Regenerate the workspace dashboard and per-model reports. Pulls workspace.yaml, phase frontmatters, decisions log, and (per model) the live process-bigraph registry; renders to <workspace>/reports/index.html and models/<model>/reports/index.html. Idempotent.
+description: Regenerate the workspace dashboard and per-model reports. Pulls workspace.yaml, decisions log, and (per model) the live process-bigraph registry; renders to <workspace>/reports/index.html and models/<model>/reports/index.html. Idempotent.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: [model-name | --all]
@@ -12,7 +12,7 @@ Transversal skill (no stage). Called by other stage skills at end-of-stage and r
 
 ## What it produces
 
-- `<workspace>/reports/index.html` — workspace dashboard: phase tracker, process registry, type registry, recent decisions, browsable composite document
+- `<workspace>/reports/index.html` — workspace dashboard: process registry, type registry, recent decisions, browsable composite document
 
 The file includes CSS + JS in `<reports>/assets/` (copied from the plugin's `templates/_assets/` and, if present, `server/client.js` for the live-dashboard mode).
 
@@ -40,7 +40,7 @@ python -c "..." # render_*_report(..., today='2026-05-09')
 
 ## Safety
 
-- Never modifies `workspace.yaml`, `phases/*.md`, `decisions.yaml`, or any other persistent state — read-only consumer.
+- Never modifies `workspace.yaml`, `decisions.yaml`, or any other persistent state — read-only consumer.
 - Refuses to run if `workspace.yaml` is malformed (lint-workspace.py disagreement is fatal).
 - Per-model rendering catches `build_core()` failures, logs them, and emits a stub deep-dive panel rather than crashing the entire report.
 

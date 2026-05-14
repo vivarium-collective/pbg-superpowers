@@ -16,7 +16,7 @@ The dashboard exposes five tabs:
 - **Registry** — browse the curated pbg-* module catalog (`scripts/_catalog/modules.json`); Install adds a submodule, pip-installs into `.venv`, appends to `pyproject.toml` deps, and refreshes the Discovered Processes/Types tables.
 - **Simulation Setup** — observables to track and simulation run configurations.
 - **Visualizations** — name + natural-language description; Create writes a request file and prompts the user to run `/pbg-viz <name>`; Add to project stages the generated file; Commit lands it on the active workstream branch.
-- **Build Model** — workstream management strip (active branch, Push, Create PR, End), phase list with Start phase / Evaluate gate buttons.
+- **Build Model** — workstream management strip (active branch, Push, Create PR, End).
 
 ## Subcommands
 
