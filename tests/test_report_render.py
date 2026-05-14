@@ -9,7 +9,7 @@ import yaml
 from pbg_superpowers.report import render_workspace_report, render_model_report
 
 
-PBG_TEMPLATE = Path(os.path.expanduser("~/code/pbg-template")).resolve()
+PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser().resolve()
 
 
 @pytest.fixture(autouse=True)

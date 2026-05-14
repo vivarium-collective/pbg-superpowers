@@ -22,6 +22,9 @@ from pathlib import Path
 import click
 
 
+# Requires pbg-template at the payload-boundary restructure (commit on or
+# after 2026-05-12) or later — earlier versions lack the template/ subdir
+# and will fail because that subdir is absent.
 DEFAULT_REMOTE = "https://github.com/vivarium-collective/pbg-template.git"
 
 
