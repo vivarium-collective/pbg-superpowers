@@ -8,7 +8,7 @@ maintain a separate list.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 
@@ -23,6 +23,11 @@ class GeneratorEntry:
     func: Callable[..., dict]
     module: str
     default_n_steps: int | None = None  # framework-owned runtime knob; UI pre-fill
+    # Canonical visualizations that ship with this composite. Each entry is
+    # a Study-spec visualization dict ({name, address, config, ...}). When
+    # a Study is built on top of this composite the dashboard merges these
+    # defaults into its visualizations list; Studies can still declare extras.
+    visualizations: list[dict] = field(default_factory=list)
 
 
 # Process-level registry. Populated by @composite_generator on import.
@@ -34,6 +39,7 @@ def composite_generator(
     name: str,
     description: str = "",
     parameters: dict[str, dict] | None = None,
+    visualizations: list[dict] | None = None,
     default_n_steps: int | None = None,
 ) -> Callable[[Callable[..., dict]], Callable[..., dict]]:
     """Decorator: register a doc-building function.
@@ -45,6 +51,14 @@ def composite_generator(
     uses, so the dashboard's parameter-form code is shared across both
     conventions.
 
+    `visualizations` declares the canonical visualization set that ships with
+    this composite. Each entry is a Study-spec visualization dict
+    (``{name, address, config, ...}``). The dashboard merges these defaults
+    into a Study's visualizations list when the Study is built on this
+    composite, so callers get the v2ecoli simulation report (or whatever the
+    composite author considers canonical) without having to hand-author them
+    in every Study spec.
+
     `default_n_steps` (optional) is a UI hint for the Composite Explorer's
     ``steps`` pre-fill. It is NOT a composite-builder kwarg — runtime knobs
     are framework-owned and live next to the generator entry.
@@ -55,6 +69,7 @@ def composite_generator(
             name=name,
             description=description,
             parameters=parameters or {},
+            visualizations=list(visualizations or []),
             func=fn,
             module=fn.__module__,
             default_n_steps=default_n_steps,
