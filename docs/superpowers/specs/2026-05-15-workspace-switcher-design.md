@@ -228,9 +228,11 @@ Behavior:
    be tricked into launching processes against non-workspaces.)
 2. If `~/.pbg/servers/` already has a live entry for this path (file present
    AND `kill -0 pid` succeeds) → return its URL immediately (idempotent).
-3. Spawn `<plugin-root>/server/start-server.sh <path>` detached
+3. Spawn `vivarium-dashboard serve --workspace <path>` detached
    (`start_new_session=True`, `stdout/stderr` → `<path>/.pbg/server/start.log`,
    `stdin=DEVNULL`, `close_fds=True`, `cwd=path`). Do not wait on the child.
+   Use `sys.executable -m vivarium_dashboard.cli serve --workspace <path>` so
+   the child inherits the same Python environment as the parent dashboard.
 4. Poll `~/.pbg/servers/` every 100 ms, up to 8 s, for a new entry matching
    `path`. When it appears + PID alive → return `{ "url": "...", "pid": ... }`.
 5. On timeout: return 504 with `{ "error": "start_timeout", "log_path": "…",
@@ -289,10 +291,10 @@ redirect the browser once it's healthy.
 log_path = Path(target_path) / ".pbg" / "server" / "start.log"
 log_path.parent.mkdir(parents=True, exist_ok=True)
 
-script = plugin_root / "server" / "start-server.sh"
 with log_path.open("ab") as logf:
     subprocess.Popen(
-        [str(script), target_path],
+        [sys.executable, "-m", "vivarium_dashboard.cli",
+         "serve", "--workspace", target_path],
         stdout=logf, stderr=logf, stdin=subprocess.DEVNULL,
         start_new_session=True,
         close_fds=True,
@@ -377,19 +379,29 @@ At the top of the boot path, before launching the server, call the same
 helper against the auto-detected workspace root. Picks up workspaces that
 pre-date this feature or were created outside `/pbg-workspace`.
 
-### 7.4 `server/start-server.sh`
+### 7.4 `vivarium-dashboard/vivarium_dashboard/cli.py:cmd_serve`
 
-On boot, after writing `<workspace>/.pbg/server/server-info` and `server.pid`,
-also call:
+The dashboard's `cmd_serve` is the canonical launcher (not pbg-superpowers'
+`start-server.sh`, which serves a separate report-mirror role and is left
+alone by this feature). `cmd_serve` already writes
+`<workspace>/.pbg/server/server-info`; this feature extends it to also:
 
-```bash
-python -m pbg_superpowers.workspace_catalog register-server \
-  --name "$NAME" --path "$WORKSPACE" \
-  --pid "$PID" --port "$PORT" --url "$URL"
-```
+1. Write `<workspace>/.pbg/server/server.pid` (containing `os.getpid()`) on
+   boot. The dashboard CLI currently runs in the foreground and has no PID
+   file; we add one because the Start-from-stopped flow detaches the child
+   and the parent process needs a stable handle to it.
+2. Register a global running entry by calling
+   `pbg_superpowers.workspace_catalog.register_server(...)` with the
+   workspace name (parsed from `workspace.yaml`), absolute path, current
+   PID, port, and URL.
+3. Install a `signal` handler (SIGTERM, SIGINT) and an `atexit` hook that
+   calls `unregister_server(path)` and removes the local `server.pid` on
+   exit.
 
-The matching `/pbg-server stop` flow calls `unregister-server --path
-"$WORKSPACE"` after the workspace-local cleanup.
+The detached-child case (spawned by `/api/workspaces/start`) and the
+foreground case (user runs `vivarium-dashboard serve` directly) use the
+same code path — the only difference is who is sending the eventual
+SIGTERM.
 
 ## 8. Edge cases
 
@@ -449,16 +461,22 @@ headless-browser test for the navigation itself is planned.
 
 ## 11. Implementation order (preview for writing-plans)
 
-1. `pbg_superpowers/workspace_catalog.py` + unit tests.
-2. `server/start-server.sh` and stop helper — write/delete the global entry.
-3. `GET /api/workspaces` endpoint + tests.
+1. `pbg_superpowers/workspace_catalog.py` + unit tests (pbg-superpowers repo).
+2. `vivarium-dashboard/vivarium_dashboard/cli.py:cmd_serve` — write
+   `server.pid`, register on boot, unregister on exit + tests.
+3. `GET /api/workspaces` endpoint + tests (vivarium-dashboard).
 4. `POST /api/workspaces/add` + tests.
 5. `POST /api/workspaces/forget` + tests.
 6. `POST /api/workspaces/cleanup-stale` + tests.
 7. `POST /api/workspaces/start` + tests.
 8. `index.html.j2` dropdown markup, CSS, JS panel.
-9. `/pbg-workspace` registration shim.
-10. `/pbg-server` registration shim (start).
+9. `/pbg-workspace` registration shim (pbg-superpowers repo).
+10. `/pbg-server` SKILL.md update — the skill's description currently mentions
+    that `start` writes `.pbg/server/server.pid`, but with the dashboard CLI
+    now writing the PID file itself, the skill text needs to be updated.
+    (No code change in pbg-superpowers' `start-server.sh`.)
 11. Manual end-to-end run across two real workspaces.
 
-Each step is its own commit so the diff stays cohesive.
+Each step is its own commit so the diff stays cohesive. Steps 1, 9, 10 live
+in the `pbg-superpowers` repo; steps 2–8 live in the `vivarium-dashboard`
+repo.
