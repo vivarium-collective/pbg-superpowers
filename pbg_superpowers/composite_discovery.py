@@ -117,6 +117,7 @@ def discover_all(
             "name": entry.name,
             "description": entry.description,
             "parameters": entry.parameters,
+            "visualizations": list(entry.visualizations),
             "module": entry.module,
             "default_n_steps": entry.default_n_steps,
         }

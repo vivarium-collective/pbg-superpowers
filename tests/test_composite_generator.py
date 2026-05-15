@@ -247,3 +247,6 @@ def test_discover_all_merges_specs_and_generators(tmp_path, installed_fake_pkg):
     assert merged[gen_id]["name"] == "demo"
     # default_n_steps is always propagated (None when the generator omits it).
     assert "default_n_steps" in merged[gen_id]
+    # visualizations is always propagated as a list (empty when the generator
+    # omits it) so dashboard callers can rely on the key existing.
+    assert merged[gen_id].get("visualizations") == []
