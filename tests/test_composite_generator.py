@@ -114,17 +114,22 @@ FIXTURE_PKG = Path(__file__).parent / "fixtures" / "fake_generator_pkg"
 
 @pytest.fixture
 def installed_fake_pkg():
-    """Install the fixture package into the current venv for the test.
+    """Install the fixture package into the running test interpreter's env.
 
-    Uses ``uv pip`` (the project's package manager) because the venv is
-    managed by uv and does not bundle pip.
+    Uses ``sys.executable -m pip`` so the install always lands in the
+    same environment that runs the test (pyenv, project venv, CI venv —
+    whichever pytest was launched under). Earlier this used ``uv pip``
+    unconditionally, but ``uv pip`` writes to the project's ``.venv``
+    even when pytest is running under pyenv, so ``importlib.metadata``
+    in-process could not see the install and discovery skipped the
+    package.
 
-    Also patches ``sys.path`` directly so the editable ``.pth`` file added
-    by hatchling takes effect inside the already-running process (``site``
-    only processes ``.pth`` files at startup).
+    Also patches ``sys.path`` directly so the editable ``.pth`` file
+    added by hatchling takes effect inside the already-running process
+    (``site`` only processes ``.pth`` files at startup).
     """
     subprocess.run(
-        ["uv", "pip", "install", "-q", "-e", str(FIXTURE_PKG)],
+        [sys.executable, "-m", "pip", "install", "-q", "-e", str(FIXTURE_PKG)],
         check=True,
     )
     # Editable installs write a .pth file that is only processed at Python
@@ -145,7 +150,7 @@ def installed_fake_pkg():
             del sys.modules[mod_name]
     importlib.invalidate_caches()
     subprocess.run(
-        ["uv", "pip", "uninstall", "-q", "fake-generator-pkg"],
+        [sys.executable, "-m", "pip", "uninstall", "-q", "-y", "fake-generator-pkg"],
         check=True,
     )
 
