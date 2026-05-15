@@ -25,6 +25,9 @@ Bootstrap stage. Operates on a brand-new workspace directory.
    - `uv venv .venv && source .venv/bin/activate`
    - `uv pip install -e .[dev]` (workspace's own pyproject)
    - `git add -A && git commit -m 'feat(stage-0): workspace bootstrap'`
+   - `python -m pbg_superpowers.workspace_catalog add --path "$TARGET" --name "$NAME" --package "$PKG"`
+     (registers the workspace in `~/.pbg/workspaces.json` so it appears in the
+     dashboard's workspace switcher; idempotent — safe to re-run).
 
    Note: subsequent `/pbg-*` skills invoke the plugin via `python -m pbg_superpowers.scaffold`
    (or other module paths) from the Claude Code host environment, NOT from inside the
