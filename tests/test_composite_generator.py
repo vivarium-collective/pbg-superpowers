@@ -1,4 +1,5 @@
 """Tests for pbg_superpowers.composite_generator."""
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -112,26 +113,45 @@ def test_build_generator_passes_core_when_present():
 FIXTURE_PKG = Path(__file__).parent / "fixtures" / "fake_generator_pkg"
 
 
+def _install_cmd(action: str, target: str) -> list[str]:
+    """Build a pip install/uninstall command that targets ``sys.executable``.
+
+    Prefers ``uv pip --python <sys.executable>`` because it (a) pins the
+    target interpreter explicitly — bare ``uv pip`` would otherwise pick
+    the project's ``.venv`` instead of the pyenv interpreter that's
+    actually running pytest — and (b) doesn't require pip to be present
+    in the target env, which matters in CI where ``uv venv`` creates a
+    pip-less ``.venv``.
+
+    Falls back to ``sys.executable -m pip`` when ``uv`` isn't on PATH,
+    for contributors who run tests without uv installed.
+    """
+    if shutil.which("uv"):
+        if action == "install":
+            return ["uv", "pip", "install", "--python", sys.executable,
+                    "-q", "-e", target]
+        return ["uv", "pip", "uninstall", "--python", sys.executable, target]
+    if action == "install":
+        return [sys.executable, "-m", "pip", "install", "-q", "-e", target]
+    return [sys.executable, "-m", "pip", "uninstall", "-q", "-y", target]
+
+
 @pytest.fixture
 def installed_fake_pkg():
     """Install the fixture package into the running test interpreter's env.
 
-    Uses ``sys.executable -m pip`` so the install always lands in the
-    same environment that runs the test (pyenv, project venv, CI venv —
-    whichever pytest was launched under). Earlier this used ``uv pip``
-    unconditionally, but ``uv pip`` writes to the project's ``.venv``
-    even when pytest is running under pyenv, so ``importlib.metadata``
-    in-process could not see the install and discovery skipped the
-    package.
+    Uses ``uv pip install --python sys.executable`` so the install lands
+    in the same environment that runs the test, regardless of whether
+    that env has pip available (CI's ``uv venv`` does not) and regardless
+    of whether ``uv``'s default target ``.venv`` differs from
+    ``sys.executable`` (e.g. running under pyenv locally). Falls back to
+    ``sys.executable -m pip`` if uv is not installed.
 
     Also patches ``sys.path`` directly so the editable ``.pth`` file
     added by hatchling takes effect inside the already-running process
     (``site`` only processes ``.pth`` files at startup).
     """
-    subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-q", "-e", str(FIXTURE_PKG)],
-        check=True,
-    )
+    subprocess.run(_install_cmd("install", str(FIXTURE_PKG)), check=True)
     # Editable installs write a .pth file that is only processed at Python
     # startup. Manually add the package root so importlib can find it now.
     pkg_root = str(FIXTURE_PKG)
@@ -149,10 +169,7 @@ def installed_fake_pkg():
         if mod_name == "fake_generator_pkg" or mod_name.startswith("fake_generator_pkg."):
             del sys.modules[mod_name]
     importlib.invalidate_caches()
-    subprocess.run(
-        [sys.executable, "-m", "pip", "uninstall", "-q", "-y", "fake-generator-pkg"],
-        check=True,
-    )
+    subprocess.run(_install_cmd("uninstall", "fake-generator-pkg"), check=True)
 
 
 def test_discover_generators_finds_decorated_function_in_installed_pkg(
