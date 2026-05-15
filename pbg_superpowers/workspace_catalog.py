@@ -64,8 +64,17 @@ def list_workspaces() -> list[dict]:
 def _atomic_write(path: Path, payload: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(payload)
-    tmp.replace(path)
+    try:
+        tmp.write_text(payload)
+        tmp.replace(path)
+    except BaseException:
+        # Best-effort cleanup of the .tmp on crash; ignore errors so we
+        # don't mask the original exception.
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def _with_catalog_lock(fn):
@@ -80,7 +89,24 @@ def _with_catalog_lock(fn):
             fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
 
-def add(path, name: str | None = None, package: str | None = None) -> dict:
+def _with_servers_lock(fn):
+    """Hold an exclusive flock on the servers lock file while running fn.
+
+    The lock file lives at ``~/.pbg/servers.lock`` (a sibling of the
+    ``servers/`` directory, not inside it) so that ``*.json`` globs over
+    the servers directory never pick it up.
+    """
+    _home().mkdir(parents=True, exist_ok=True)
+    lock = _home() / "servers.lock"
+    with lock.open("a+") as fh:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        try:
+            return fn()
+        finally:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
+def add(path: str | Path, name: str | None = None, package: str | None = None) -> dict:
     """Append-or-noop. Returns the catalog entry. Raises ValueError if path is
     not a workspace (no workspace.yaml)."""
     target = _safe_resolve(path)
@@ -155,8 +181,6 @@ def _server_filename(name: str, path: Path) -> str:
 def register_server(name: str, path, pid: int, port: int, url: str) -> Path:
     target = _safe_resolve(path)
     _servers_dir().mkdir(parents=True, exist_ok=True)
-    fname = _server_filename(name, target)
-    fpath = _servers_dir() / fname
     entry = {
         "name": name,
         "path": str(target),
@@ -165,8 +189,17 @@ def register_server(name: str, path, pid: int, port: int, url: str) -> Path:
         "url": url,
         "started_at": _now_iso(),
     }
-    _atomic_write(fpath, json.dumps(entry, indent=2))
-    return fpath
+
+    def _do_register() -> Path:
+        # _server_filename + _atomic_write must be done atomically: two
+        # concurrent calls for workspaces sharing a name but different paths
+        # would both pick <name>.json and race-overwrite each other.
+        fname = _server_filename(name, target)
+        fpath = _servers_dir() / fname
+        _atomic_write(fpath, json.dumps(entry, indent=2))
+        return fpath
+
+    return _with_servers_lock(_do_register)
 
 
 def unregister_server(path) -> bool:
@@ -219,7 +252,7 @@ def find_entry(path) -> dict | None:
 
 
 def find_running(path) -> dict | None:
-    """Return the running-registry entry for path if its PID is alive."""
+    """Returns the running entry for `path` if its PID is alive, else None."""
     entry = find_entry(path)
     if entry is None:
         return None

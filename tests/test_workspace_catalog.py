@@ -121,11 +121,15 @@ def test_find_running_returns_entry_if_pid_alive(pbg_home, workspace_dir):
 
 
 def test_find_running_returns_none_if_pid_dead(pbg_home, workspace_dir):
+    import subprocess as _sp
     from pbg_superpowers.workspace_catalog import register_server, find_running
-    # Use a PID that is virtually guaranteed to be dead.
+    # Spawn a real subprocess, wait for it to exit, then use its confirmed-dead PID.
+    proc = _sp.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    dead_pid = proc.pid
     register_server(
         name="my-workspace", path=workspace_dir,
-        pid=2_000_000, port=8731, url="http://127.0.0.1:8731",
+        pid=dead_pid, port=8731, url="http://127.0.0.1:8731",
     )
     assert find_running(workspace_dir) is None
 
@@ -138,8 +142,8 @@ def test_unregister_server_removes_file(pbg_home, workspace_dir):
     assert find_entry(workspace_dir) is None
 
 
-def test_concurrent_add_dedups(pbg_home, tmp_path):
-    """Many threads adding the same path → exactly one catalog entry."""
+def test_concurrent_add_same_path_dedups(pbg_home, tmp_path):
+    """Many threads adding the SAME path → exactly one catalog entry."""
     from pbg_superpowers.workspace_catalog import add, list_workspaces
 
     ws = tmp_path / "concurrent"
@@ -159,6 +163,77 @@ def test_concurrent_add_dedups(pbg_home, tmp_path):
 
     assert errors == []
     assert len(list_workspaces()) == 1
+
+
+def test_concurrent_add_different_paths_all_survive(pbg_home, tmp_path):
+    """N threads each adding a distinct workspace path → all N entries land.
+
+    Without flock, the read-modify-write race causes lost updates: a thread
+    reads the catalog, another thread reads the same state, both append their
+    entry to their local copy, both write back. The second write erases the
+    first thread's entry. With flock, all N entries survive.
+    """
+    from pbg_superpowers.workspace_catalog import add, list_workspaces
+
+    N = 12
+    workspaces = []
+    for i in range(N):
+        ws = tmp_path / f"ws-{i}"
+        ws.mkdir()
+        (ws / "workspace.yaml").write_text(f"name: ws-{i}\npackage: pbg_ws_{i}\n")
+        workspaces.append(ws)
+
+    errors = []
+    def worker(ws):
+        try:
+            add(ws)
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker, args=(w,)) for w in workspaces]
+    for t in threads: t.start()
+    for t in threads: t.join()
+
+    assert errors == []
+    listed = list_workspaces()
+    assert len(listed) == N
+    paths = sorted(w["path"] for w in listed)
+    expected = sorted(str(ws.resolve()) for ws in workspaces)
+    assert paths == expected
+
+
+def test_concurrent_register_server_same_name_different_paths(pbg_home, tmp_path):
+    """Two workspaces with same name registering concurrently must end up
+    with distinct files (one base, one hash-suffixed) — neither lost."""
+    from pbg_superpowers.workspace_catalog import register_server
+
+    w1 = tmp_path / "a" / "shared-name"; w1.mkdir(parents=True)
+    w2 = tmp_path / "b" / "shared-name"; w2.mkdir(parents=True)
+
+    results = {}
+    errors = []
+    def worker(label, ws, pid, port):
+        try:
+            fpath = register_server("shared-name", ws, pid, port, f"http://127.0.0.1:{port}")
+            results[label] = fpath
+        except Exception as e:
+            errors.append(e)
+
+    t1 = threading.Thread(target=worker, args=("w1", w1, 100, 8001))
+    t2 = threading.Thread(target=worker, args=("w2", w2, 200, 8002))
+    t1.start(); t2.start(); t1.join(); t2.join()
+
+    assert errors == []
+    assert len(results) == 2
+    assert results["w1"] != results["w2"]
+    # Both files should still exist (neither overwritten).
+    assert results["w1"].exists()
+    assert results["w2"].exists()
+    # And their contents should match what each thread wrote.
+    d1 = json.loads(results["w1"].read_text())
+    d2 = json.loads(results["w2"].read_text())
+    assert d1["path"] != d2["path"]
+    assert {d1["pid"], d2["pid"]} == {100, 200}
 
 
 def test_cli_add_and_list(pbg_home, workspace_dir):
