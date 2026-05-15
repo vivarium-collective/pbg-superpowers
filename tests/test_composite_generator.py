@@ -63,6 +63,48 @@ def test_decorator_default_n_steps_optional():
     assert entry.default_n_steps is None
 
 
+def test_decorator_accepts_visualizations():
+    """``visualizations`` ships canonical Study-spec viz entries with the
+    composite; dashboards can merge them into a Study without the author
+    having to hand-author each."""
+    viz_list = [
+        {
+            "name": "level-trace",
+            "address": "local:TimeSeriesPlot",
+            "config": {"observable": "level"},
+        },
+        {
+            "name": "topology",
+            "address": "local:NetworkVisualization",
+            "config": {},
+        },
+    ]
+
+    @composite_generator(
+        name="vz",
+        description="",
+        parameters={},
+        visualizations=viz_list,
+    )
+    def builder(core=None):
+        return {}
+
+    entry = _REGISTRY[f"{builder.__module__}.vz"]
+    assert entry.visualizations == viz_list
+    # Defensive copy — mutating the caller's list shouldn't change the entry.
+    viz_list.append({"name": "intruder"})
+    assert len(entry.visualizations) == 2
+
+
+def test_decorator_visualizations_optional():
+    @composite_generator(name="vz-opt", description="", parameters={})
+    def builder(core=None):
+        return {}
+
+    entry = _REGISTRY[f"{builder.__module__}.vz-opt"]
+    assert entry.visualizations == []
+
+
 def _make_entry(parameters, body):
     @composite_generator(name="t", description="", parameters=parameters)
     def _fn(core=None, **kw):
@@ -205,3 +247,6 @@ def test_discover_all_merges_specs_and_generators(tmp_path, installed_fake_pkg):
     assert merged[gen_id]["name"] == "demo"
     # default_n_steps is always propagated (None when the generator omits it).
     assert "default_n_steps" in merged[gen_id]
+    # visualizations is always propagated as a list (empty when the generator
+    # omits it) so dashboard callers can rely on the key existing.
+    assert merged[gen_id].get("visualizations") == []
