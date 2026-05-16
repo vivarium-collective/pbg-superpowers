@@ -1,8 +1,34 @@
 # Process-Bigraph Glossary
 
-Canonical terminology for the Process-Bigraph framework, anchored on
-[Agmon & Spangler, 2026, Supplement 1](../references/papers/agmon-spangler-2026-process-bigraphs-supplement1.pdf).
-Use these names exactly when authoring skill docs, plans, specs, or code comments.
+Canonical terminology for the Process-Bigraph framework. Bigger-picture framing is anchored on the main paper ([Agmon & Spangler, 2026 main](../references/papers/agmon-spangler-2026-process-bigraphs-main.pdf)); formal semantics on the supplement ([Agmon & Spangler, 2026 supplement 1](../references/papers/agmon-spangler-2026-process-bigraphs-supplement1.pdf)). Use these names exactly when authoring skill docs, plans, specs, or code comments.
+
+## Bigger picture
+
+### Compositional systems biology — what the framework is for
+
+Process Bigraph is a *composition protocol* for systems biology — analogous to how internet protocols let heterogeneous computers interoperate. It operates one level above individual model descriptions (SBML, CellML, etc.), specifying how multiple models, datasets, and simulators are connected, how data is exchanged, and how execution is coordinated. The shift from "publish a single model" to "compose models into a multiscale simulation" is what *compositional systems biology* names.
+
+### Three fundamental criteria for compositional modeling
+
+| Criterion | What it specifies |
+|---|---|
+| **Process interfaces** | The precise points of interaction between mechanisms and system state — which variables a process reads, writes, or transforms. |
+| **Composition patterns** | How independently developed processes are coupled through shared state. Includes the place graph (hierarchical containment) + the process graph (wiring of processes to stores). |
+| **Orchestration patterns** | How processes are invoked over time, with consistent access to shared state. Determines temporal coordination across heterogeneous timescales. |
+
+### Three orchestration patterns
+
+| Pattern | When to use | Mechanism |
+|---|---|---|
+| **Multi-timestepping** | Continuous + discrete processes on different timescales. | DEVS-style scheduling; each process declares an `interval`; the composite invokes the next-due event. |
+| **Workflows** | Initialization, analysis pipelines, computation with natural ordering. | DAG of `Step` nodes (interval = 0); each step runs after its input dependencies are satisfied. |
+| **Event-driven structural updates** | Composite must change its own structure (division, engulfment, bursting). | Graph-rewrite processes apply structural deltas in response to state-dependent conditions. |
+
+All three patterns are interoperable; entire composites can themselves act as processes within larger composites, so multi-scale orchestration is recursive.
+
+### Place graph and process graph
+
+The framework builds on Milner's bigraphs, which combine a **place graph** (hierarchical containment — e.g. molecules in compartments, cells in tissues) and a **link graph** (connectivity via hyperedges). Process Bigraph keeps the place graph and replaces the link graph with a **process graph** in which processes are first-class nodes connecting to stores via typed ports. This shift emphasizes dynamics and causation: rather than encoding interactions implicitly as links, processes are entities that condition on, and act upon, the evolving system.
 
 ## Software stack
 
@@ -129,6 +155,18 @@ Process execution protocols define how addresses resolve to running handlers:
 | `rest` | HTTP | Process address → (process_class, host, port); state serialized into request payloads. |
 | `ray` | Ray actors | Each unique (process_class, config) tied to a persistent actor pool (default size `os.cpu_count()`); round-robin dispatch. |
 | (variants) | `docker`, `socket` | Explored historically; not in the current active registry. |
+
+## Concrete reference: Spatio-Flux process families
+
+From the main paper's Table 2. Useful as a categorization when scaffolding a new process: "is this a metabolic process? a field transport process? ..." helps pick the right wrapper pattern.
+
+| Family | Example processes | Role |
+|---|---|---|
+| Metabolic | `DynamicFBA`, `MonodKinetics`, `SpatialDFBA` | Compute metabolic uptake, secretion, biomass production. |
+| Field transport | `DiffusionAdvection` | Update dissolved-species fields through diffusion and advection. |
+| Particle movement | `BrownianMovement`, `PymunkParticleMovement` | Update particle positions in continuous space (stochastic / Newtonian). |
+| Particle–field coupling | `ParticleExchange` | Bidirectional exchange between particle-local state and spatial fields. |
+| Structural / boundary | `ParticleDivision`, `ManageBoundaries` | Rewrite the particle store (creation, removal, boundary handling). |
 
 ## See also
 

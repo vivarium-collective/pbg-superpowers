@@ -8,6 +8,14 @@ Use it to go from "I have a simulator" to "I have a reviewable, reproducible mod
 
 > **🚧 In development.** The plugin and the [vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard) it drives are under active iteration; minor versions may reshape concepts or APIs.
 
+## What pbg-superpowers is
+
+From [Agmon & Spangler, 2026](docs/references/papers/agmon-spangler-2026-process-bigraphs-main.pdf) (§ Discussion, p. 14):
+
+> A GitHub repository ... with a set of reusable AI agent skills that scaffold process wrapping and composition. These tools automate the creation of port-typed process interfaces and composite connection patterns, reducing manual effort and ambiguity.
+
+Wrapped simulators include COMETS, CompuCell3D, Mem3DG, Smoldyn, VCell's finite-volume solver, Martini, and LAMMPS.
+
 ## Companion repo
 
 This plugin orchestrates **[vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard)** — a local web UI for browsing composites, running studies, and rendering visualizations. The skills read from the dashboard's HTTP API and write to it. The canonical data model (Workspace · Study · Baseline · Variant · Intervention · Run · Visualization) is documented in [`docs/concepts/vivarium-dashboard-model.md`](docs/concepts/vivarium-dashboard-model.md). New agents should read [`CLAUDE.md`](CLAUDE.md) first.
