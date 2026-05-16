@@ -1,9 +1,16 @@
-# expected_behavior Grammar
+# behavior_tests Grammar
 
-The `expected_behavior:` field in `study.yaml` encodes each scientific
+The `behavior_tests:` field in `study.yaml` encodes each scientific
 prediction as a machine-readable **(given, measure, expect)** triple, paired
 with a one-sentence English description that the dashboard renders on the
 Overview tab.
+
+> **Field rename (Pass 7).** Section 6 of the canonical 8-section `study.yaml`
+> is `behavior_tests:`. The legacy v3 name was `expected_behavior:` (renamed
+> because `tests:` is reserved in dashboard v4; see
+> [vivarium-dashboard-model.md § v4 reserved fields](vivarium-dashboard-model.md#v4-reserved-fields)).
+> The grammar below applies unchanged under either field name; v3 specs using
+> `expected_behavior:` are auto-migrated on read.
 
 Adding a new behavioral test is a YAML edit only — no new test code required.
 The evaluator (`vivarium_dashboard.lib.expected_behavior.evaluate()`) turns

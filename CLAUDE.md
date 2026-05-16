@@ -4,14 +4,15 @@ This is the Claude Code plugin that drives the [vivarium-dashboard](https://gith
 
 ## Start here
 
-1. **Concept map: [`docs/concepts/vivarium-dashboard-model.md`](docs/concepts/vivarium-dashboard-model.md)** — canonical vocabulary (Workspace · Study · Baseline · Variant · Intervention · Run · Visualization), on-disk shapes, the dashboard API surface, and which skill controls which concept. **Read this before invoking any Study/Baseline/Variant skill.**
+1. **Concept map: [`docs/concepts/vivarium-dashboard-model.md`](docs/concepts/vivarium-dashboard-model.md)** — canonical vocabulary (Workspace · Study · Baseline · Variant · Intervention · Run · Visualization), the 8-section canonical `study.yaml` (Pass 7), Decide-phase follow-up proposals (Pass 8), on-disk shapes, the dashboard API surface, and which skill controls which concept. **Read this before invoking any Study/Baseline/Variant skill.**
 2. **Conventions: [`docs/conventions/`](docs/conventions/)** — authoritative specs for composites, composite generators, discovery, distribution, and visualizations.
-3. **README: [`README.md`](README.md)** — install + quick start for humans.
+3. **Skills catalog: [`docs/skills.md`](docs/skills.md)** — all 17 user-invocable `/pbg-*` skills with one-line descriptions.
+4. **README: [`README.md`](README.md)** — install + quick start for humans.
 
 ## Working preconditions
 
 Every skill that touches the dashboard requires:
-1. A workspace (a directory with `workspace.yaml` + `pbg_<pkg>/`). Create via `/pbg-init`.
+1. A workspace (a directory with `workspace.yaml` + `pbg_<pkg>/`). Create via `/pbg-workspace`.
 2. The dashboard server running. Start via `/pbg-server start`. Skills read `.pbg/server/server-info` for the URL.
 
 If either is missing, the skill should fail with a clear actionable error pointing the user at the missing precondition.
@@ -22,7 +23,7 @@ If either is missing, the skill should fail with a clear actionable error pointi
 - **Vocabulary:** use **Study**, not "Investigation". The legacy term is kept only in on-disk v2 paths (`investigations/<name>/spec.yaml`) and one or two API body keys for back-compat.
 - **API calls:** prefer `/api/study-*` endpoints over the v2 `/api/investigation-*` aliases. New skill code targets v3.
 - **Body keys:** standardize on `study:` (not `investigation:`, not `name:` when the body has a separate entry-name field). The server's `_study_name_from_body` accepts all three but new code should send `study:`.
-- **Subcommands** (for skills like `/pbg-study`) use kebab-case verbs: `new`, `set-objective`, `baseline-add`, `variant-set-params`, `run-baseline`, etc.
+- **Subcommands** (for skills like `/pbg-study`) use kebab-case verbs: `new`, `set-objective`, `baseline-add`, `variant-set-params`, `run-baseline`, `propose-followup`, `seed-from-followup`, etc. The `/pbg-study` subcommand surface is organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide).
 
 ## Editing rules
 
@@ -46,6 +47,8 @@ If either is missing, the skill should fail with a clear actionable error pointi
 | Add a visualization | `/pbg-viz <study> <viz-name> '<description>'` |
 | Render a study report | `/pbg-report <study>` |
 | Run a composite directly (no Study) | `/pbg-run <composite-id> [--steps N]` |
+| Propose a Decide-phase follow-up study | `/pbg-study propose-followup <study> --id <slug> --title '<t>' --motivation '<m>'` |
+| Seed a new study from a follow-up proposal | `/pbg-study seed-from-followup <parent-study> <proposal-id>` |
 
 For the full set of skill commands, see [`docs/concepts/vivarium-dashboard-model.md`](docs/concepts/vivarium-dashboard-model.md#skill--concept-map).
 
@@ -56,7 +59,7 @@ pbg-superpowers/
 ├── .claude-plugin/        # plugin.json + marketplace.json (manifest format)
 ├── pbg_superpowers/       # Python package (schemas, visualizations, helpers)
 ├── server/                # the report-mirror server (NOT the dashboard — see pbg-server skill)
-├── skills/                # 18 skill directories, one SKILL.md each
+├── skills/                # 17 user-invocable `/pbg-*` skills + `/pbg-init` (machine setup)
 ├── templates/             # Jinja templates for scaffolding workspaces + models
 ├── tests/                 # pytest suite for the Python package
 ├── docs/
