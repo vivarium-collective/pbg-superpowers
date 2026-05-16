@@ -1,9 +1,9 @@
 ---
 name: pbg-workspace
-description: Scaffold a process-bigraph research workspace by cloning the pbg-template repo and initialising it. Bootstraps a new workspace directory ready for the 5-tab dashboard and active-branch workstream flow.
+description: Scaffold a process-bigraph research workspace. In the recommended upstream-branch mode, clones an upstream repo (e.g. vivarium-collective/v2ecoli) and creates a fresh branch off its main with workspace scaffolding committed on top. Falls back to standalone mode (pbg-template clone) when --upstream is omitted.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
-argument-hint: <workspace-name> [target-dir]
+argument-hint: <workspace-name> [target-dir] [--upstream <repo>] [--branch <name>]
 ---
 
 # pbg-workspace
@@ -13,8 +13,25 @@ Bootstrap stage. Operates on a brand-new workspace directory.
 ## Prerequisites
 - Target directory must not exist or must be empty.
 - `git` and (optionally) `uv` available on PATH.
+- When `--upstream` is provided: `gh` CLI present and authenticated (`gh auth status`).
 
-## Lifecycle (per spec §7)
+## Lifecycle — Step-by-step
+
+### Upstream-branch mode (recommended when --upstream is provided)
+
+1. **Pre-flight**: validate upstream-repo format (`owner/name`), confirm `gh` CLI present, confirm `gh auth ok`.
+2. **Clone the upstream** into the target dir: `gh repo clone <upstream> <target>`.
+3. **Create + checkout a fresh branch** off main: `git -C <target> checkout -b <branch> origin/main`.
+   - Default branch name: kebab-case of the workspace name (e.g. `my-workspace`).
+   - Override with `--branch <name>`.
+4. **Apply workspace scaffolding files** (the same set as standalone-mode bootstrap) on top of the branch.
+5. Commit: `git add -A && git commit -m "feat(workspace): scaffold ${NAME} workspace from pbg-template"`.
+6. The workspace is now a branch of the upstream repo ready to develop on. Push via the dashboard's
+   `/api/work-link-branch` or `git push -u origin <branch>`.
+7. Register in workspace catalog same as standalone mode (see step 4 of standalone mode below).
+
+### Standalone mode (when --upstream is omitted)
+
 1. **Pre-flight** — refuse if target dir exists and is non-empty.
 2. **Branch (n/a)** — there is no parent branch yet; the bootstrap will create the workspace's `main`.
 3. **Walkthrough** — confirm the workspace name, the parent directory, and (optionally) override the template source.
@@ -37,7 +54,7 @@ Bootstrap stage. Operates on a brand-new workspace directory.
 6. **Report refresh** — `/pbg-report` to generate the initial `reports/index.html`.
 7. **Next steps** — print a brief summary: workspace is ready; open the dashboard with `bash scripts/serve.sh`. From the dashboard, use the **Registry** tab to install pbg-* modules, **Simulation Setup** to configure observables, and **Build Model** to start a workstream branch.
 
-## Source-of-template options
+## Source-of-template options (standalone mode)
 
 - Default: clones `https://github.com/vivarium-collective/pbg-template.git`.
 - Override via `--template-source <path-or-url>` or `$PBG_TEMPLATE` env var.

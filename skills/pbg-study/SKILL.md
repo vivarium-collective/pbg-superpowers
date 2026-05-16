@@ -19,6 +19,32 @@ All sub-commands:
 1. Walk up from cwd to find `workspace.yaml`. Fail if not found.
 2. Read `.pbg/server/server-info` for the dashboard URL. If absent, fail with: "Run `/pbg-server start` first."
 
+## Tests on a Study (v4 schema)
+
+A v4 Study has a `tests/` subdirectory containing pytest files. The dashboard
+runs them via `POST /api/study-tests-run {study}` and writes a summary back to
+`study.yaml.tests.last_results`. The Tests tab on the Study detail page shows
+per-test pass/fail with expandable tracebacks.
+
+Tests use a `run` pytest fixture provided by `vivarium_dashboard.testing`:
+
+```python
+# studies/<slug>/tests/conftest.py
+from vivarium_dashboard.testing import run  # noqa: F401
+
+# studies/<slug>/tests/test_steady_state.py
+def test_dnaA_count_in_range(run):
+    assert 300 <= run.final("DnaA_count") <= 800
+```
+
+`Run` exposes: `.observable(name) → np.ndarray`, `.final(name)`, `.initial(name)`,
+`.cv(name)`, `.params`, `.seed`, `.status`, `.n_steps`, `.variant`, `.composite`,
+`.trajectory` (pandas DataFrame).
+
+For studies that need to parametrize across all runs, set
+`study.yaml.tests.data_source: all_runs` and use the `runs` fixture
+(parametrized) instead.
+
 ## Sub-commands
 
 ### Overview (set objective + conclusion)
@@ -27,7 +53,7 @@ All sub-commands:
 
 Create a new Study seeded with one baseline composite.
 
-POST `/api/study-new` (or v2 alias `/api/investigation-create-from-composite`):
+POST `/api/study-new`:
 
 ```json
 {"composite_name": "<composite-id>"}
@@ -200,8 +226,7 @@ case "$sub" in
   new)
     CID="$1"
     BODY=$(python3 -c "import json,sys; print(json.dumps({'composite_name': sys.argv[1]}))" "$CID")
-    post "/api/study-new" "$BODY" 2>/dev/null \
-      || post "/api/investigation-create-from-composite" "$BODY"
+    post "/api/study-new" "$BODY"
     ;;
 
   set-objective)
