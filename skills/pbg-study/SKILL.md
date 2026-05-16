@@ -1,9 +1,9 @@
 ---
 name: pbg-study
-description: Manage Studies in the dashboard — full CRUD for baseline composites, variants, interventions, and runs. Wraps the v3 /api/study-* endpoints.
+description: Manage Studies in the dashboard — full CRUD for baseline composites, variants, interventions, and runs. Includes fill-overview to draft question/hypothesis/objective/description from plan and expert PDFs. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new|set-objective|set-conclusion|baseline-add|baseline-remove|run-baseline|variant-add|variant-set-params|variant-delete|run-variant|intervention-add|intervention-update|intervention-delete|open [args]
+argument-hint: new|fill-overview|set-objective|set-conclusion|baseline-add|baseline-remove|run-baseline|variant-add|variant-set-params|variant-delete|run-variant|intervention-add|intervention-update|intervention-delete|open [args]
 ---
 
 # pbg-study
@@ -78,6 +78,67 @@ Replace the Study's conclusion. POST `/api/study-set-conclusion`:
 ```
 
 The markdown is canonically structured under H2 headers: `## Claims`, `## Evidence`, `## Limitations`, `## Next steps`.
+
+#### `fill-overview <slug> [--from-plan <path>] [--from-expert <path>...] [--fields <comma-list>] [--dry-run]`
+
+Draft the `question`, `hypothesis`, `objective`, and/or `description` fields of an existing study by reading its linked plan and expert documents, then write them via the API after user confirmation.
+
+**Arguments:**
+
+- `<slug>` (required) — study slug under `studies/<slug>/`. Abort with a clear error pointing at `/pbg-study new` if the directory or `study.yaml` is absent.
+- `--from-plan <path>` (optional) — path to a planning PDF or markdown that decomposes the study's intent. If absent, look inside `references/expert/` for a file whose name matches `<slug>` or contains the word "plan".
+- `--from-expert <path>` (optional, repeatable) — additional expert-knowledge PDFs or markdown files. If absent, consult `workspace.yaml.expert_docs` and use any entry whose `claims_supported` list overlaps with the study's `parent_studies` or `id`.
+- `--fields <comma-list>` (optional) — restrict drafting to a subset of `question,hypothesis,objective,description`. Default: all four.
+- `--dry-run` (optional) — print the proposed diff and stop without writing anything.
+
+**Behavior (steps Claude follows when running this subcommand):**
+
+1. **Resolve study.** Read `studies/<slug>/study.yaml`. If the study doesn't exist, abort: "Study '<slug>' not found. Run `/pbg-study new` to create it."
+
+2. **Discover source docs.** Resolve `--from-plan` and each `--from-expert` path (relative to the workspace root). If neither flag is given:
+   - Scan `references/expert/` for files whose filename (lowercased, without extension) contains the slug or the substring "plan".
+   - Also check `workspace.yaml` under `expert_docs` for any entry whose `claims_supported` overlaps with the study's `id` or `parent_studies`.
+   - If no docs are found, warn the user and offer to continue with only the study.yaml context.
+
+3. **Read source material.** Use the Read tool on each resolved doc. If a doc is a PDF, read all pages.
+
+4. **Draft each requested field.** For each field in `--fields` (default: all four):
+
+   - `question:` — One paragraph (at most four sentences), scientifically framed as a measurable prediction, ending with `?`. When the plan names a specific section or heading that motivates the question, cite it parenthetically (e.g., "per §3.2 of the plan"). Keep it concise.
+
+   - `hypothesis:` — One paragraph stating the predicted outcome. Include quantitative thresholds (counts, fractions, timescales) **only when they appear explicitly in the source documents**. If the source is qualitative, write "approximately X to Y, per <citation>" rather than fabricating precision. Do not inflate specificity.
+
+   - `objective:` — One paragraph in imperative present tense naming what the study will build, measure, or test (e.g., "Simulate … and measure … to determine …").
+
+   - `description:` — Two to four paragraphs providing scientific context, citing source sections by their heading names. Structure: background, mechanism of interest, why this study, expected outcome.
+
+   Each draft is a plain string suitable for direct insertion into `study.yaml`.
+
+5. **Print preview.** Show a unified diff for each drafted field:
+   - If the field currently has a user-authored value, display: `existing:` block then `proposed:` block, with a note that the default action is replace.
+   - If the field is empty or missing, display `(empty) → <proposed>`.
+
+6. **Confirm with the user.** Accept three responses:
+   - `yes` — proceed to write.
+   - `no` — abort without writing; print "No changes made."
+   - `edit <field> <new-prompt>` — re-draft only that field using the new prompt, then repeat the preview for it before asking again. Loop until the user says `yes` or `no`.
+
+7. **Write via API.** POST `/api/study-set-overview` with only the fields being written:
+
+   ```json
+   {"study": "<slug>", "question": "...", "hypothesis": "...", "objective": "...", "description": "..."}
+   ```
+
+   The endpoint accepts partial bodies — omit any field not being updated. After the POST, verify by fetching `/api/study/<slug>` and printing the resulting values of the written fields so the user can confirm what landed.
+
+8. **Report.** Print a one-line summary per field: field name, character count before and after, and confirmation that the dashboard now shows the new value.
+
+**Notes for Claude when running fill-overview:**
+
+- Be conservative with hypothesis thresholds. Only state numbers that appear explicitly in the source docs. Prefer "approximately" phrasing over invented precision.
+- A `question:` field longer than four sentences is too long — revise.
+- If a field already has user-authored content that is substantively different from the draft, present both side-by-side and let the user decide before overwriting.
+- `/api/study-set-overview` is the canonical endpoint. The legacy alias `/api/investigation-set-overview` exists for backwards compatibility but should not be used in new code.
 
 ### Baseline composites
 
@@ -243,6 +304,19 @@ print(json.dumps({'study': os.environ['NAME'], 'text': os.environ['TEXT']}))")
 import json, os
 print(json.dumps({'study': os.environ['NAME'], 'text': os.environ['MD']}))")
     post "/api/study-set-conclusion" "$BODY"
+    ;;
+
+  fill-overview)
+    # fill-overview is a Claude-driven subcommand. The shell case dispatches it,
+    # but the actual work (reading docs, drafting fields, confirm loop, POST) is
+    # performed by the host Claude instance following the prose steps in SKILL.md
+    # rather than by this bash script.  The case arm below is a no-op placeholder
+    # so the usage block does not fire; Claude handles everything in-context.
+    SLUG="${1:-}"
+    [ -n "$SLUG" ] || { echo "ERROR: fill-overview requires a study slug." >&2; exit 1; }
+    # Claude: follow the "fill-overview" behavior steps in SKILL.md starting at
+    # step 1 (Resolve study). The remaining flags (--from-plan, --from-expert,
+    # --fields, --dry-run) are parsed from "$@" by Claude inline.
     ;;
 
   baseline-add)
@@ -452,6 +526,7 @@ print(json.dumps({'route': f'/studies/{os.environ[\"NAME\"]}'}))")
     cat <<EOF
 Usage:
   /pbg-study new <composite-id>
+  /pbg-study fill-overview <slug> [--from-plan <path>] [--from-expert <path>...] [--fields <comma-list>] [--dry-run]
   /pbg-study set-objective <study-name> '<text>'
   /pbg-study set-conclusion <study-name> '<markdown>'
 
@@ -480,6 +555,13 @@ esac
 ```text
 # Create a study from a composite
 /pbg-study new pbg_chromosome_rep1.composites.dnaa-binding
+
+# Draft question, hypothesis, objective, description from plan + expert PDFs
+/pbg-study fill-overview dnaa-01 --from-plan references/expert/dnaa-plan.pdf
+# Restrict to just question and hypothesis, dry-run first
+/pbg-study fill-overview dnaa-01 --fields question,hypothesis --dry-run
+# Provide extra expert doc
+/pbg-study fill-overview dnaa-01 --from-plan references/expert/dnaa-plan.pdf --from-expert references/expert/grimwade2007.pdf
 
 # Set the objective
 /pbg-study set-objective dnaa-binding "Does DnaA threshold gate initiation?"
