@@ -2,15 +2,14 @@
 name: pbg-expert
 description: >
   Process-bigraph API expert for wrapping simulation tools as process-bigraph Steps or Processes,
-  OR composing multiple wrapped simulators into a sibling composite repo.
-  Single-tool form (/pbg-expert <tool>): creates a sibling pbg-<tool>/ repo with Process class,
-  tests, README, HTML report, and a local commit.
-  Composite form (/pbg-expert <name> <tool1> <tool2> ...): creates a sibling
-  pbg-<name>-composite/ repo wiring the listed wrappers, with HTML report and local commit.
+  OR composing multiple wrapped simulators. Heavy mode (default) creates a sibling pbg-<name>/ repo
+  with tests, README, HTML report, and a local commit. Lightweight mode (--lightweight, alias
+  --in-workspace) writes a single file inside the current workspace's pbg_<slug>/ package and a
+  stub test, with no sibling repo, no report, no commit.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob Grep Agent WebFetch WebSearch
 effort: high
-argument-hint: <tool-name> | <composite-name> <tool1> <tool2> [tool3 ...]
+argument-hint: "[--lightweight] <tool-name> | [--lightweight] <composite-name> <tool1> <tool2> [tool3 ...]"
 ---
 
 # pbg-expert
@@ -19,14 +18,18 @@ You are a process-bigraph API expert. You know the `process-bigraph` framework, 
 
 ## Mode Detection
 
-Inspect `$ARGUMENTS` to determine which mode to run:
+Inspect `$ARGUMENTS`:
 
-- **Single-tool mode** (`/pbg-expert <tool>`): exactly one argument. Wrap a single simulator as `pbg-<tool>/`.
-- **Composite mode** (`/pbg-expert <name> <tool1> <tool2> [...]`): two or more arguments. The first argument is the composite name; the remaining arguments are simulator/wrapper names that should already be installable (as local sibling repos `pbg-<tool>/` or via PyPI).
+1. If the first token is `--lightweight` or `--in-workspace`, strip the flag and run **Lightweight Mode** (see bottom of this file) with the remaining args. Lightweight mode produces ONE Python file inside the current workspace's `pbg_<slug>/` package plus a stub test, with no sibling repo / README / HTML report / commit.
+2. Otherwise count the remaining positional args:
+   - **Heavy single-tool mode** (one arg): wrap a single simulator as a sibling `pbg-<tool>/` repo.
+   - **Heavy composite mode** (two or more args): the first arg is the composite name; the rest are simulator/wrapper names. Compose into a sibling `pbg-<name>-composite/` repo.
 
-In single-tool mode, proceed to **Initial Repo Setup** below.
+For heavy single-tool mode, proceed to **Initial Repo Setup** below.
 
-In composite mode, jump to **Composite Mode** section below.
+For heavy composite mode, jump to **Composite Mode** section below.
+
+For lightweight mode (either form), jump to **Lightweight Mode** at the bottom.
 
 ---
 
@@ -1069,11 +1072,11 @@ Enumerate every (producer-port, consumer-port) pair and classify each into one o
 
 Present the connection table to the user before writing code. Never mark a row "pass-through" if schemas differ.
 
-Encode the table in `wiring.py` as a `WIRING` dict (see the /pbg-composer SKILL.md for the dict format).
+Encode the table in `wiring.py` as a `WIRING` dict (see the **Lightweight Mode** section below for the dict format reference).
 
 #### Step 3: Build core and document
 
-`core.py` exposes `build_core()` that calls `allocate_core()` and registers all wrappers, adapters, stubs, and `RAMEmitter`. See wiring and composition patterns in the /pbg-composer SKILL.md.
+`core.py` exposes `build_core()` that calls `allocate_core()` and registers all wrappers, adapters, stubs, and `RAMEmitter`. See wiring and composition patterns in the **Lightweight Mode** section below.
 
 `document.py` exposes `build_document()` that returns the full Composite document using paths from `WIRING`.
 
@@ -1135,5 +1138,99 @@ Do not push.
 
 Given `$ARGUMENTS`:
 
-- If one argument: study the tool, create `pbg-<tool>/`, implement the package, test it, generate the report, commit locally, and open the report.
-- If two or more arguments: inventory the listed wrappers, design the wiring table, build `pbg-<name>-composite/`, validate, test, generate the composite report, commit locally, and open the report.
+- If the first token is `--lightweight` (alias `--in-workspace`): run **Lightweight Mode** with the remaining args.
+- Else if one positional arg: study the tool, create `pbg-<tool>/`, implement the package, test it, generate the report, commit locally, and open the report.
+- Else if two or more positional args: inventory the listed wrappers, design the wiring table, build `pbg-<name>-composite/`, validate, test, generate the composite report, commit locally, and open the report.
+
+---
+
+## Lightweight Mode
+
+Invoked when `$ARGUMENTS` starts with `--lightweight` or `--in-workspace`. Strip that flag and dispatch on the remaining positional count.
+
+This mode produces a single file inside the **current workspace's** `pbg_<slug>/` package plus a stub test. No sibling repo, no README, no HTML report, no commit. The dashboard's active-branch workstream is the canonical commit surface — this mode leaves the working tree dirty so the user (or the dashboard's Push button) commits when ready.
+
+(Replaces the v0.8.x skills `/pbg-wrapper` and `/pbg-composer`.)
+
+### Common preconditions
+
+1. Walk up from cwd to find `workspace.yaml`. Fail with a clear message if absent.
+2. Read `package_path` from `workspace.yaml`; default to `pbg_<workspace_name_underscored>` if missing.
+3. NEVER install simulator dependencies — that's a separate step (`/pbg-catalog install <pkg>` or manual `uv pip install`).
+4. NEVER modify `workspace.yaml`. The Process/Composite lives in code, not metadata.
+5. NEVER auto-commit.
+
+### Lightweight single-tool form
+
+`/pbg-expert --lightweight <tool>` (replaces `/pbg-wrapper <tool>`)
+
+Steps:
+
+1. Create `pbg_<slug>/processes/` if missing (touch `__init__.py`).
+2. Write `pbg_<slug>/processes/<tool>.py` containing:
+   - Module docstring naming the simulator + a `TODO` for the real implementation.
+   - `from process_bigraph import Process`.
+   - Class `<Tool>Process(Process)` with:
+     - `config_schema = {}`
+     - `def inputs(self)` — sketch of expected input ports.
+     - `def outputs(self)` — sketch of expected output ports.
+     - `def update(self, state, interval)` — placeholder (e.g. echo state).
+     - Real implementation marked `# TODO:`.
+3. Write `tests/test_<tool>.py` — minimal smoke test:
+   - Import the class.
+   - Instantiate with default config.
+   - Assert `inputs()` and `outputs()` return dicts.
+4. Print a short summary listing the two files and the "working tree is now dirty" hint.
+
+Example:
+
+```text
+/pbg-expert --lightweight tellurium     # in a workspace called chromosome-rep1
+
+  pbg_chromosome_rep1/processes/tellurium.py    # TelluriumProcess
+  tests/test_tellurium.py                        # smoke test
+```
+
+### Lightweight composite form
+
+`/pbg-expert --lightweight <name> <tool1> <tool2> [...]` (replaces `/pbg-composer <name> <tools…>`)
+
+Two or more `<tool>` args after `<name>`. Each `<tool>` must be an already-installed importable package (e.g. `pbg_tellurium`). If any is missing, abort and direct the user at `/pbg-catalog install <pkg>` or the Registry tab.
+
+Steps:
+
+1. Verify each `<tool>` is importable. If any are missing, report and abort.
+2. Create `pbg_<slug>/composites/` if missing (touch `__init__.py`).
+3. Write `pbg_<slug>/composites/<name>.py` containing:
+   - Module docstring naming the composite and its participants.
+   - Imports for each tool's Process class (use `__all__` or known process names from the package).
+   - A `build_composite(core=None) -> Composite` function that:
+     - Calls `allocate_core()` if `core` is None.
+     - Builds a state dict referencing each Process at a path (e.g. `simulation/tellurium`, `simulation/cobra`).
+     - Wires the processes via shared stores (best-effort guess based on `inputs()` / `outputs()` — leave wires as `# TODO:` if ambiguous).
+     - Adds a `RAMEmitter` capturing the shared stores.
+     - Returns `Composite({'state': state}, core=core)`.
+   - An `if __name__ == "__main__":` block that runs `build_composite().run(10)` and prints a summary.
+4. Write `tests/test_<name>_composite.py` — minimal smoke test:
+   - Call `build_composite()`.
+   - Assert the result is a `Composite`.
+   - Run for 1 timestep and verify no exception.
+5. Print a summary listing the two files, any `# TODO:` wires left, and "Run from terminal: `python -m pbg_<slug>.composites.<name>`".
+
+Example:
+
+```text
+/pbg-expert --lightweight metabolism pbg_cobra pbg_tellurium  # in chromosome-rep1
+
+  pbg_chromosome_rep1/composites/metabolism.py    # build_composite()
+  tests/test_metabolism_composite.py              # smoke test
+```
+
+### When to use lightweight vs. heavy
+
+| You want… | Use |
+|---|---|
+| To prototype a Process inside an existing workspace without a sibling repo | `--lightweight <tool>` |
+| To compose two installed wrappers inside the workspace before deciding to publish | `--lightweight <name> <t1> <t2>` |
+| A publication-ready sibling `pbg-<tool>/` repo with README, tests, HTML report, PR | (heavy) `/pbg-expert <tool>` |
+| A composite repo `pbg-<name>-composite/` with wiring table, validation, report | (heavy) `/pbg-expert <name> <t1> <t2>` |

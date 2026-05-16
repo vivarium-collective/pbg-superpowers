@@ -1,13 +1,22 @@
 ---
 name: pbg-suggest
-description: Draft a Claude-suggested value (repo name, PR title, or PR body) in response to a dashboard request file. Same request/response lifecycle as /pbg-viz.
+description: Internal dashboard callback — invoked by the vivarium-dashboard "Suggest" button to draft a repo name, PR title, or PR body in response to a request file. Not part of the user-facing catalog; do not invoke directly. The dashboard prints the exact `/pbg-suggest <id>` to run when needed.
 arguments:
   - name: request-id
-    description: ID of the request file (e.g. repo-name-1778394000). Find it via the Suggest button in the dashboard.
+    description: ID of the request file (e.g. repo-name-1778394000). Supplied by the dashboard; users do not type this by hand.
     required: true
 ---
 
 # /pbg-suggest <request-id>
+
+> **Internal callback skill.** This is not part of the v0.9 user-facing
+> catalog. It exists because the vivarium-dashboard "Suggest" button asks
+> the user to paste `/pbg-suggest <id>` into Claude Code — the dashboard
+> wrote a request file at `.pbg/agent-requests/<id>.json` and is polling
+> `.pbg/agent-responses/<id>.json` for the answer.
+>
+> Do not advertise this skill in docs or invoke it manually. It stays
+> registered only so the dashboard callback works.
 
 Read `.pbg/agent-requests/<request-id>.json` from the current workspace. The file contains:
 - `kind`: one of `repo-name`, `pr-title`, `pr-body`

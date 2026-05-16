@@ -102,9 +102,11 @@ exclusively. Skills (`/pbg-workspace`, `/pbg-server`) follow suit.
 
 ## Verification
 
-The `/pbg-package` skill checks whether a repo is published on PyPI:
+The maintainer audit script checks whether a repo is published on PyPI:
 
 ```
-/pbg-package pbg-tellurium
+python scripts/audit-pbg-repo.py pbg-tellurium
 # Audit output includes "published on PyPI: PASS (v0.3.2)" or similar.
 ```
+
+(Replaces the v0.8 `/pbg-package` skill.)

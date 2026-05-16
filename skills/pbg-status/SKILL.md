@@ -64,45 +64,30 @@ If `~/.pbg/workspaces.json` is absent or empty, print `catalog: no registered wo
 
 ### 2. Dashboard server liveness
 
-Read `<workspace_root>/.pbg/server/server-info` (JSON):
+Delegate to `/pbg-server status` for the canonical server-info / alive
+check — do **not** re-implement TCP probing or `server-info` parsing
+here. Capture the output and prefix it with `server: ` (or print it
+inline) so the consolidated status block stays a one-screen summary.
 
-```python
-import json, socket
-info = json.load(open(server_info_path))
-pid = info.get("pid")
-port = info.get("port") or info.get("url", "").split(":")[-1].rstrip("/")
-url  = info.get("url")
-# TCP probe:
-alive = False
-try:
-    s = socket.create_connection(("127.0.0.1", int(port)), timeout=1)
-    s.close(); alive = True
-except Exception:
-    pass
-```
+If `<workspace_root>/.pbg/server/server-info` is absent, print
+`server:  not running` and skip the API-endpoint best-effort calls below.
 
-Print:
-
-```
-server:  http://127.0.0.1:<port>  pid=<pid>  [alive | DEAD — safe to delete .pbg/server/server-info]
-```
-
-If `server-info` is absent: `server:  not running`.
-
-If workspace was not found but cwd has a stale `.pbg/server/server-info`, report it explicitly:
+If workspace was not found but cwd has a stale
+`.pbg/server/server-info`, surface that as a separate one-liner:
 
 ```
 stale .pbg/server/server-info in cwd: yes (pid=<N> not running — safe to delete)
 ```
 
-When the server is alive, also hit the three API endpoints (best-effort):
+When the server is alive, hit the three best-effort API endpoints to
+enrich the rest of the status output:
 
 - `GET /api/work-status`
 - `GET /api/dirty-status`
 - `GET /api/workspace-manifest`
 
-And render workstream / dirty-files info as the existing implementation did (see
-Implementation outline below).
+Render workstream / dirty-files info as the existing implementation
+outline below shows.
 
 ### 3. Git state
 
@@ -133,6 +118,12 @@ If no `studies/` directory: `studies: none`.
 ---
 
 ## Implementation outline
+
+> The dashboard-server portion below duplicates what `/pbg-server status`
+> already prints. Prefer shelling out to `/pbg-server status` when that
+> skill is installed; the inline TCP probe is kept as a self-contained
+> fallback so `/pbg-status` works even from a checkout where pbg-server
+> hasn't been wired up yet.
 
 ```bash
 #!/usr/bin/env bash

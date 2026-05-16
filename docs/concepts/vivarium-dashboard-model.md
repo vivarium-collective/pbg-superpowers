@@ -37,7 +37,7 @@ A self-contained research unit: question + baseline composite(s) + variants + in
 - **On disk:** `<workspace>/studies/<name>/study.yaml` (schema_version 3). Legacy v2 specs live at `<workspace>/investigations/<name>/spec.yaml` and are migrated to v3 in-memory on read.
 - **Identity:** the directory name (a slug like `study-monod_kinetics-096184`).
 - **v3 shape:** `{schema_version: 3, name, objective, status, baseline: [...], variants: [...], interventions: [...], runs: [...], visualizations: [...], conclusion}`.
-- **Created by:** `/pbg-study new`. **Managed by:** `/pbg-study`. **Listed by:** `/pbg-list`.
+- **Created by:** `/pbg-study new`. **Managed by:** `/pbg-study`. **Listed by:** `/pbg-catalog list`.
 
 > "Study" is the canonical per-experiment term. "Investigation" now refers specifically to the higher-level collection container (`investigations/<slug>/investigation.yaml`). The v2 legacy use of "investigation" as a synonym for "study" is retired in the UI; backend aliases (`investigation:` body key, `/api/investigation-*`) remain for backwards compatibility but should not be used in new code.
 
@@ -48,7 +48,7 @@ Studies move through five phases. Each phase has a distinct deliverable, distinc
 | Phase | Produces | Skills / tools |
 |---|---|---|
 | **Design** | The spec: purpose, pipeline_gate, simulation_set, model_change, key_assumptions, readouts, behavior_tests, conclusion_logic, limitations, implementation_requirements, bibliography | `/pbg-study new`, `/pbg-study fill-overview`, `/pbg-study set-objective`, baseline/variant/intervention `*-add` subcommands, `/pbg-investigation new`, `/pbg-investigation scaffold-from-plan` |
-| **Build** | The executable code: Process classes, listeners, composites that make the spec runnable against the workspace's simulator | `/pbg-wrapper`, `/pbg-expert`, `/pbg-composer`, plus manual code in `pbg_<workspace>/processes/`. Gap-listed listeners + sim_data calibration also happen here. |
+| **Build** | The executable code: Process classes, listeners, composites that make the spec runnable against the workspace's simulator | `/pbg-expert` (sibling repo) or `/pbg-expert --lightweight` (in-workspace, single-tool or composite form), plus manual code in `pbg_<workspace>/processes/`. Gap-listed listeners + sim_data calibration also happen here. |
 | **Simulate** | The runs: `runs.db` populated with trajectories | `/pbg-study run-baseline`, `/pbg-study run-variant` |
 | **Evaluate** | The verdict: behavioral test results, rendered visualizations, observations against `behavior_tests` | `POST /api/study-tests-run` (Tests tab), `/pbg-viz` (Visualizations tab) |
 | **Decide** | The conclusion: what we learned + next steps | `/pbg-study set-conclusion` |
@@ -341,11 +341,11 @@ Skills that read dashboard state do so via these HTTP endpoints:
 
 | Endpoint | Returns | Used by |
 |---|---|---|
-| `GET /api/investigations` | All studies with summary fields (`name, status, baseline_names, n_baseline, n_variants, n_interventions, n_runs, baseline_source, conclusions_excerpt`) | `/pbg-list` |
-| `GET /api/workspace-manifest` | Composites, studies, registry, health | `/pbg-status`, `/pbg-list` |
+| `GET /api/investigations` | All studies with summary fields (`name, status, baseline_names, n_baseline, n_variants, n_interventions, n_runs, baseline_source, conclusions_excerpt`) | `/pbg-catalog list` |
+| `GET /api/workspace-manifest` | Composites, studies, registry, health | `/pbg-status`, `/pbg-catalog list` |
 | `GET /api/investigation-composites?investigation=<n>` | A study's baseline list as `[{name, source, params}]` | `/pbg-study`, UI |
 | `GET /api/composite-resolve?id=<id>&overrides=<json>` | A composite's `{parameters, state, svg, kind, ...}` for param-form pre-fill | `/pbg-explore`, UI |
-| `GET /api/composites` | Workspace catalog of discoverable composites | `/pbg-list` |
+| `GET /api/composites` | Workspace catalog of discoverable composites | `/pbg-catalog list` |
 
 ## The dashboard server (write surface)
 
@@ -372,14 +372,13 @@ Skills that read dashboard state do so via these HTTP endpoints:
 |---|---|---|---|
 | `/pbg-init` | — | Workspace | Scaffolds new workspace. |
 | `/pbg-server` | `.pbg/server/server-info` | Starts/stops dashboard server. | Required precondition for every other dashboard-touching skill. |
-| `/pbg-list` | Workspace, Composites, Studies | — | Read-only catalog. |
-| `/pbg-status` | Workspace state | — | Server up? recent activity? |
-| `/pbg-install` / `/pbg-uninstall` | Workspace | Workspace deps | Wraps `pip install` + workspace catalog. |
-| `/pbg-package` | Workspace | Workspace | Scaffolds a new composite into `pbg_<pkg>/composites/`. |
-| `/pbg-composer` | Composite catalog | Workspace composite file | Generates a composite spec from prompts. |
-| `/pbg-wrapper` | External Process | Workspace composite file | Wraps an existing simulator as a Process. |
-| `/pbg-expert` | — | — | Domain reference for biology + Process design. |
-| `/pbg-suggest` | Workspace | — | Suggests next actions. |
+| `/pbg-catalog [list]` | Workspace, Composites, Studies | — | Read-only catalog. |
+| `/pbg-catalog install <pkg>` / `/pbg-catalog uninstall <pkg>` | Workspace | Workspace deps | Wraps `pip install` + workspace catalog. |
+| `/pbg-status` | Workspace state | — | Server up? recent activity? Defers server section to `/pbg-server status`. |
+| `/pbg-expert <tool>` | External Process | Sibling `pbg-<tool>/` repo | Wraps a simulator as a Process. Default mode creates a sibling repo + tests + README + report; `--lightweight` writes a single file into the current workspace package instead. |
+| `/pbg-expert <name> <tools…>` | Composite catalog | Sibling `pbg-<name>-composite/` repo | Composes installed wrappers. `--lightweight` writes a single composite file into the workspace package instead. |
+| (internal) `/pbg-suggest <id>` | `.pbg/agent-requests/<id>.json` | `.pbg/agent-responses/<id>.json` | Dashboard "Suggest" callback. Not user-facing. |
+| (maintainer) `scripts/audit-pbg-repo.py <repo>` | External pbg-* repo | — | Audits packaging/discovery conventions. Replaces v0.8 `/pbg-package`. |
 | `/pbg-explore` | Composite | Dashboard view | Opens composite in dashboard. |
 | `/pbg-run` | Composite | Run record | Runs a composite directly (no Study). |
 | `/pbg-study` | Study | Study | **All Study CRUD + runs.** See subcommand table above. |
