@@ -115,7 +115,29 @@ def cli() -> None:
 @click.option("--name", required=True, help="Workspace name")
 @click.option("--target", required=True, type=click.Path(path_type=Path), help="Target directory (must not exist or be empty)")
 @click.option("--template-source", default=None, help="Path or git URL of pbg-template (default: $PBG_TEMPLATE or upstream)")
-def workspace(name: str, target: Path, template_source: str | None) -> None:
+@click.option("--in-place", "in_place", is_flag=True, default=False,
+              help="Promote an existing git checkout into a workspace branch (see /pbg-workspace --in-place docs).")
+@click.option("--branch", default=None, help="Branch name for --in-place mode (default: <repo-name>-workspace).")
+@click.option("--package", "package_path", default=None,
+              help="Python package path for --in-place mode (default: pbg_<repo-name-normalized>).")
+def workspace(name: str, target: Path, template_source: str | None,
+              in_place: bool, branch: str | None, package_path: str | None) -> None:
+    if in_place:
+        # TODO(follow-up): implement full in-place bootstrap.
+        # See /pbg-workspace SKILL.md "In-place mode" section for the full spec.
+        # The steps are:
+        #   1. Pre-flight: refuse if workspace.yaml exists; require git repo.
+        #   2. git checkout -b <branch> (default: <repo-name>-workspace, warn if on main).
+        #   3. Selectively copy pbg-template scaffolding files, skipping existing ones.
+        #   4. Generate workspace.yaml from repo name.
+        #   5. git add -A && git commit.
+        #   6. Register in ~/.pbg/workspaces.json.
+        raise click.ClickException(
+            "--in-place bootstrap not yet implemented in scaffold.py. "
+            "Follow the manual steps in skills/pbg-workspace/SKILL.md "
+            "('In-place mode') until this is implemented. "
+            "Tracked as a follow-up task."
+        )
     out = scaffold_workspace(target, name, template_source)
     click.echo(f"workspace scaffolded at {out}")
 

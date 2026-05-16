@@ -1,9 +1,9 @@
 ---
 name: pbg-workspace
-description: Scaffold a process-bigraph research workspace. In the recommended upstream-branch mode, clones an upstream repo (e.g. vivarium-collective/v2ecoli) and creates a fresh branch off its main with workspace scaffolding committed on top. Falls back to standalone mode (pbg-template clone) when --upstream is omitted.
+description: "Scaffold a process-bigraph research workspace. Three modes: (1) upstream-branch — clone a repo and create a workspace branch on top; (2) standalone — clone pbg-template directly; (3) in-place — promote an existing git checkout into a workspace branch without cloning."
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
-argument-hint: <workspace-name> [target-dir] [--upstream <repo>] [--branch <name>]
+argument-hint: <workspace-name> [target-dir] [--upstream <repo>] [--branch <name>] [--in-place]
 ---
 
 # pbg-workspace
@@ -60,6 +60,35 @@ Bootstrap stage. Operates on a brand-new workspace directory.
 - Override via `--template-source <path-or-url>` or `$PBG_TEMPLATE` env var.
 - During development, point at `~/code/pbg-template/` to use the local copy.
 
+### In-place mode (use when scaffolding an existing checkout)
+
+When invoked with `--in-place` inside an EXISTING git checkout (e.g. you cloned
+v2ecoli yourself and want to scaffold workspace files on top), the skill:
+
+1. **Pre-flight:**
+   - Refuse if `workspace.yaml` already exists in cwd (already a workspace).
+   - Refuse if cwd is not inside a git repo (`git rev-parse --is-inside-work-tree`).
+2. **Branch:**
+   - If `--branch <name>` given, `git checkout -b <branch>`.
+   - Otherwise, stay on current branch and warn if it's `main` (suggest a branch
+     name like `<repo-name>-workspace`).
+3. **Apply scaffolding files** (the same set as standalone-mode bootstrap):
+   `workspace.yaml`, `NEXT_STEPS.md`, `scripts/`, `references/`, `experiments/`,
+   `pbg_<package_path>/`, `.pbg/schemas/`.
+   SKIP files that already exist on the branch (don't overwrite, but DO add any
+   missing ones). Generic scaffolding committed by PR #50 style changes may already
+   be present; do not overwrite them.
+4. **Generate `workspace.yaml`** using the cwd's repo name as the default
+   workspace name and `package_path = pbg_<repo_name_normalized>`.
+5. Commit: `git add -A && git commit -m "feat(workspace): scaffold {NAME} on top of existing checkout"`.
+6. Register in the workspace catalog (`~/.pbg/workspaces.json`):
+   `python -m pbg_superpowers.workspace_catalog add --path . --name <name> --package <pkg>`.
+
+**Note:** `scaffold.py --in-place` flag is declared but the full implementation
+is a follow-up TODO. Follow the manual steps above until that lands. The
+`python -m pbg_superpowers.scaffold workspace --in-place` command will print a
+clear error message pointing to this document.
+
 ## Safety (mirror spec §12)
 - Only modify files inside the new workspace directory.
 - Never push, never force-push, never push to main.
@@ -68,3 +97,10 @@ Bootstrap stage. Operates on a brand-new workspace directory.
 
 ## Resume
 This stage has no prereqs. If a partial scaffold exists, ask: delete-and-retry, abort, or use a different target. Confirm before any deletion.
+
+## See also
+
+- [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md) —
+  the dashboard's data model and `/api/*` endpoints. Read this to understand what
+  `workspace.yaml`, study files, and expert-doc entries must contain before the
+  dashboard can render them correctly.
