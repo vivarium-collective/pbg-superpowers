@@ -1,12 +1,19 @@
-"""Tests for pbg_superpowers.visualization.Visualization (v2: update(state) only)."""
+"""Tests for pbg_superpowers.visualization.Visualization.
+
+The baseclass now orchestrates accumulate/render with ``render_mode='end'``
+as the default. Subclasses MAY override ``update(state)`` directly to keep
+the legacy streaming contract; both paths are exercised here.
+"""
 import pytest
 
 from process_bigraph import Step
-from pbg_superpowers.visualization import Visualization
+from pbg_superpowers.visualization import Visualization, as_visualization
 
+
+# --- legacy subclass: overrides update() directly --------------------------
 
 class _Echo(Visualization):
-    """Test subclass that echoes the input as html."""
+    """Legacy-style subclass that echoes the input as html each tick."""
 
     def inputs(self):
         return {'msg': 'string'}
@@ -15,37 +22,136 @@ class _Echo(Visualization):
         return {'html': '<p>' + state.get('msg', '') + '</p>'}
 
 
+# --- new-style subclass: implements accumulate + render --------------------
+
+class _Counter(Visualization):
+    """New-style subclass that accumulates a count then renders at end."""
+
+    def inputs(self):
+        return {'msg': 'string'}
+
+    def accumulate(self, state):
+        self._n = getattr(self, '_n', 0) + 1
+        self._last_msg = state.get('msg', '')
+
+    def render(self):
+        return f'<p>n={self._n}, last={self._last_msg}</p>'
+
+
+def _make(cls):
+    """Helper: instantiate without running through bigraph wiring."""
+    return object.__new__(cls)
+
+
+# ---------------------------------------------------------------------------
+# baseclass shape
+
+
 def test_visualization_is_step_subclass():
     assert issubclass(Visualization, Step)
 
 
-def test_visualization_base_update_raises_not_implemented():
-    inst = object.__new__(Visualization)
-    with pytest.raises(NotImplementedError, match='update'):
-        inst.update({})
-
-
 def test_visualization_outputs_default_html():
-    inst = object.__new__(Visualization)
+    inst = _make(Visualization)
     assert inst.outputs() == {'html': 'string'}
 
 
 def test_visualization_inputs_default_empty():
-    inst = object.__new__(Visualization)
+    inst = _make(Visualization)
     assert inst.inputs() == {}
-
-
-def test_subclass_update_returns_html_dict():
-    inst = object.__new__(_Echo)
-    out = inst.update({'msg': 'hello'})
-    assert out == {'html': '<p>hello</p>'}
 
 
 def test_visualization_marker_classmethod():
     assert _Echo.is_visualization() is True
+    assert _Counter.is_visualization() is True
 
 
-from pbg_superpowers.visualization import as_visualization
+def test_render_mode_in_config_schema():
+    """Default render_mode must be 'end' so test-suite-style runs don't
+    pay the per-tick render cost."""
+    assert Visualization.config_schema['render_mode']['_default'] == 'end'
+    assert Visualization.config_schema['sample_every']['_default'] == 1
+
+
+# ---------------------------------------------------------------------------
+# legacy contract: subclass.update() overrides orchestrator
+
+
+def test_legacy_subclass_update_returns_html_dict():
+    inst = _make(_Echo)
+    out = inst.update({'msg': 'hello'})
+    assert out == {'html': '<p>hello</p>'}
+
+
+# ---------------------------------------------------------------------------
+# new-style contract: baseclass.update() orchestrates accumulate + render
+
+
+def test_new_style_end_mode_accumulates_silently():
+    """In default ('end') mode, update() accumulates but emits empty html."""
+    inst = _make(_Counter)
+    inst.config = {}
+    assert inst.update({'msg': 'a'}) == {'html': ''}
+    assert inst.update({'msg': 'b'}) == {'html': ''}
+    assert inst.update({'msg': 'c'}) == {'html': ''}
+    # Accumulation happened across all three ticks.
+    assert inst.render() == '<p>n=3, last=c</p>'
+
+
+def test_new_style_stream_mode_renders_each_tick():
+    """``render_mode='stream'`` keeps the legacy per-tick HTML behavior."""
+    inst = _make(_Counter)
+    inst.config = {'render_mode': 'stream'}
+    assert inst.update({'msg': 'a'}) == {'html': '<p>n=1, last=a</p>'}
+    assert inst.update({'msg': 'b'}) == {'html': '<p>n=2, last=b</p>'}
+
+
+def test_new_style_sample_every_skips_intermediate_ticks():
+    """``sample_every=N`` accumulates only every Nth tick."""
+    inst = _make(_Counter)
+    inst.config = {'sample_every': 3}
+    for msg in ['t0', 't1', 't2', 't3', 't4', 't5', 't6']:
+        inst.update({'msg': msg})
+    # Ticks 0, 3, 6 were accumulated → n == 3, last == 't6'.
+    assert inst.render() == '<p>n=3, last=t6</p>'
+
+
+def test_new_style_default_accumulate_snapshots_last_state():
+    """The baseclass default ``accumulate`` stashes the latest state on
+    ``_last_state`` so stateless renderers don't need their own buffer."""
+
+    class _SnapOnly(Visualization):
+        def render(self):
+            return f'<p>{self._last_state.get("msg")}</p>'
+
+    inst = _make(_SnapOnly)
+    inst.config = {}
+    inst.update({'msg': 'a'})
+    inst.update({'msg': 'b'})
+    assert inst.render() == '<p>b</p>'
+
+
+def test_new_style_missing_render_raises():
+    """New-style subclass that forgets ``render()`` blows up only when the
+    orchestrator actually tries to render — i.e. in stream mode or via
+    render_results."""
+
+    class _NoRender(Visualization):
+        def accumulate(self, state):
+            pass
+
+    inst = _make(_NoRender)
+    inst.config = {}  # 'end' mode — accumulate-only, never calls render()
+    assert inst.update({}) == {'html': ''}
+
+    # Stream mode triggers render() and surfaces the NotImplementedError.
+    inst.config = {'render_mode': 'stream'}
+    with pytest.raises(NotImplementedError, match='render'):
+        inst.update({})
+
+
+# ---------------------------------------------------------------------------
+# as_visualization decorator — legacy-style by definition
 
 
 def test_as_visualization_synthesizes_subclass():
@@ -57,7 +163,7 @@ def test_as_visualization_synthesizes_subclass():
     assert update_my_viz.__name__ == 'MyViz'
     assert update_my_viz.__pb_kind__ == 'visualization'
     assert 'MyViz' in update_my_viz.__pb_aliases__
-    inst = object.__new__(update_my_viz)
+    inst = _make(update_my_viz)
     assert inst.inputs() == {'x': 'list[float]'}
     assert inst.outputs() == {'html': 'string'}
     assert inst.update({'x': [1.0, 2.0]}) == {'html': '<p>x=[1.0, 2.0]</p>'}
