@@ -134,6 +134,32 @@ Skills that read dashboard state do so via these HTTP endpoints:
 | `/pbg-report` | Study | Report file | Renders study summary to markdown. |
 | `/pbg-workspace` | Workspace | Workspace state | Workspace-level commands. |
 
+## v4 reserved field names {#v4-reserved-fields}
+
+Schema v4 (the current dashboard validation target) reserves these top-level
+field names on `study.yaml`. **If you author v3 specs (the common case) with
+fields that share these names but a different shape, the v3→v4 auto-migration
+will collide and surface validation errors.**
+
+| Field | Required shape (v4) | Notes |
+|---|---|---|
+| `tests` | object: `{auto_discover: bool, data_source: enum, pytest_args: list, last_results: object\|null}` | The dashboard runs pytest from `studies/<slug>/tests/` and writes results back here. |
+| `references` | list of `{file: str, section?: str}` objects | Resolves to markdown / PDF docs. |
+| `implementation_tasks` | string (markdown blob) | Narrative; not parsed. |
+
+**If you have a custom field with one of these names but a different shape,
+rename your custom field.** Common renames the team has adopted:
+
+- `references:` (dict) → `bibliography:`
+- `implementation_tasks:` (list of strings) → `tasks:`
+
+If your spec is intentionally v4-shape, set `schema_version: 4` at the top
+level so the migration short-circuits and you get the v4 validator directly.
+
+When a collision occurs, the validation error message now includes a `Note:`
+suffix naming the reserved field, so you know to rename your custom field
+rather than guessing at a shape mismatch.
+
 ## Migration notes
 
 - **v2 → v3 on read:** `vivarium_dashboard.lib.spec_migration.migrate_v2_to_v3` runs automatically in `load_spec`. Skills never need to invoke it.
