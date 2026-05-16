@@ -43,19 +43,178 @@ A self-contained research unit: question + baseline composite(s) + variants + in
 
 ### Study lifecycle (Design → Build → Simulate → Evaluate → Decide)
 
-Studies move through five phases. Each phase has a distinct deliverable, distinct tools, and distinct evaluation criteria. The dashboard's `status` field captures the runtime sub-state within a phase (`planned`, `running`, `ran`, `complete`, `failed`, `invalid`); the phase itself is a higher-level coordinate that a Study can also declare via the optional `lifecycle_phase:` field.
+Studies move through five phases. Each phase has a distinct deliverable, distinct tools, and distinct evaluation criteria. The dashboard's `status` field captures the runtime sub-state within a phase (`planned`, `running`, `ran`, `complete`, `failed`, `invalid`); the phase itself is a higher-level coordinate that a Study declares via the top-level `phase:` field. The enum is **capitalized**: `Design | Build | Simulate | Evaluate | Decide` (the dashboard's `study-detail.html` reads `study.phase` directly).
 
 | Phase | Produces | Skills / tools |
 |---|---|---|
-| **Design** | The spec: question, hypothesis, objective, baseline(s), variants, interventions, expected_behavior, references | `/pbg-study new`, `/pbg-study fill-overview`, `/pbg-study set-objective`, baseline/variant/intervention `*-add` subcommands, `/pbg-investigation new`, `/pbg-investigation scaffold-from-plan` |
+| **Design** | The spec: purpose, pipeline_gate, simulation_set, model_change, key_assumptions, readouts, behavior_tests, conclusion_logic, limitations, implementation_requirements, bibliography | `/pbg-study new`, `/pbg-study fill-overview`, `/pbg-study set-objective`, baseline/variant/intervention `*-add` subcommands, `/pbg-investigation new`, `/pbg-investigation scaffold-from-plan` |
 | **Build** | The executable code: Process classes, listeners, composites that make the spec runnable against the workspace's simulator | `/pbg-wrapper`, `/pbg-expert`, `/pbg-composer`, plus manual code in `pbg_<workspace>/processes/`. Gap-listed listeners + sim_data calibration also happen here. |
 | **Simulate** | The runs: `runs.db` populated with trajectories | `/pbg-study run-baseline`, `/pbg-study run-variant` |
-| **Evaluate** | The verdict: behavioral test results, rendered visualizations, observations against `expected_behavior` | `POST /api/study-tests-run` (Tests tab), `/pbg-viz` (Visualizations tab) |
+| **Evaluate** | The verdict: behavioral test results, rendered visualizations, observations against `behavior_tests` | `POST /api/study-tests-run` (Tests tab), `/pbg-viz` (Visualizations tab) |
 | **Decide** | The conclusion: what we learned + next steps | `/pbg-study set-conclusion` |
 
-The phases are sequential at a coarse level but **iterative in practice**: Evaluate often surfaces a Build issue → return to Build → Simulate again → re-Evaluate. The lifecycle_phase reflects the study's *current* phase, not its history.
+The phases are sequential at a coarse level but **iterative in practice**: Evaluate often surfaces a Build issue → return to Build → Simulate again → re-Evaluate. The `phase:` field reflects the study's *current* phase, not its history.
 
 Investigations aggregate over their constituent studies: an Investigation card surfaces the slowest-phase member (e.g., one study still in Design blocks the Investigation from leaving Design overall).
+
+### 8-section canonical Study structure
+
+A v3 `study.yaml` is organized into 8 user-facing sections plus two cross-cutting fields. Each section maps to a top-level YAML field. The shape below mirrors `studies/dnaa-01-expression-dynamics/study.yaml` in a v2ecoli workspace — read that file for live, expanded values.
+
+| Section            | YAML field(s)                                            |
+|--------------------|----------------------------------------------------------|
+| 1. Purpose         | `purpose:` (`question` / `mechanism` / `expected_outcome`) |
+| 2. Pipeline Gate   | `pipeline_gate:` (`prerequisites` / `enables` / `proceed_condition`) |
+| 3. Simulations     | `simulation_set:` (replaces v3 `variants:` + `interventions:`) |
+| 4. Build           | `model_change:` + `implementation_requirements:`         |
+| 5. Readouts        | `readouts:` (replaces v3 `observables:`; each carries `status` + `blocked_by_requirements`) |
+| 6. Tests           | `behavior_tests:` (replaces v3 `expected_behavior:`; `tests:` is dashboard-v4 reserved so the field is renamed) |
+| 7. Limitations     | `limitations:`                                           |
+| 8. References      | `bibliography:` (`references:` is dashboard-v4 reserved so the field is renamed) |
+
+Cross-cutting fields that sit outside the 8 sections:
+- `key_assumptions:` — short biological context that pairs with section 4 (Build).
+- `conclusion_logic:` — `if_primary_tests_pass:` / `if_primary_tests_fail:` mapping that pairs with section 6 (Tests).
+
+Top-level lifecycle field:
+- `phase: Design | Build | Simulate | Evaluate | Decide` — capitalized enum (see [Study lifecycle](#study-lifecycle-design--build--simulate--evaluate--decide) above).
+
+Back-compat shims kept at the top level so v3-era dashboards still render:
+- `baseline:` — mirrors one entry of `simulation_set:`; the v4 renderer should consume `simulation_set:` directly.
+- `parent_studies:` — superseded by `pipeline_gate.prerequisites`; kept for the v3 dashboard's DAG layout.
+
+Minimal example (truncate values to placeholders; the schema accepts the loose shapes below — see [`study.schema.json`](https://github.com/vivarium-collective/pbg-template/blob/main/template/.pbg/schemas/study.schema.json)):
+
+```yaml
+schema_version: 3
+name: <slug>
+created: '<YYYY-MM-DD>'
+status: planned
+phase: Design        # Design | Build | Simulate | Evaluate | Decide
+
+# v3 back-compat shim — mirrors simulation_set[0]
+baseline:
+  - name: <name>
+    composite: <pkg.composites.x>
+    params: {}
+
+# 1. PURPOSE
+purpose:
+  question: |
+    <one-paragraph research question>
+  mechanism: |
+    <which existing/new processes carry the answer>
+  expected_outcome: |
+    <quantitative or qualitative prediction>
+
+# 2. PIPELINE GATE
+pipeline_gate:
+  prerequisites: []          # list of parent study slugs (or [])
+  enables: []                # list of child study slugs
+  proceed_condition: |
+    <when downstream studies may start>
+
+# 3. SIMULATION SET
+simulation_set:
+  - name: <run-name>
+    base_model: <pkg.composites.x>
+    perturbation: null       # or {param_name: value}
+    condition: <env-id>
+    duration_min: 60
+    seeds: [0, 1, 2]
+    readouts: [<readout-name>, ...]
+    applies_tests: [<test-name>, ...]
+    status: ready            # ready | gated
+    blocked_by_requirements: []   # only if status == gated
+
+# 4. MODEL CHANGE (Build section)
+model_change:
+  base_model: <pkg.composites.x>
+  new_processes: []
+  new_state_variables: []
+  new_parameters: []
+  modified_processes: []
+  new_listeners: []
+  notes: |
+    <one-paragraph "what code changes and what doesn't">
+
+# Pairs with Build — short biological context
+key_assumptions:
+  - "<assumption 1>"
+  - "<assumption 2>"
+
+# 5. READOUTS
+readouts:
+  - name: <readout-name>
+    description: |
+      <what is collected and from where>
+    store_path: <agents.0.listeners.x.y>
+    units: <molecules/cell | uM | ratio | ...>
+    status: available        # available | derived-needed | aspirational
+    blocked_by_requirements: []     # populated when status != available
+
+# 6. BEHAVIOR TESTS
+behavior_tests:
+  - name: <test-name>
+    classification: primary  # primary | supporting | diagnostic | regression
+    description: |
+      <one-paragraph what this test asserts>
+    measure: {kind: <primitive>, ...}
+    pass_if: {op: <op>, ...}
+    units: <unit>
+    requires_simulation: <simulation-set-name>
+    cites: [<bib-key>, ...]
+
+# Pairs with Tests — explicit if/then
+conclusion_logic:
+  if_primary_tests_pass:
+    implementation_status: "<one-sentence>"
+    biological_validation: |
+      <what this DOES and does NOT validate>
+    pipeline_unblocks: []
+  if_primary_tests_fail:
+    diagnose: []
+    block_downstream: "<one-sentence>"
+
+# 7. LIMITATIONS
+limitations:
+  - "<explicit out-of-scope claim>"
+
+# 8. IMPLEMENTATION REQUIREMENTS (Build section)
+implementation_requirements:
+  - id: <req-N-slug>
+    kind: listener | parameter_hook | process | data
+    title: <short title>
+    effort: XS | S | M | L | XL
+    description: |
+      <what to build>
+    steps: []
+    defer_until: <study-slug or null>
+    unblocks: [<simulation_set/readouts/tests refs>]
+
+# 8b. BIBLIOGRAPHY (renamed from `references:` — v4 reserved)
+bibliography:
+  expert: [<expert-doc-key>, ...]
+  bib_keys: [<bib-key>, ...]
+
+# v3 back-compat shim — superseded by pipeline_gate.prerequisites
+parent_studies: []
+
+# v3 dashboard-managed config (dashboard-v4-reserved shape)
+tests:
+  auto_discover: true
+  data_source: latest_run
+  pytest_args: []
+  last_results: null
+runs: []
+conclusion: null
+```
+
+**Sticky-nav ordering (for report renderers).** Per-study sticky nav, in this order:
+
+> Purpose · Pipeline Gate · Simulations · Model Change · Assumptions · Readouts · Tests · Conclusion · Limitations · Requirements · References
+
+Report-generation code that mirrors the dashboard layout should emit headings in that order so authors can navigate report and dashboard interchangeably.
 
 ### Baseline
 
