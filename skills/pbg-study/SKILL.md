@@ -3,7 +3,7 @@ name: pbg-study
 description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|run-baseline|run-variant|set-conclusion|open [args]
+argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|run-baseline|run-variant|set-conclusion|propose-followup|seed-from-followup|open [args]
 ---
 
 # pbg-study
@@ -277,6 +277,73 @@ Replace the Study's conclusion. POST `/api/study-set-conclusion`:
 ```
 
 The markdown is canonically structured under H2 headers: `## Claims`, `## Evidence`, `## Limitations`, `## Next steps`.
+
+#### `propose-followup <parent-slug> --id <id> --title '<t>' --motivation '<m>' [--mechanism '<hyp>'] [--seed-from-file <path>] [--dry-run]`
+
+Append one entry to `studies/<parent-slug>/study.yaml.followup_proposals[]` (creates the list if absent). This is the Decide-phase "we should also study X" capture. The proposal is later lifted into a sibling study via `seed-from-followup`.
+
+**Arguments:**
+
+- `<parent-slug>` (required) — existing study under `studies/<parent-slug>/`. Abort if `study.yaml` is missing.
+- `--id <id>` (required) — slug matching `^[a-z0-9][a-z0-9-]*$`. Must be unique within the parent's `followup_proposals[]`. 409-style error if duplicate.
+- `--title '<t>'` (required) — short human-readable title.
+- `--motivation '<m>'` (required) — what gap from this study motivates the follow-up.
+- `--mechanism '<hyp>'` (optional) — hypothesized missing biology/process. Stored as `hypothesized_mechanism`. Falls through to the seeded child's `model_change:` if no explicit `seed.model_change` is provided at seed time.
+- `--seed-from-file <path>` (optional) — YAML file whose contents are loaded as the `seed:` block of the proposal. Free-form; common keys are `purpose`, `key_assumptions`, `model_change`, `simulation_set`, `pipeline_gate`.
+- `--dry-run` (optional) — print the proposed diff and stop.
+
+**Behavior (steps Claude follows):**
+
+1. **Resolve study.** Read `studies/<parent-slug>/study.yaml`. If absent, abort.
+2. **Check id uniqueness.** Walk `followup_proposals[]` (treat absent as empty list). If any entry has `id == --id`, abort: "Proposal '<id>' already exists on study '<parent-slug>'."
+3. **Build the proposal dict.** Defaults: `status: proposed`. Include only the keys provided on the CLI; `seed:` comes from `--seed-from-file` (parsed as YAML; abort on parse error).
+4. **Preview.** Print a unified diff of `followup_proposals` before/after.
+5. **Confirm.** `yes` → write; `no` → abort. Skip step 6 if `--dry-run`.
+6. **Atomic write.** Serialize the updated study.yaml to `studies/<parent-slug>/study.yaml.tmp`, then `mv` over the original. Preserve all other top-level keys verbatim.
+7. **Report.** Print one line: `Added proposal <id> to <parent-slug>.followup_proposals (now N entries).`
+
+#### `seed-from-followup <parent-slug> <proposal-id> [--new-slug <slug>] [--dry-run]`
+
+Lift a parent's `followup_proposals[id == <proposal-id>]` entry into a brand-new sibling study, stamped with `seeded_from:` and auto-linked back to the parent via `pipeline_gate.prerequisites`.
+
+**Arguments:**
+
+- `<parent-slug>` (required) — existing parent study.
+- `<proposal-id>` (required) — id of the proposal entry to seed from. Status must be `proposed` or `accepted`; abort on `seeded` (already seeded) or `rejected`.
+- `--new-slug <slug>` (optional) — slug for the new study. Default: the proposal's `id`. Abort if `studies/<new-slug>/` already exists.
+- `--dry-run` (optional) — print both proposed diffs and stop.
+
+**Behavior (steps Claude follows):**
+
+1. **Resolve parent.** Read `studies/<parent-slug>/study.yaml`. Find `followup_proposals[id == <proposal-id>]`. Abort if missing or if `status not in {proposed, accepted}`.
+2. **Resolve new slug.** `new_slug = --new-slug or proposal.id`. Abort if `studies/<new_slug>/` exists.
+3. **Build child `study.yaml` dict** with this skeleton:
+   ```yaml
+   schema_version: 3
+   name: <new_slug>
+   phase: Design
+   purpose: <proposal.seed.purpose or {question: <derived from title+motivation>, mechanism: '', expected_outcome: ''}>
+   pipeline_gate:
+     prerequisites: [<parent-slug>, ...any from proposal.seed.pipeline_gate.prerequisites]
+     # plus enables / proceed_condition / blocks_until_resolved if present in proposal.seed.pipeline_gate
+   key_assumptions: <proposal.seed.key_assumptions or []>
+   model_change: <proposal.seed.model_change or proposal.hypothesized_mechanism or ''>
+   simulation_set: <proposal.seed.simulation_set or []>
+   seeded_from:
+     study: <parent-slug>
+     proposal_id: <proposal-id>
+   ```
+   The purpose-fallback question is `"<proposal.title> — <proposal.motivation>"` (single line, truncated tastefully) when `proposal.seed.purpose` is absent.
+4. **Build parent diff.** Flip the proposal entry: set `status: seeded` and `seeded_study: <new_slug>`.
+5. **Preview both diffs.** Show (a) the new `studies/<new_slug>/study.yaml` content, (b) the parent's `followup_proposals[<i>]` before/after.
+6. **Confirm.** `yes` → write both; `no` → abort. Skip step 7 if `--dry-run`.
+7. **Atomic writes (two).** Write the new child via tmp+rename (creating `studies/<new_slug>/` first). Write the parent via tmp+rename. If the parent write fails after the child write succeeded, `rm -rf studies/<new_slug>/` to avoid an orphaned child, then re-raise.
+8. **Report.** Print: `Seeded studies/<new_slug>/study.yaml from <parent-slug>.followup_proposals[<proposal-id>]. Parent proposal marked seeded.`
+
+**Notes:**
+
+- This is a YAML-direct subcommand; no dashboard API endpoint exists yet (mirrors `/pbg-investigation`'s YAML-direct write pattern).
+- After seeding, the child appears in the dashboard's Studies tab on the next workspace refresh; the parent's proposal entry's `seeded_study:` makes the lineage visible in the Decide panel.
 
 ### Utility
 
@@ -554,6 +621,14 @@ print(json.dumps({'route': f'/studies/{os.environ[\"NAME\"]}'}))")
     post "/api/open-window" "$BODY"
     ;;
 
+  propose-followup|seed-from-followup)
+    # Both subcommands are Claude-driven YAML-direct writes (no API endpoint).
+    # Claude: follow the prose "Behavior" steps in SKILL.md for the relevant
+    # subcommand. The case arm is a placeholder so the usage block does not fire.
+    SLUG="${1:-}"
+    [ -n "$SLUG" ] || { echo "ERROR: $sub requires a parent study slug." >&2; exit 1; }
+    ;;
+
   *)
     cat <<EOF
 Usage:
@@ -574,6 +649,9 @@ Usage:
   /pbg-study intervention-add    <study-name> --name <n> [--description '<text>']
   /pbg-study intervention-update <study-name> --name <n> --description '<text>'
   /pbg-study intervention-delete <study-name> --name <n>
+
+  /pbg-study propose-followup    <parent-slug> --id <id> --title '<t>' --motivation '<m>' [--mechanism '<hyp>'] [--seed-from-file <path>] [--dry-run]
+  /pbg-study seed-from-followup  <parent-slug> <proposal-id> [--new-slug <slug>] [--dry-run]
 
   /pbg-study open <study-name>
 EOF
@@ -619,6 +697,25 @@ esac
 - Single-cell only
 ## Next steps
 - Multi-cell run"
+
+# Propose a Decide-phase follow-up study
+/pbg-study propose-followup dnaa-binding \
+  --id replisome-coupling \
+  --title "Couple DnaA threshold to replisome assembly" \
+  --motivation "Current study treats threshold-crossing as instantaneous initiation; downstream replisome dynamics are not modeled." \
+  --mechanism "Add a replisome-loading Process gated by the DnaA-ATP fraction; transition from initiation event to fork-progression rate."
+
+# Same, but with a richer seed block pre-authored as YAML
+/pbg-study propose-followup dnaa-binding \
+  --id replisome-coupling \
+  --title "Couple DnaA threshold to replisome assembly" \
+  --motivation "..." \
+  --seed-from-file references/proposals/replisome-coupling.seed.yaml
+
+# Seed a new study from that proposal (default slug = proposal id)
+/pbg-study seed-from-followup dnaa-binding replisome-coupling
+# Override the child slug
+/pbg-study seed-from-followup dnaa-binding replisome-coupling --new-slug dnaa-03-replisome-coupling
 
 # Open in browser
 /pbg-study open dnaa-binding
