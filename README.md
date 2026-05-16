@@ -18,16 +18,58 @@ Two parts — the Claude Code plugin (the skills) and the Python package the ski
 
 Verify with `/help` — the `/pbg-*` skills should be listed. For local development, point Claude at a working tree with `claude --plugin-dir /path/to/pbg-superpowers` and `pip install -e .`.
 
-## Quick start
+## Getting Started
 
-    /pbg-workspace my-project --upstream <owner/repo>   # scaffold a workspace
-    cd my-project
-    /pbg-server start                                   # start the local dashboard
-    /pbg-list                                           # browse the catalog
-    /pbg-study new <pkg.composites.my-composite>        # create a Study
-    /pbg-study run-baseline my-composite                # run it
+Two supported paths. Both end at the same dashboard over the same workspace files — choose based on whether you want Claude in the loop.
 
-To wrap a new mechanism first, use `/pbg-expert <tool>` (full sibling repo with tests, report, and PR) or `/pbg-wrapper <tool>` (lightweight in-workspace wrap).
+### Path A — Dashboard only (no AI)
+
+For testers evaluating the UI against an existing or scaffold-only workspace. No Claude Code required.
+
+    pip install vivarium-dashboard
+    # scaffold a workspace from pbg-template (GitHub "Use this template" or git clone)
+    bash use-this-template-init.sh
+    vivarium-dashboard serve --workspace .
+
+Open the printed URL and browse the seven tabs — Registry, Composites, Studies, Investigations, Visualizations, Decisions, Runs. Create studies and investigations directly through the UI. Scaffolding details in the [pbg-template](https://github.com/vivarium-collective/pbg-template) README; serving details (ports, multi-workspace) in the [vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard) README.
+
+### Path B — Dashboard + AI agent (pbg-superpowers integration)
+
+The primary path for this repo. You drive the workspace by talking to Claude; Claude writes the typed Python, YAML, and visualization code; the dashboard reflects state in real time.
+
+**How to install**
+
+1. Install [Claude Code](https://claude.com/claude-code) if you haven't already.
+2. From inside Claude Code:
+
+        /plugin marketplace add vivarium-collective/pbg-superpowers
+        /plugin install pbg-superpowers
+        /reload-plugins
+
+3. Install the Python package the skills call:
+
+        pip install pbg-superpowers
+
+Verify with `/help` — the `/pbg-*` skills should be listed.
+
+**How to get started**
+
+1. Scaffold a workspace (with an upstream model repo, or standalone if you omit `--upstream`):
+
+        /pbg-workspace my-project --upstream <owner/repo>
+        cd my-project
+
+2. Boot the dashboard — Claude will print the local URL:
+
+        /pbg-server start
+
+3. Start authoring in natural language. Ask Claude to wrap a simulator (`/pbg-wrapper <tool>`), compose a model (`/pbg-composer`), or design a study (`/pbg-study new`).
+
+**What to expect**
+
+You interact in natural language — you don't write the boilerplate. Claude authors the typed Process/Composite Python, the study YAML, the Visualization Step, and the tests, while you steer at the level of "wrap this solver," "compose these two," "design a study around this question." Every dashboard mutation Claude makes lands as a commit on your active workstream branch, so you get a full git audit trail and can review or revert any change. You can fall back to the dashboard UI for any of these tasks at any time — both paths share the same files. A common first session: ask Claude to wrap a tool you already know (an ODE solver, a COBRA model, a custom integrator) → run a quick simulation → ask it to draft a Study around a question you care about → it proposes follow-up Studies after the first one completes. The overall loop is **Design → Build → Simulate → Evaluate → Decide**, and Claude helps at each phase.
+
+Full skill catalog: [`docs/skills.md`](docs/skills.md).
 
 ## Concepts
 
