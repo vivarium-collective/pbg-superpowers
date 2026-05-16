@@ -66,6 +66,22 @@ A standalone, text-described experimental condition. Fully separate from variant
 - **API:** `POST /api/study-intervention-add`, `POST /api/study-intervention-update`, `POST /api/study-intervention-delete`.
 - **Skill:** `/pbg-study intervention-add`, `/pbg-study intervention-update`, `/pbg-study intervention-delete`.
 
+### Study dependencies (DAG)
+
+Studies can declare ordering via the optional `parent_studies:` field. Each entry is either a bare slug (legacy, normalized to `{study, condition: tests-passed}`) or an object `{study: <slug>, condition: tests-passed | ran | complete}`. Conditions:
+
+- `tests-passed` — parent's `tests.last_results.passed > 0` AND `failed == 0`.
+- `ran` — parent's `status` is one of `{ran, complete}`.
+- `complete` — parent's `status == complete`.
+
+**API**: `GET /api/investigations` returns each study with computed `parent_studies` (normalized to object form), `blocked: bool`, and `blocked_by: [{study, condition, missing-diagnostic}]`. A parent that doesn't resolve to a known study slug surfaces as `parent-not-found` in `blocked_by`.
+
+**Dashboard rendering**: the Studies tab's `Dependencies` sort (default) topologically orders studies — roots first, alphabetical within depth. Each card shows:
+
+- `Depends on: <links> (<condition>) · ...` (blue, clickable).
+- `Blocks: <links> · ...` (grey, clickable).
+- `🔒 blocked` status pill with the `blocked_by` diagnostics in tooltip, when `blocked: true`.
+
 ### Run
 
 A completed execution of a baseline composite or variant. The dashboard records run metadata; the actual simulation trace lives in `runs.db` (per study).

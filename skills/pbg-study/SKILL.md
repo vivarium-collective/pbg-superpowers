@@ -45,6 +45,29 @@ For studies that need to parametrize across all runs, set
 `study.yaml.tests.data_source: all_runs` and use the `runs` fixture
 (parametrized) instead.
 
+## Cross-study dependencies (parent_studies)
+
+A study can declare ordering against other studies in the workspace via
+the optional `parent_studies:` field. Each entry is either a bare slug
+or an object `{study, condition}` where `condition` is one of
+`tests-passed` | `ran` | `complete` (default `tests-passed` when omitted).
+
+```yaml
+# studies/dnaa-02-atp-hydrolysis/study.yaml
+parent_studies:
+  - dnaa-01-expression-dynamics                       # legacy: tests-passed
+  - {study: dnaa-03-box-binding, condition: ran}      # object: parent must have ≥1 run
+```
+
+The dashboard's `GET /api/investigations` resolves these to per-study
+`blocked` + `blocked_by` (parent + condition + missing-diagnostic), and
+the Studies tab's `Dependencies` sort (default) topologically orders
+the cards. Cards show `Depends on:` / `Blocks:` link chips and a
+`🔒 blocked` pill with diagnostics in the tooltip when blocked.
+
+A parent slug that doesn't resolve to a real study shows up as
+`parent-not-found` in `blocked_by`, so dead references are visible.
+
 ## Sub-commands
 
 ### Overview (set objective + conclusion)
