@@ -1,21 +1,27 @@
-"""Visualization Step base class — single contract: update(state) → {'html': str}.
+"""Visualization Step base class — accumulate during the run, render at the end.
 
 Visualization is a process_bigraph.Step. Subclasses declare typed input ports
-via ``inputs()`` and produce HTML via ``update(state)``. The bigraph runtime
-type-checks the wiring when the Visualization is placed inside a Composite.
+via ``inputs()`` and produce HTML by implementing two hooks:
 
-Two use modes both call the same ``update`` method:
+- ``accumulate(state)``: called each tick (or every Nth tick in 'sample' mode)
+  with the current per-step state. Subclasses mutate their own buffers here.
+- ``render() -> str``: builds the final HTML from the accumulated buffers.
 
-1. **Streaming** — wired into a user's simulation Composite. ``update(state)``
-   is called once per step with a per-step state dict; the Visualization
-   accumulates internally and produces a fresh HTML each step.
+The baseclass ``update(state)`` orchestrates these based on the
+``render_mode`` config:
 
-2. **Post-hoc dispatch** — used by the Investigations dashboard. The
-   orchestrator builds a small Composite per visualization with an input
-   store pre-populated from the SQLiteEmitter's recorded trajectory, the
-   Visualization Step wired to that store, and an output store of type
-   ``'string'``. ``composite.run(1)`` fires ``update(state)`` once; the HTML
-   is written to ``investigations/<name>/viz/<viz>.html``.
+- ``'end'`` (default): accumulate each tick, return ``{'html': ''}`` from
+  every ``update()`` call. The dashboard / test harness calls
+  :func:`render_results` after the run to materialize the HTML once.
+- ``'stream'``: accumulate AND render every tick. Use when the runtime is
+  short (dashboard's Composite Explorer Run tab) and per-tick HTML is wanted.
+- ``'sample'``: accumulate only every ``sample_every`` ticks, defer rendering
+  to end-of-run (same as ``'end'`` but cheaper accumulation).
+
+Subclasses that need the old per-tick streaming contract can still override
+``update(state)`` directly — the baseclass detects this and skips the
+orchestrator. This keeps every existing Visualization subclass working
+unchanged.
 
 Discovery: Visualization extends Step extends Edge, so subclasses are
 auto-discovered via ``bigraph_schema.package.discover`` and registered in
@@ -24,7 +30,7 @@ auto-discovered via ``bigraph_schema.package.discover`` and registered in
 This module also exposes :func:`render_results`, the visualization analogue
 of ``process_bigraph.emitter.gather_emitter_results``: it walks a Composite's
 state for Visualization instances and returns a path-keyed dict of their
-rendered HTML.
+rendered HTML, calling ``render()`` once per viz.
 """
 from __future__ import annotations
 from typing import Any
@@ -35,13 +41,21 @@ from process_bigraph import Step
 class Visualization(Step):
     """Base class for renderable Visualization Steps.
 
-    Subclasses MUST implement ``update(state) -> {'html': str}`` and SHOULD
-    override ``inputs()`` to declare typed input ports using the bigraph-
-    schema type system (e.g., ``{'level': 'list[float]'}``).
+    New-style contract:
+      - override ``accumulate(state)`` to buffer per-tick state
+      - override ``render() -> str`` to build the final HTML
+      - leave ``update(state)`` to the baseclass orchestrator
+
+    Legacy contract (still supported):
+      - override ``update(state) -> {'html': str}`` directly; the orchestrator
+        steps aside.
     """
 
     config_schema = {
         'title': {'_type': 'string', '_default': ''},
+        # New-style controls. Ignored when a subclass overrides update().
+        'render_mode':  {'_type': 'string',  '_default': 'end'},
+        'sample_every': {'_type': 'integer', '_default': 1},
     }
 
     def inputs(self) -> dict[str, Any]:
@@ -54,12 +68,44 @@ class Visualization(Step):
         """All visualizations expose a single ``html`` string port."""
         return {'html': 'string'}
 
-    def update(self, state: dict) -> dict:
-        """Consume the input state and return ``{'html': '<rendered>'}``."""
+    def accumulate(self, state: dict) -> None:
+        """New-style hook: buffer per-tick state into ``self`` for later render.
+
+        Default implementation snapshots the latest state on ``self._last_state``,
+        which is enough for stateless renderers that only need the most recent
+        frame. Override for genuine history accumulation.
+        """
+        self._last_state = state
+
+    def render(self) -> str:
+        """New-style hook: produce the final HTML from accumulated buffers.
+
+        Subclasses MUST implement this (or override ``update(state)`` directly
+        for the legacy streaming contract).
+        """
         raise NotImplementedError(
-            f'{type(self).__name__} must implement update(state) -> '
-            f"{{'html': str}}."
+            f'{type(self).__name__}: implement render() (and optionally '
+            f'accumulate(state)), or override update(state) directly.'
         )
+
+    def update(self, state: dict) -> dict:
+        """Default orchestrator. Subclasses MAY override directly (legacy).
+
+        New-style subclasses leave this alone; the baseclass calls
+        ``accumulate(state)`` per tick and only emits HTML in
+        ``render_mode='stream'``. End-of-run rendering happens via
+        :func:`render_results`.
+        """
+        cfg = getattr(self, 'config', None) or {}
+        sample_every = max(1, int(cfg.get('sample_every', 1) or 1))
+        tick = getattr(self, '_tick', -1) + 1
+        self._tick = tick
+        if tick % sample_every == 0:
+            self.accumulate(state)
+        mode = cfg.get('render_mode', 'end') or 'end'
+        if mode == 'stream':
+            return {'html': self.render()}
+        return {'html': ''}
 
     @classmethod
     def is_visualization(cls) -> bool:
@@ -67,11 +113,25 @@ class Visualization(Step):
         return True
 
 
+def _is_new_style(instance) -> bool:
+    """True iff the subclass relies on the baseclass orchestrator.
+
+    A subclass is "new-style" when it does NOT override ``update`` itself —
+    i.e. the orchestrator owns the per-tick path and ``render()`` is the
+    single source of HTML.
+    """
+    return type(instance).update is Visualization.update
+
+
 def as_visualization(inputs, name=None, demo=None, aliases=None):
     """Decorator: convert an ``update_*`` pure function into a Visualization subclass.
 
     The function must be named ``update_<viz_name>`` and accept
     ``state: dict`` -> ``{'html': str}``.
+
+    Functions decorated this way use the LEGACY contract — every call to
+    ``update(state)`` renders. This is appropriate for stateless renderers
+    that take a full-trajectory state dict in dashboard post-hoc mode.
 
     Args:
         inputs:  typed input port map (same shape as Visualization.inputs()).
@@ -127,14 +187,14 @@ def render_results(composite, results=None):
 
     Two modes:
 
-    - ``results=None`` — return each viz's most recently-produced output
-      (whatever ``update(state)`` last wrote to its ``html`` port during the
-      run). Cheap; no re-execution.
+    - ``results=None`` — end-of-run rendering. For new-style vizes (subclass
+      did not override ``update``), call ``instance.render()`` once per viz.
+      For legacy vizes, fall back to reading the last value the runtime wrote
+      to the html output port.
 
-    - ``results=<dict>`` — replay mode. For each viz, call
-      ``instance.update(results)`` directly with the passed-in data,
-      bypassing the bigraph wiring. Useful for re-rendering against a saved
-      SQLiteEmitter dump.
+    - ``results=<dict>`` — replay mode. For new-style vizes, accumulate the
+      provided state then render. For legacy vizes, call ``instance.update``
+      directly. Useful for re-rendering against a saved SQLiteEmitter dump.
     """
     from process_bigraph.composite import find_instance_paths
 
@@ -150,17 +210,25 @@ def render_results(composite, results=None):
         instance = node.get('instance') if isinstance(node, dict) else None
         if instance is None:
             continue
-        if results is not None:
-            # Replay mode — call update directly. The function is expected
-            # to return {'html': str}.
-            try:
-                rendered = instance.update(results) or {}
-            except Exception as e:  # noqa: BLE001
-                rendered = {'html': f'<pre style="color:#c00">render failed: {e}</pre>'}
-        else:
-            # Read the last output value the runtime stored on the html port.
-            # bigraph stores outputs as the same dict the update() returned.
-            rendered = {'html': _read_last_html(composite, path) or ''}
+        new_style = _is_new_style(instance)
+        try:
+            if results is not None:
+                # Replay mode.
+                if new_style:
+                    instance.accumulate(results)
+                    html = instance.render()
+                else:
+                    rendered = instance.update(results) or {}
+                    html = rendered.get('html', '') if isinstance(rendered, dict) else ''
+            else:
+                # End-of-run.
+                if new_style:
+                    html = instance.render()
+                else:
+                    html = _read_last_html(composite, path) or ''
+            rendered = {'html': html}
+        except Exception as e:  # noqa: BLE001
+            rendered = {'html': f'<pre style="color:#c00">render failed: {e}</pre>'}
         out[path] = rendered
     return out
 
@@ -190,7 +258,6 @@ def _read_last_html(composite, path_tuple):
     html_target = outputs.get('html')
     if html_target is None:
         return None
-    # html_target is a path (list of strings) into the state tree.
     if isinstance(html_target, (list, tuple)):
         value = _get_path(composite.state, tuple(html_target))
     else:
