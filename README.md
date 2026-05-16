@@ -1,5 +1,7 @@
 # pbg-superpowers
 
+> **Canonical terminology** — see [`docs/concepts/process-bigraph-glossary.md`](docs/concepts/process-bigraph-glossary.md), anchored on Agmon & Spangler's supplement.
+
 A Claude Code plugin for building **process-bigraph research projects**. It wraps simulators as composable process-bigraph units, composes them into larger models, and organizes the work into research workspaces with an interactive dashboard and HTML reports.
 
 Use it to go from "I have a simulator" to "I have a reviewable, reproducible model project" — without writing the registry, packaging, and report boilerplate by hand.
