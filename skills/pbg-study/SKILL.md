@@ -1,16 +1,16 @@
 ---
 name: pbg-study
-description: Manage Studies in the dashboard — full CRUD for baseline composites, variants, interventions, and runs. Includes fill-overview to draft question/hypothesis/objective/description from plan and expert PDFs. Wraps the v3 /api/study-* endpoints.
+description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new|fill-overview|set-objective|set-conclusion|baseline-add|baseline-remove|run-baseline|variant-add|variant-set-params|variant-delete|run-variant|intervention-add|intervention-update|intervention-delete|open [args]
+argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|run-baseline|run-variant|set-conclusion|open [args]
 ---
 
 # pbg-study
 
-The end-to-end interface for **Studies** in the vivarium-dashboard. A Study is a self-contained research unit holding one-or-more baseline composites, variants (parameter perturbations), interventions (text-described conditions), runs, and visualizations.
+The end-to-end interface for **Studies** in the vivarium-dashboard, organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide; see [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md#study-lifecycle)).
 
-See [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md) for the canonical data model.
+A Study is a self-contained research unit holding one-or-more baseline composites, variants (parameter perturbations), interventions (text-described conditions), runs, and visualizations. The **Build** phase between Design and Simulate doesn't have pbg-study subcommands directly — it's handled by `/pbg-wrapper`, `/pbg-expert`, `/pbg-composer`, or by hand-edited code in `pbg_<workspace>/processes/`.
 
 ## Common prelude
 
@@ -74,7 +74,7 @@ Studies that share a research arc can be grouped into an **Investigation** (a na
 
 ## Sub-commands
 
-### Overview (set objective + conclusion)
+### Design subcommands
 
 #### `new <composite-id>`
 
@@ -87,24 +87,6 @@ POST `/api/study-new`:
 ```
 
 Returns `{name, spec_path}`. Print the new study's name and offer to open it via `/pbg-study open <name>`.
-
-#### `set-objective <study-name> '<text>'`
-
-Replace the Study's objective. POST `/api/study-set-objective`:
-
-```json
-{"study": "<study-name>", "text": "<text>"}
-```
-
-#### `set-conclusion <study-name> '<markdown>'`
-
-Replace the Study's conclusion. POST `/api/study-set-conclusion`:
-
-```json
-{"study": "<study-name>", "text": "<markdown>"}
-```
-
-The markdown is canonically structured under H2 headers: `## Claims`, `## Evidence`, `## Limitations`, `## Next steps`.
 
 #### `fill-overview <slug> [--from-plan <path>] [--from-expert <path>...] [--fields <comma-list>] [--dry-run]`
 
@@ -167,7 +149,13 @@ Draft the `question`, `hypothesis`, `objective`, and/or `description` fields of 
 - If a field already has user-authored content that is substantively different from the draft, present both side-by-side and let the user decide before overwriting.
 - `/api/study-set-overview` is the canonical endpoint. The legacy alias `/api/investigation-set-overview` exists for backwards compatibility but should not be used in new code.
 
-### Baseline composites
+#### `set-objective <study-name> '<text>'`
+
+Replace the Study's objective. POST `/api/study-set-objective`:
+
+```json
+{"study": "<study-name>", "text": "<text>"}
+```
 
 #### `baseline-add <study-name> --name <n> --composite <id> [--params '<json>']`
 
@@ -193,18 +181,6 @@ Remove a baseline composite by name. POST `/api/study-baseline-remove`:
 ```
 
 Refuses with 409 if any variant has `base_composite` pointing to the entry (error body includes `dependents: [...]` listing the blocking variants). Refuses with 400 if removal would leave the baseline empty.
-
-#### `run-baseline <study-name> [--composite <name>] [--steps N]`
-
-Run a baseline composite. POST `/api/study-run-baseline`:
-
-```json
-{"study": "<study-name>", "composite": "<baseline-entry-name>", "steps": 5}
-```
-
-`composite` is the entry name in `baseline[]`. If omitted, defaults to `baseline[0]`.
-
-### Variants
 
 #### `variant-add <study-name> --name <n> --base-composite <baseline-name> [--params '<json>']`
 
@@ -237,19 +213,9 @@ Remove a variant. POST `/api/study-variant-delete`:
 {"study": "<study-name>", "variant": "<n>"}
 ```
 
-#### `run-variant <study-name> --variant <n> [--steps N]`
-
-Run a variant. The server resolves the variant's `base_composite` against the Study's baseline list and layers `parameter_overrides` on top. POST `/api/study-run-variant`:
-
-```json
-{"study": "<study-name>", "variant": "<n>", "steps": 5}
-```
-
-### Interventions
+#### `intervention-add <study-name> --name <n> [--description '<text>']`
 
 Interventions are text-described experimental conditions. Currently text-only: no data link to variants or runs (deferred).
-
-#### `intervention-add <study-name> --name <n> [--description '<text>']`
 
 POST `/api/study-intervention-add`:
 
@@ -273,7 +239,46 @@ POST `/api/study-intervention-delete`:
 {"study": "<study-name>", "name": "<n>"}
 ```
 
-### Open in browser
+### Simulate subcommands
+
+#### `run-baseline <study-name> [--composite <name>] [--steps N]`
+
+Run a baseline composite. POST `/api/study-run-baseline`:
+
+```json
+{"study": "<study-name>", "composite": "<baseline-entry-name>", "steps": 5}
+```
+
+`composite` is the entry name in `baseline[]`. If omitted, defaults to `baseline[0]`.
+
+#### `run-variant <study-name> --variant <n> [--steps N]`
+
+Run a variant. The server resolves the variant's `base_composite` against the Study's baseline list and layers `parameter_overrides` on top. POST `/api/study-run-variant`:
+
+```json
+{"study": "<study-name>", "variant": "<n>", "steps": 5}
+```
+
+### Evaluate subcommands
+
+No `pbg-study` subcommands run here directly. Evaluation is driven by:
+
+- `POST /api/study-tests-run {study}` — run the study's pytest suite (Tests tab in the dashboard); results land in `study.yaml.tests.last_results`.
+- `/pbg-viz` — add or render visualizations (Visualizations tab).
+
+### Decide subcommands
+
+#### `set-conclusion <study-name> '<markdown>'`
+
+Replace the Study's conclusion. POST `/api/study-set-conclusion`:
+
+```json
+{"study": "<study-name>", "text": "<markdown>"}
+```
+
+The markdown is canonically structured under H2 headers: `## Claims`, `## Evidence`, `## Limitations`, `## Next steps`.
+
+### Utility
 
 #### `open <study-name>`
 

@@ -41,6 +41,22 @@ A self-contained research unit: question + baseline composite(s) + variants + in
 
 > "Study" is the canonical per-experiment term. "Investigation" now refers specifically to the higher-level collection container (`investigations/<slug>/investigation.yaml`). The v2 legacy use of "investigation" as a synonym for "study" is retired in the UI; backend aliases (`investigation:` body key, `/api/investigation-*`) remain for backwards compatibility but should not be used in new code.
 
+### Study lifecycle (Design → Build → Simulate → Evaluate → Decide)
+
+Studies move through five phases. Each phase has a distinct deliverable, distinct tools, and distinct evaluation criteria. The dashboard's `status` field captures the runtime sub-state within a phase (`planned`, `running`, `ran`, `complete`, `failed`, `invalid`); the phase itself is a higher-level coordinate that a Study can also declare via the optional `lifecycle_phase:` field.
+
+| Phase | Produces | Skills / tools |
+|---|---|---|
+| **Design** | The spec: question, hypothesis, objective, baseline(s), variants, interventions, expected_behavior, references | `/pbg-study new`, `/pbg-study fill-overview`, `/pbg-study set-objective`, baseline/variant/intervention `*-add` subcommands, `/pbg-investigation new`, `/pbg-investigation scaffold-from-plan` |
+| **Build** | The executable code: Process classes, listeners, composites that make the spec runnable against the workspace's simulator | `/pbg-wrapper`, `/pbg-expert`, `/pbg-composer`, plus manual code in `pbg_<workspace>/processes/`. Gap-listed listeners + sim_data calibration also happen here. |
+| **Simulate** | The runs: `runs.db` populated with trajectories | `/pbg-study run-baseline`, `/pbg-study run-variant` |
+| **Evaluate** | The verdict: behavioral test results, rendered visualizations, observations against `expected_behavior` | `POST /api/study-tests-run` (Tests tab), `/pbg-viz` (Visualizations tab) |
+| **Decide** | The conclusion: what we learned + next steps | `/pbg-study set-conclusion` |
+
+The phases are sequential at a coarse level but **iterative in practice**: Evaluate often surfaces a Build issue → return to Build → Simulate again → re-Evaluate. The lifecycle_phase reflects the study's *current* phase, not its history.
+
+Investigations aggregate over their constituent studies: an Investigation card surfaces the slowest-phase member (e.g., one study still in Design blocks the Investigation from leaving Design overall).
+
 ### Baseline
 
 A study's set of runnable composites — **one or more**. Each entry is a runnable composite document with optional parameter defaults.
