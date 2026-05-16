@@ -20,9 +20,9 @@ The dashboard exposes five tabs:
 
 ## Subcommands
 
-- **`/pbg-server start`** — runs `<plugin>/server/start-server.sh <workspace>` (passes the workspace root). Writes `.pbg/server/server-info` (port, URL, content/state dirs) and `.pbg/server/server.pid`. Prints the URL.
-- **`/pbg-server stop`** — reads `.pbg/server/server.pid`, sends SIGTERM, removes both `server-info` and `server.pid` once the process exits.
-- **`/pbg-server status`** — prints `.pbg/server/server-info` if present (and the server is alive); otherwise reports "not running".
+- **`/pbg-server start`** — runs `vivarium-dashboard serve --workspace <workspace>` (the dashboard CLI from the `vivarium-dashboard` package). The dashboard writes `.pbg/server/server-info` (port, URL, content/state dirs) and `.pbg/server/server.pid` on boot, plus a global running-registry entry at `~/.pbg/servers/<name>.json`. Prints the URL.
+- **`/pbg-server stop`** — reads `.pbg/server/server.pid`, sends SIGTERM. The dashboard's exit handler removes `server-info`, `server.pid`, and the global registry entry; the skill verifies the PID is gone before returning.
+- **`/pbg-server status`** — prints `.pbg/server/server-info` if present (and the server is alive); otherwise reports "not running". Also reports the global registry entry under `~/.pbg/servers/` if present.
 
 ## What "alive" means
 
