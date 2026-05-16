@@ -1,6 +1,6 @@
 # pbg-superpowers
 
-A Claude Code plugin for building **multiscale models in the Process Bigraph framework**. Ships 17 `/pbg-*` skills that scaffold the mechanical parts of compositional modeling — wrapping a simulator as a typed Process, composing Processes into a Composite, organizing the work as a reproducible workspace, and managing studies + runs + visualizations through a local dashboard.
+A Claude Code plugin for building **multiscale models in the Process Bigraph framework**. Ships 11 `/pbg-*` skills that scaffold the mechanical parts of compositional modeling — wrapping a simulator as a typed Process, composing Processes into a Composite, organizing the work as a reproducible workspace, and managing studies + runs + visualizations through a local dashboard.
 
 For **computational biologists** who want their models to be reusable, recombinable, and runnable by others — without writing the registry, packaging, schema, and report boilerplate by hand. Framework background: [Agmon & Spangler (2026)](docs/references/papers/agmon-spangler-2026-process-bigraphs-main.pdf).
 
@@ -63,7 +63,7 @@ Verify with `/help` — the `/pbg-*` skills should be listed.
 
         /pbg-server start
 
-3. Start authoring in natural language. Ask Claude to wrap a simulator (`/pbg-wrapper <tool>`), compose a model (`/pbg-composer`), or design a study (`/pbg-study new`).
+3. Start authoring in natural language. Ask Claude to wrap a simulator (`/pbg-expert <tool>` for a sibling package, or `/pbg-expert --lightweight <tool>` in-workspace), compose a model (`/pbg-expert <name> <tools…>`), or design a study (`/pbg-study new`).
 
 **What to expect**
 
@@ -80,7 +80,7 @@ Full skill catalog: [`docs/skills.md`](docs/skills.md).
 
 ## Skills
 
-17 skills, grouped by purpose (wrap & compose · workspace lifecycle · catalog · run & study). See [`docs/skills.md`](docs/skills.md) for the full catalog.
+11 skills, grouped by purpose (wrap & compose · workspace lifecycle · catalog · run & study). See [`docs/skills.md`](docs/skills.md) for the full catalog.
 
 ## Companion repos
 

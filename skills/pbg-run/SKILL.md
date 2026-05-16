@@ -15,7 +15,7 @@ the emitted observables. Wraps `/api/composite-test-run`.
 
 - `<composite-id>` (required) — the dotted reference
   (e.g. `spatio_flux.composites.metabolism.monod_kinetics`). Use
-  `/pbg-list` to find IDs.
+  `/pbg-catalog list` to find IDs.
 - `--steps N` (optional) — number of simulation steps. Default `5`.
 - `--emit p1,p2,...` (optional) — store paths to emit. Paths use `/` as
   separator (e.g. `stores/fields`). Cascades to descendants. Defaults to
@@ -40,7 +40,7 @@ the emitted observables. Wraps `/api/composite-test-run`.
    - `viz_html` paths bundled with the run (if any)
 5. Suggest follow-ups:
    - `/pbg-explore <composite-id>` to inspect in the dashboard
-   - `/pbg-list` if the composite ID was wrong
+   - `/pbg-catalog list` if the composite ID was wrong
 
 ## Implementation outline
 

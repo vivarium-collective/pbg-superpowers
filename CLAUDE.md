@@ -6,7 +6,7 @@ This is the Claude Code plugin that drives the [vivarium-dashboard](https://gith
 
 1. **Concept map: [`docs/concepts/vivarium-dashboard-model.md`](docs/concepts/vivarium-dashboard-model.md)** — canonical vocabulary (Workspace · Study · Baseline · Variant · Intervention · Run · Visualization), the 8-section canonical `study.yaml` (Pass 7), Decide-phase follow-up proposals (Pass 8), on-disk shapes, the dashboard API surface, and which skill controls which concept. **Read this before invoking any Study/Baseline/Variant skill.**
 2. **Conventions: [`docs/conventions/`](docs/conventions/)** — authoritative specs for composites, composite generators, discovery, distribution, and visualizations.
-3. **Skills catalog: [`docs/skills.md`](docs/skills.md)** — all 17 user-invocable `/pbg-*` skills with one-line descriptions.
+3. **Skills catalog: [`docs/skills.md`](docs/skills.md)** — all 11 user-invocable `/pbg-*` skills with one-line descriptions, plus the v0.8→v0.9 migration table.
 4. **README: [`README.md`](README.md)** — install + quick start for humans.
 
 ## Working preconditions
@@ -36,7 +36,7 @@ If either is missing, the skill should fail with a clear actionable error pointi
 
 | Task | Command |
 |---|---|
-| Survey the workspace | `/pbg-list` |
+| Survey the workspace | `/pbg-catalog` (or `/pbg-catalog list`) |
 | Open dashboard | `/pbg-server start` (then visit the URL) |
 | Create a study | `/pbg-study new <composite-id>` |
 | Add a baseline composite to a study | `/pbg-study baseline-add <study> --name <n> --composite <id>` |
@@ -59,7 +59,7 @@ pbg-superpowers/
 ├── .claude-plugin/        # plugin.json + marketplace.json (manifest format)
 ├── pbg_superpowers/       # Python package (schemas, visualizations, helpers)
 ├── server/                # the report-mirror server (NOT the dashboard — see pbg-server skill)
-├── skills/                # 17 user-invocable `/pbg-*` skills + `/pbg-init` (machine setup)
+├── skills/                # 11 user-invocable `/pbg-*` skills + `/pbg-init` (machine setup) + `/pbg-suggest` (internal dashboard callback)
 ├── templates/             # Jinja templates for scaffolding workspaces + models
 ├── tests/                 # pytest suite for the Python package
 ├── docs/

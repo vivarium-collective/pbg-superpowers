@@ -10,7 +10,7 @@ argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|vari
 
 The end-to-end interface for **Studies** in the vivarium-dashboard, organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide; see [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md#study-lifecycle)).
 
-A Study is a self-contained research unit holding one-or-more baseline composites, variants (parameter perturbations), interventions (text-described conditions), runs, and visualizations. The **Build** phase between Design and Simulate doesn't have pbg-study subcommands directly — it's handled by `/pbg-wrapper`, `/pbg-expert`, `/pbg-composer`, or by hand-edited code in `pbg_<workspace>/processes/`.
+A Study is a self-contained research unit holding one-or-more baseline composites, variants (parameter perturbations), interventions (text-described conditions), runs, and visualizations. The **Build** phase between Design and Simulate doesn't have pbg-study subcommands directly — it's handled by `/pbg-expert` (heavy mode → sibling repo) or `/pbg-expert --lightweight` (in-workspace, single-tool or composite form), or by hand-edited code in `pbg_<workspace>/processes/`.
 
 ## Common prelude
 

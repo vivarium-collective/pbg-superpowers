@@ -1,6 +1,6 @@
 ---
 name: pbg-init
-description: Install pbg-* skills into ~/.claude/skills/ so Claude can invoke /pbg-list, /pbg-run, /pbg-study, and the other dashboard-driving skills. One-shot setup per machine.
+description: Install pbg-* skills into ~/.claude/skills/ so Claude can invoke /pbg-catalog, /pbg-run, /pbg-study, and the other dashboard-driving skills. One-shot setup per machine.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
 argument-hint: (no args)
@@ -77,7 +77,7 @@ ls -1 "$SKILLS_DEST" | grep '^pbg-'
 After running, in any Claude conversation:
 
 ```text
-/pbg-list
+/pbg-catalog
 ```
 
 If the slash command is recognized (not "no such skill"), installation

@@ -1,16 +1,15 @@
 # Skills catalog
 
-17 skills grouped by purpose. Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects).
+11 user-facing skills (plus `/pbg-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects). v0.9 consolidated the 17-skill v0.8 catalog — see the [migration table](#migration-from-v08) below.
 
 ## Wrap & compose
 
 | Skill | What it does |
 |---|---|
-| [`/pbg-expert <tool>`](../skills/pbg-expert/SKILL.md) | Wrap a simulator as a Process — full sibling `pbg-<tool>/` repo with Process class, tests, README, HTML report, and an open PR. The canonical wrap. |
-| [`/pbg-expert <name> <tools…>`](../skills/pbg-expert/SKILL.md) | Compose two or more wrapped simulators into a sibling `pbg-<name>-composite/` repo with HTML report and PR. |
-| [`/pbg-wrapper <tool>`](../skills/pbg-wrapper/SKILL.md) | Lightweight in-workspace wrap: writes `pbg_<slug>/processes/<tool>.py` + a test stub. No sibling repo, no report. |
-| [`/pbg-composer <name> <tools…>`](../skills/pbg-composer/SKILL.md) | Lightweight in-workspace composite: writes `pbg_<slug>/composites/<name>.py` + a test stub. |
-| [`/pbg-suggest <request-id>`](../skills/pbg-suggest/SKILL.md) | Draft a repo name, PR title, or PR body in response to a dashboard Suggest request. |
+| [`/pbg-expert <tool>`](../skills/pbg-expert/SKILL.md) | Wrap a simulator as a Process — full sibling `pbg-<tool>/` repo with Process class, tests, README, HTML report, and a local commit. The canonical wrap. |
+| [`/pbg-expert <name> <tools…>`](../skills/pbg-expert/SKILL.md) | Compose two or more wrapped simulators into a sibling `pbg-<name>-composite/` repo with HTML report and a local commit. |
+| [`/pbg-expert --lightweight <tool>`](../skills/pbg-expert/SKILL.md#lightweight-mode) | Lightweight in-workspace wrap: writes `pbg_<slug>/processes/<tool>.py` + a test stub. No sibling repo, no report. (Alias: `--in-workspace`. Replaces v0.8 `/pbg-wrapper`.) |
+| [`/pbg-expert --lightweight <name> <tools…>`](../skills/pbg-expert/SKILL.md#lightweight-mode) | Lightweight in-workspace composite: writes `pbg_<slug>/composites/<name>.py` + a test stub. (Replaces v0.8 `/pbg-composer`.) |
 
 ## Workspace lifecycle & dashboard
 
@@ -18,16 +17,19 @@
 |---|---|
 | [`/pbg-workspace <name>`](../skills/pbg-workspace/SKILL.md) | Scaffold a fresh workspace — three modes: upstream-branch (clone an upstream model repo and create a workspace branch), standalone (clone `pbg-template`), or in-place (promote an existing checkout). |
 | [`/pbg-server [start\|stop\|status]`](../skills/pbg-server/SKILL.md) | Start/stop the dashboard server in the current workspace. Required precondition for the Studies skills. |
-| [`/pbg-status`](../skills/pbg-status/SKILL.md) | Print workspace health: is this a workspace? server up? recent activity? |
+| [`/pbg-status`](../skills/pbg-status/SKILL.md) | Print workspace health: is this a workspace? server up? recent activity? Delegates the server-liveness section to `/pbg-server status`. |
 
 ## Catalog & registry
 
 | Skill | What it does |
 |---|---|
-| [`/pbg-install <pkg>`](../skills/pbg-install/SKILL.md) | Add a curated `pbg-*` package, install it, and refresh the workspace catalog. |
-| [`/pbg-uninstall <pkg>`](../skills/pbg-uninstall/SKILL.md) | Remove an installed `pbg-*` package. |
-| [`/pbg-list`](../skills/pbg-list/SKILL.md) | Browse the workspace catalog — composites, studies, registry. |
-| [`/pbg-package <repo>`](../skills/pbg-package/SKILL.md) | Audit an external `pbg-*` repo for discovery- and packaging-convention compliance. |
+| [`/pbg-catalog [list]`](../skills/pbg-catalog/SKILL.md) | Browse the workspace catalog — composites, studies, registry. Default subcommand when no args. (Replaces v0.8 `/pbg-list`.) |
+| [`/pbg-catalog install <pkg>`](../skills/pbg-catalog/SKILL.md#install) | Add a curated `pbg-*` package, install it, refresh the workspace catalog. (Replaces v0.8 `/pbg-install`.) |
+| [`/pbg-catalog uninstall <pkg>`](../skills/pbg-catalog/SKILL.md#uninstall) | Remove an installed `pbg-*` package. (Replaces v0.8 `/pbg-uninstall`.) |
+
+Maintainer-only: to audit an external `pbg-*` repo for discovery- and
+packaging-convention compliance, run `python scripts/audit-pbg-repo.py <repo>`
+from a pbg-superpowers checkout. (Replaces the v0.8 `/pbg-package` skill.)
 
 ## Run, explore, study
 
@@ -42,4 +44,19 @@
 
 For the read/write surface each skill touches (which API endpoints, which on-disk files), see the [Skill ↔ concept map](concepts/vivarium-dashboard-model.md#skill--concept-map).
 
-> The plugin also ships `/pbg-init`, a one-shot machine-setup installer that symlinks the skills into `~/.claude/skills/`. Not part of the workflow surface above.
+> Also shipped: `/pbg-init`, a one-shot machine-setup installer that symlinks the skills into `~/.claude/skills/`. Not part of the workflow surface above. And `/pbg-suggest <id>`, an internal callback the dashboard's "Suggest" button asks the user to paste — kept registered so the callback works, but not part of the user-facing catalog.
+
+## Migration from v0.8
+
+The v0.8 catalog had 17 user-invocable skills. v0.9 cuts that to 11
+without losing any capability — repetitive trios are merged behind one
+front door, and prototyping flags fold into the canonical commands.
+
+| v0.8 skill | v0.9 equivalent |
+|---|---|
+| `/pbg-wrapper <tool>` | `/pbg-expert --lightweight <tool>` |
+| `/pbg-composer <name> <tools…>` | `/pbg-expert --lightweight <name> <tools…>` |
+| `/pbg-list` | `/pbg-catalog list` (or just `/pbg-catalog`) |
+| `/pbg-install <pkg>` | `/pbg-catalog install <pkg>` |
+| `/pbg-uninstall <pkg>` | `/pbg-catalog uninstall <pkg>` |
+| `/pbg-package <repo>` | `python scripts/audit-pbg-repo.py <repo>` (maintainer-only) |

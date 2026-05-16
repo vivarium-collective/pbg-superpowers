@@ -221,5 +221,5 @@ association in VS Code or PyCharm).
   function-based sibling for composites that need to compute initial state
   or introspect processes at build time.
 - [Process discovery convention](discovery.md) — how processes (code) are discovered
-- `/pbg-composer` skill — writes in-workspace composite Python files; v0.4.11 will
-  also emit `*.composite.yaml` alongside the Python
+- `/pbg-expert --lightweight <name> <tools…>` skill — writes in-workspace composite
+  Python files; v0.4.11 will also emit `*.composite.yaml` alongside the Python
