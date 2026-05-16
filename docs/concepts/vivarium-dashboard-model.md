@@ -15,6 +15,8 @@ Workspace
   │     ├── Interventions (list of text-described conditions, each {name, description})
   │     ├── Runs          (list of completed executions; per-baseline-entry or per-variant)
   │     └── Visualizations (list of named viz configs)
+  ├── Investigations (in investigations/<slug>/investigation.yaml)
+  │     └── Studies[]     (list of study slugs; DAG from each study's parent_studies)
   └── Visualization classes / registry (workspace-wide)
 ```
 
@@ -37,7 +39,7 @@ A self-contained research unit: question + baseline composite(s) + variants + in
 - **v3 shape:** `{schema_version: 3, name, objective, status, baseline: [...], variants: [...], interventions: [...], runs: [...], visualizations: [...], conclusion}`.
 - **Created by:** `/pbg-study new`. **Managed by:** `/pbg-study`. **Listed by:** `/pbg-list`.
 
-> "Study" is the canonical term. "Investigation" is the v2 name, retained only in on-disk legacy paths and accepted as a synonym in some API bodies (`investigation:` body key still works via `_study_name_from_body`).
+> "Study" is the canonical per-experiment term. "Investigation" now refers specifically to the higher-level collection container (`investigations/<slug>/investigation.yaml`). The v2 legacy use of "investigation" as a synonym for "study" is retired in the UI; backend aliases (`investigation:` body key, `/api/investigation-*`) remain for backwards compatibility but should not be used in new code.
 
 ### Baseline
 
@@ -65,6 +67,21 @@ A standalone, text-described experimental condition. Fully separate from variant
 - **Shape:** `{name, description}` — `name` is a short slug; `description` is freeform text.
 - **API:** `POST /api/study-intervention-add`, `POST /api/study-intervention-update`, `POST /api/study-intervention-delete`.
 - **Skill:** `/pbg-study intervention-add`, `/pbg-study intervention-update`, `/pbg-study intervention-delete`.
+
+### Investigation
+
+An Investigation is a **named collection of studies** with an explicit cross-study dependency DAG. Used to group studies that together answer a higher-level research question.
+
+- **On disk:** `<workspace>/investigations/<slug>/investigation.yaml`. Note the filename is `investigation.yaml`, NOT `spec.yaml` — the legacy v2 `investigations/<name>/spec.yaml` files are Studies (auto-migrated to v3) and are excluded by the new iset walker.
+- **Shape:** `{schema_version, name, title, status, question, hypothesis, description, studies[], expert_docs[], acceptance_criteria[]}`. `studies` is a list of study slugs (members); `acceptance_criteria` is a list of `{study, behavior}` pairs linking criteria to specific `expected_behavior[i].name` entries on member studies.
+- **API**:
+  - `GET /api/iset-list` — summaries (name, title, status, n_studies).
+  - `GET /api/iset/<name>` — full investigation + resolved studies (each carrying normalized `parent_studies` for DAG layout).
+  - No write endpoints exist yet; skills write YAML directly (atomic tmp-file + rename).
+- **Dashboard render**: Investigations tab cards → DAG canvas on click; rail sidebar groups studies under their investigation header; "Ungrouped" bucket for studies not in any investigation; topological order within each group.
+- **Skill**: `/pbg-investigation` for CRUD + scaffold-from-plan.
+
+> Note: the DAG topology is computed from each member study's `parent_studies:` field at render time. The `studies:` list on the investigation controls visibility/grouping only, not execution order.
 
 ### Study dependencies (DAG)
 
@@ -146,6 +163,7 @@ Skills that read dashboard state do so via these HTTP endpoints:
 | `/pbg-explore` | Composite | Dashboard view | Opens composite in dashboard. |
 | `/pbg-run` | Composite | Run record | Runs a composite directly (no Study). |
 | `/pbg-study` | Study | Study | **All Study CRUD + runs.** See subcommand table above. |
+| `/pbg-investigation` | Investigation | Investigation YAML | **All Investigation CRUD + scaffold-from-plan.** Writes YAML directly (no write endpoints yet). |
 | `/pbg-viz` | Visualization | Visualization | Adds a viz to a study. |
 | `/pbg-report` | Study | Report file | Renders study summary to markdown. |
 | `/pbg-workspace` | Workspace | Workspace state | Workspace-level commands. |

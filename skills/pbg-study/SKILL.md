@@ -68,6 +68,10 @@ the cards. Cards show `Depends on:` / `Blocks:` link chips and a
 A parent slug that doesn't resolve to a real study shows up as
 `parent-not-found` in `blocked_by`, so dead references are visible.
 
+## Grouping studies into Investigations
+
+Studies that share a research arc can be grouped into an **Investigation** (a named collection with its own question/hypothesis + acceptance criteria). Studies don't declare investigation membership themselves; the investigation lists them in its `studies:` field. Use `/pbg-investigation` for investigation CRUD and the `scaffold-from-plan` marquee command that auto-generates an investigation + all constituent studies from a plan PDF.
+
 ## Sub-commands
 
 ### Overview (set objective + conclusion)
