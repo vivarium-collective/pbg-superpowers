@@ -140,8 +140,6 @@ CI is provided for both repos: `.github/workflows/plugin-ci.yml` here, and `work
 - [`docs/concepts/`](docs/concepts/) — canonical data-model docs (start here when integrating with vivarium-dashboard).
 - [`docs/conventions/`](docs/conventions/) — authoritative spec conventions (composites, generators, discovery, distribution, visualizations).
 - [`docs/references/papers/`](docs/references/papers/) — the Process-Bigraph paper + supplement (formal semantics + framing).
-- [`docs/superpowers/`](docs/superpowers/) — historical plans + specs from the build-out.
-- [`docs/audits/`](docs/audits/) — dated snapshots (e.g. PyPI publication audits).
 
 ## License
 
