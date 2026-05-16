@@ -216,6 +216,51 @@ conclusion: null
 
 Report-generation code that mirrors the dashboard layout should emit headings in that order so authors can navigate report and dashboard interchangeably.
 
+### Decide-phase follow-up proposals
+
+The Decide phase often surfaces gaps the current study can't close. Those gaps belong as **first-class proposals** on the study itself, then graduate into new sibling studies. Two optional top-level fields make the loop explicit (see [`study.schema.json`](https://github.com/vivarium-collective/pbg-template/blob/main/template/.pbg/schemas/study.schema.json)):
+
+- `followup_proposals:` — list of proposed follow-up studies attached to *this* study.
+- `seeded_from:` — provenance stamp on a child study, set automatically when the child is created from a parent's proposal.
+
+**Proposal shape** (terse; per-key meanings mirror the schema):
+
+```yaml
+followup_proposals:
+  - id: <slug>                  # required, unique within parent study
+    title: <short string>       # required
+    motivation: |               # required: what gap motivates the followup
+      <text>
+    hypothesized_mechanism: |   # optional: missing biology/process to add
+      <text>
+    status: proposed            # proposed | accepted | rejected | seeded
+    seeded_study: <slug>        # set when status == seeded
+    seed:                       # optional; transferred verbatim at seed time
+      purpose:
+        question: <text>
+        mechanism: <text>
+        expected_outcome: <text>
+      key_assumptions: [<text>, ...]
+      model_change: <object or string>
+      simulation_set: []
+```
+
+**Seed flow** — `/pbg-study seed-from-followup <parent> <proposal-id>`:
+
+1. Reads `studies/<parent>/study.yaml` and locates `followup_proposals[id == <proposal-id>]` (must be `proposed` or `accepted`).
+2. Creates `studies/<new-slug>/study.yaml` with `schema_version: 3`, `phase: Design`, `purpose:` / `key_assumptions:` / `model_change:` / `simulation_set:` populated from `proposal.seed.*` (falling back to `hypothesized_mechanism` for `model_change:` if absent).
+3. Auto-adds `pipeline_gate.prerequisites: [<parent-slug>]` (extending any existing `proposal.seed.pipeline_gate`).
+4. Stamps `seeded_from: {study: <parent-slug>, proposal_id: <proposal-id>}` on the child.
+5. Flips the parent's proposal entry to `status: seeded` and records `seeded_study: <new-slug>`.
+
+**Provenance query.** Lineage from a parent study to all its seeded children is a plain grep:
+
+```bash
+git grep -n "study: <parent-slug>" -- 'studies/*/study.yaml' | grep seeded_from -B1
+```
+
+(or load each `study.yaml` and check `seeded_from.study`). This keeps the lineage discoverable without a separate index file.
+
 ### Baseline
 
 A study's set of runnable composites — **one or more**. Each entry is a runnable composite document with optional parameter defaults.
