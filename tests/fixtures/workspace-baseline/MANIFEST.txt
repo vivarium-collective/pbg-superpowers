@@ -27,6 +27,7 @@
 ./scripts/_migrate_v1_to_v2.py
 ./scripts/add-dataset.sh
 ./scripts/add-reference.sh
+./scripts/clone_investigation.py
 ./scripts/compare-runs.py
 ./scripts/lint-workspace.py
 ./scripts/render-dashboard.py
