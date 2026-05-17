@@ -1,0 +1,30 @@
+name: study-clean
+baseline:
+  - name: b1
+    composite: pkg.composites.x
+evaluation_status: evaluated
+simulation_status: ran
+implementation_status: complete
+gate_status: passed
+expert_review_status: approved
+conclusion_logic:
+  if_primary_tests_pass:
+    implementation_status: confirmed
+    biological_validation: "Model reproduces the expected DnaA steady state within tolerance."
+    pipeline_unblocks:
+      - downstream-study
+  if_primary_tests_fail:
+    diagnose:
+      - "Inspect listener output for DnaA copies."
+    block_downstream: "Halt downstream studies until DnaA reproduces expected steady state."
+behavior_tests:
+  - name: dnaa-steady
+    description: "Measure DnaA copy count at steady state and assert it lies within the literature-anchored 350-500 range over the second half of the run."
+  - name: autorepression-correlation
+    description: "Compute Pearson correlation between DnaA-ATP concentration and dnaA transcript count; assert the value is significantly negative."
+findings:
+  - id: F-01
+    statement: "v2ecoli reproduces the DnaA shortfall."
+    provenance:
+      run_ids: ["run-001", "run-002"]
+      model_commit_hash: "deadbeef"

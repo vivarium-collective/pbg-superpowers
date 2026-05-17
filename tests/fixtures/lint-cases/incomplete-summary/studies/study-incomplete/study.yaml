@@ -1,0 +1,8 @@
+name: study-incomplete
+baseline:
+  - name: b1
+    composite: pkg.composites.x
+evaluation_status: evaluated
+simulation_status: ran
+implementation_status: complete
+# conclusion_logic intentionally absent — should fire incomplete_summaries.
