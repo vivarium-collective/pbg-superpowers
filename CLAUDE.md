@@ -63,16 +63,14 @@ pbg-superpowers/
 ├── templates/             # Jinja templates for scaffolding workspaces + models
 ├── tests/                 # pytest suite for the Python package
 ├── docs/
-│   ├── audits/            # dated snapshots (e.g. PyPI audit)
 │   ├── concepts/          # canonical data-model docs (THIS ENTRY POINT)
 │   ├── conventions/       # authoritative spec conventions
-│   └── superpowers/       # historical plans + specs from the build-out
-└── scripts/               # ops scripts (audit-pbg-catalog, update-scaffold-snapshot)
+│   └── references/        # PDF references (papers)
+└── scripts/               # ops scripts (audit-pbg-repo, update-scaffold-snapshot)
 ```
 
 ## When in doubt
 
 - **What does this concept mean?** → `docs/concepts/vivarium-dashboard-model.md`.
 - **How is a composite/generator/etc. structured?** → `docs/conventions/`.
-- **How was this feature built?** → `docs/superpowers/plans/` (historical).
 - **What's the right endpoint to call?** → the concept map's API tables.

@@ -17,9 +17,6 @@ Exit code:
     0  no FAIL checks (WARN is OK)
     1  one or more FAIL checks
     2  could not locate or clone the target repo
-
-For the catalog-wide audit (every pbg-* repo in pbg-template's catalog), use
-`scripts/audit-pbg-catalog.py` instead.
 """
 from __future__ import annotations
 
