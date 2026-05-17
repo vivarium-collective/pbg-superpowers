@@ -3,7 +3,7 @@ name: pbg-study
 description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|run-baseline|run-variant|set-conclusion|findings|propose-followup|seed-from-followup|open [args]
+argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|run-baseline|run-variant|set-conclusion|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
 ---
 
 # pbg-study
@@ -338,7 +338,7 @@ Append one entry to `studies/<parent-slug>/study.yaml.followup_proposals[]` (cre
 6. **Atomic write.** Serialize the updated study.yaml to `studies/<parent-slug>/study.yaml.tmp`, then `mv` over the original. Preserve all other top-level keys verbatim.
 7. **Report.** Print one line: `Added proposal <id> to <parent-slug>.followup_proposals (now N entries).`
 
-#### `seed-from-followup <parent-slug> <proposal-id> [--new-slug <slug>] [--dry-run]`
+#### `seed-from-followup <parent-slug> <proposal-id> [--new-slug <slug>] [--from-finding <finding-id>] [--dry-run]`
 
 Lift a parent's `followup_proposals[id == <proposal-id>]` entry into a brand-new sibling study, stamped with `seeded_from:` and auto-linked back to the parent via `pipeline_gate.prerequisites`.
 
@@ -347,13 +347,21 @@ Lift a parent's `followup_proposals[id == <proposal-id>]` entry into a brand-new
 - `<parent-slug>` (required) — existing parent study.
 - `<proposal-id>` (required) — id of the proposal entry to seed from. Status must be `proposed` or `accepted`; abort on `seeded` (already seeded) or `rejected`.
 - `--new-slug <slug>` (optional) — slug for the new study. Default: the proposal's `id`. Abort if `studies/<new-slug>/` already exists.
+- `--from-finding <finding-id>` (optional, **Pass 10B**) — id of a finding (e.g. `F-03`) on the parent's `findings[]`. When passed, pre-populates the child's `purpose:` / `key_assumptions:` from that finding's `explanation` + `next_action` + `evidence.smoking_gun` (see heuristic below), stamps `seeded_from.finding: <id>` on the child, and records `linked_finding: <id>` on the parent's proposal entry so the lineage from finding → proposal → child study is queryable. Abort if the finding id isn't on the parent.
 - `--dry-run` (optional) — print both proposed diffs and stop.
 
 **Behavior (steps Claude follows):**
 
 1. **Resolve parent.** Read `studies/<parent-slug>/study.yaml`. Find `followup_proposals[id == <proposal-id>]`. Abort if missing or if `status not in {proposed, accepted}`.
 2. **Resolve new slug.** `new_slug = --new-slug or proposal.id`. Abort if `studies/<new_slug>/` exists.
-3. **Build child `study.yaml` dict** with this skeleton:
+3. **(Pass 10B) Resolve `--from-finding`, if passed.** Shell out to the helper:
+   ```bash
+   python3 -m pbg_superpowers.seed_from_followup \
+     studies/<parent-slug>/study.yaml <proposal-id> <finding-id> \
+     --new-slug <new_slug>
+   ```
+   This prints a YAML preview of (a) the child seed (`purpose` + `key_assumptions` + `seeded_from`) and (b) the updated parent-proposal entry. If the helper exits 2, the finding id is unknown — abort with the printed error. The helper never writes; the prose flow does.
+4. **Build child `study.yaml` dict** with this skeleton:
    ```yaml
    schema_version: 3
    name: <new_slug>
@@ -368,13 +376,22 @@ Lift a parent's `followup_proposals[id == <proposal-id>]` entry into a brand-new
    seeded_from:
      study: <parent-slug>
      proposal_id: <proposal-id>
+     finding: <finding-id>            # ONLY when --from-finding is passed
    ```
    The purpose-fallback question is `"<proposal.title> — <proposal.motivation>"` (single line, truncated tastefully) when `proposal.seed.purpose` is absent.
-4. **Build parent diff.** Flip the proposal entry: set `status: seeded` and `seeded_study: <new_slug>`.
-5. **Preview both diffs.** Show (a) the new `studies/<new_slug>/study.yaml` content, (b) the parent's `followup_proposals[<i>]` before/after.
-6. **Confirm.** `yes` → write both; `no` → abort. Skip step 7 if `--dry-run`.
-7. **Atomic writes (two).** Write the new child via tmp+rename (creating `studies/<new_slug>/` first). Write the parent via tmp+rename. If the parent write fails after the child write succeeded, `rm -rf studies/<new_slug>/` to avoid an orphaned child, then re-raise.
-8. **Report.** Print: `Seeded studies/<new_slug>/study.yaml from <parent-slug>.followup_proposals[<proposal-id>]. Parent proposal marked seeded.`
+
+   **Pass 10B finding-to-purpose merge** (when `--from-finding` is passed): merge the helper's `ChildSeed` over the skeleton above with **existing keys winning** — the propose-followup seed.purpose still has priority, the finding only fills empty slots. The mapping:
+   - `purpose.question` ← derived from the finding's `next_action` (e.g. "Calibrate X to match Y" → "How do we calibrate X to match Y?"). Falls back to "Investigate <statement>?" when `next_action` is absent.
+   - `purpose.mechanism` ← the finding's `explanation` verbatim (when set).
+   - `purpose.expected_outcome` ← the trailing clause of `next_action` if it contains target cues ("to match", "within", "in range", numeric thresholds); else empty.
+   - `key_assumptions[]` ← appended with the finding's `evidence.smoking_gun` string (when present and not already in the list).
+   - `seeded_from.finding` ← `<finding-id>`.
+
+5. **Build parent diff.** Flip the proposal entry: set `status: seeded` and `seeded_study: <new_slug>`. When `--from-finding` was passed AND the proposal doesn't already have a `linked_finding:` key, also set `linked_finding: <finding-id>`.
+6. **Preview both diffs.** Show (a) the new `studies/<new_slug>/study.yaml` content, (b) the parent's `followup_proposals[<i>]` before/after.
+7. **Confirm.** `yes` → write both; `no` → abort. Skip step 8 if `--dry-run`.
+8. **Atomic writes (two).** Write the new child via tmp+rename (creating `studies/<new_slug>/` first). Write the parent via tmp+rename. If the parent write fails after the child write succeeded, `rm -rf studies/<new_slug>/` to avoid an orphaned child, then re-raise.
+9. **Report.** Print: `Seeded studies/<new_slug>/study.yaml from <parent-slug>.followup_proposals[<proposal-id>]. Parent proposal marked seeded.` Append `Linked finding: <finding-id>.` when `--from-finding` was passed.
 
 **Notes:**
 
@@ -706,7 +723,7 @@ Usage:
   /pbg-study findings            <study-slug> [--auto] [--dry-run]
 
   /pbg-study propose-followup    <parent-slug> --id <id> --title '<t>' --motivation '<m>' [--mechanism '<hyp>'] [--seed-from-file <path>] [--dry-run]
-  /pbg-study seed-from-followup  <parent-slug> <proposal-id> [--new-slug <slug>] [--dry-run]
+  /pbg-study seed-from-followup  <parent-slug> <proposal-id> [--new-slug <slug>] [--from-finding <id>] [--dry-run]
 
   /pbg-study open <study-name>
 EOF
@@ -778,6 +795,10 @@ esac
 /pbg-study seed-from-followup dnaa-binding replisome-coupling
 # Override the child slug
 /pbg-study seed-from-followup dnaa-binding replisome-coupling --new-slug dnaa-03-replisome-coupling
+# Pass 10B: seed from a specific finding on the parent (pre-populates purpose +
+# key_assumptions from the finding's next_action / explanation / smoking_gun,
+# and stamps seeded_from.finding on the child + linked_finding on the proposal)
+/pbg-study seed-from-followup dnaa-01 calibrate-dars --from-finding F-03 --new-slug dnaa-02-dars-calibration
 
 # Open in browser
 /pbg-study open dnaa-binding

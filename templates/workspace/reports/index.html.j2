@@ -18,6 +18,10 @@
 </tbody></table>
 {% else %}<p>No models yet. <code>/pbg-add-model &lt;name&gt;</code></p>{% endif %}
 </div>
+<div class="panel"><h2>Findings index</h2>
+<p>Cross-study findings aggregated from every <code>study.yaml</code>.
+{% if findings_count %}{{ findings_count }} finding{{ findings_count != 1 and 's' or '' }} recorded.{% else %}None recorded yet.{% endif %}
+<a href="findings.html">Open findings index →</a></p></div>
 <div class="panel"><h2>Recent decisions</h2>
 {% if decisions %}<ul>{% for d in (decisions[-10:] | reverse) %}<li><strong>{{ d.skill }}</strong> · {{ d.timestamp }} — {{ d.summary }}</li>{% endfor %}</ul>
 {% else %}<p>No decisions logged yet.</p>{% endif %}

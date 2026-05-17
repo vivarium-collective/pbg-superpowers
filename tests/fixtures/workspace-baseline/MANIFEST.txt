@@ -28,7 +28,6 @@
 ./scripts/add-dataset.sh
 ./scripts/add-reference.sh
 ./scripts/clone_investigation.py
-./scripts/compare-runs.py
 ./scripts/lint-workspace.py
 ./scripts/render-dashboard.py
 ./scripts/serve.sh

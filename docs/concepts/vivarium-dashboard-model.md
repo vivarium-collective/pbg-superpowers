@@ -250,8 +250,8 @@ followup_proposals:
 1. Reads `studies/<parent>/study.yaml` and locates `followup_proposals[id == <proposal-id>]` (must be `proposed` or `accepted`).
 2. Creates `studies/<new-slug>/study.yaml` with `schema_version: 3`, `phase: Design`, `purpose:` / `key_assumptions:` / `model_change:` / `simulation_set:` populated from `proposal.seed.*` (falling back to `hypothesized_mechanism` for `model_change:` if absent).
 3. Auto-adds `pipeline_gate.prerequisites: [<parent-slug>]` (extending any existing `proposal.seed.pipeline_gate`).
-4. Stamps `seeded_from: {study: <parent-slug>, proposal_id: <proposal-id>}` on the child.
-5. Flips the parent's proposal entry to `status: seeded` and records `seeded_study: <new-slug>`.
+4. Stamps `seeded_from: {study: <parent-slug>, proposal_id: <proposal-id>}` on the child. **Pass 10B:** when invoked with `--from-finding <id>`, also stamps `seeded_from.finding: <id>` so the child knows which parent finding motivated it.
+5. Flips the parent's proposal entry to `status: seeded` and records `seeded_study: <new-slug>`. **Pass 10B:** when invoked with `--from-finding <id>`, also records `linked_finding: <id>` on the proposal so the finding → proposal → child lineage is queryable from the parent side too.
 
 **Provenance query.** Lineage from a parent study to all its seeded children is a plain grep:
 
@@ -530,16 +530,16 @@ findings:
     next_action: Seed calibration_task follow-up.
 ```
 
-**Five tooling components.** Pass 10A delivers components A, B, C; D and E
-are explicitly deferred to Pass 10B.
+**Five tooling components.** All five components now ship: A, B, C in
+Pass 10A and D, E in Pass 10B.
 
 | Component | Status | Where |
 |---|---|---|
 | A. `/pbg-study findings` interactive walk | shipped (10A) | `skills/pbg-study/SKILL.md` → `pbg_superpowers/study_findings.py` |
 | B. `search_expert_docs()` helper | shipped (10A) | `pbg_superpowers/expert_search.py` |
 | C. Findings linter | shipped (10A) | `pbg_superpowers/report_linter.py` (4 new checks) |
-| D. Cross-study findings index on `/pbg-report` | **deferred to Pass 10B** | — |
-| E. Findings-aware `seed-from-followup` | **deferred to Pass 10B** | — |
+| D. Cross-study findings index on `/pbg-report` | shipped (10B) | `pbg_superpowers/report.py:render_workspace_findings_index` → `reports/findings.html` |
+| E. Findings-aware `seed-from-followup` | shipped (10B) | `skills/pbg-study/SKILL.md` `--from-finding <id>` → `pbg_superpowers/seed_from_followup.py` |
 
 The four new linter checks (C):
 
@@ -549,6 +549,45 @@ The four new linter checks (C):
   - `finding_references_unknown_expert_doc` (error) — `expert_reference.doc` not in `workspace.yaml.expert_docs[]`.
 
 All four plug into the existing `/pbg-report --lint` override mechanism.
+
+#### Pass 10B additions
+
+**D. Cross-study findings index.** `/pbg-report` now writes a second
+workspace-level page at `reports/findings.html` alongside
+`reports/index.html`. It harvests every `findings[]` entry across every
+`studies/*/study.yaml` and renders them grouped by `status` (default
+view: confirms / partial / contradicts / novel) or by `kind` (toggle
+button: biological / computational / methodological). Filter chips at
+the top let the reader narrow by status + kind interactively (small
+client-side JS, no framework). Each row shows the finding id, the
+parent study slug (linked to the per-study report when one exists), a
+one-liner cut of the statement (full text in a `<details>` disclosure),
+status + kind badges, plus small chips for any `expected.cites` bib_keys
+and the `expert_reference.doc`. Empty workspaces render a friendly
+"No findings recorded — run `/pbg-study findings <slug>` to start"
+panel so the link from the dashboard never 404s. The workspace
+dashboard (`reports/index.html`) gains a "Findings index" panel that
+links to the page and badges the total count.
+
+**E. Findings-aware `seed-from-followup`.** The Pass 8
+`/pbg-study seed-from-followup <parent> <proposal-id>` subcommand takes
+an optional `--from-finding <finding-id>` flag. When passed, the helper
+at `pbg_superpowers/seed_from_followup.py` reads the finding off the
+parent and pre-populates the child's `purpose:` + `key_assumptions:`
+from `next_action` / `explanation` / `evidence.smoking_gun` (mapping
+documented in `skills/pbg-study/SKILL.md` and the helper's docstring).
+The child gets `seeded_from.finding: <id>` (Pass 10B schema extension,
+see [`study.schema.json`](https://github.com/vivarium-collective/pbg-template/blob/main/template/.pbg/schemas/study.schema.json))
+and the parent's proposal entry gets `linked_finding: <id>`, so the
+finding → proposal → child-study lineage is queryable from both
+directions:
+
+```bash
+# All children seeded from any finding on parent dnaa-01:
+grep -rA2 "seeded_from:" studies/*/study.yaml | grep -B1 "study: dnaa-01" | grep finding
+# All proposals on dnaa-01 that link back to a finding:
+yq '.followup_proposals[] | select(.linked_finding) | {id, linked_finding}' studies/dnaa-01/study.yaml
+```
 
 ### Dependency-with-hashes ({#dependency-with-hashes})
 

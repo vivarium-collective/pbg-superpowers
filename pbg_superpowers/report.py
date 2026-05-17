@@ -1,9 +1,19 @@
-"""Render reports/index.html for workspace and per-model targets."""
+"""Render reports/index.html for workspace and per-model targets.
+
+Pass 10B adds :func:`render_workspace_findings_index`, which walks every
+``studies/*/study.yaml`` in the workspace and produces a flat cross-study
+findings index at ``reports/findings.html`` (linked from the workspace
+dashboard). The aggregation, sort, and per-row shape are documented on
+that function.
+"""
 from __future__ import annotations
 import json
+import re
 import shutil
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -110,11 +120,166 @@ def render_workspace_report(
     out = ws_root / "reports" / "index.html"
     out.parent.mkdir(parents=True, exist_ok=True)
     _copy_assets(ws_root / "reports" / "assets")
+    # Pass 10B: also harvest cross-study findings for the dashboard link
+    # + a sibling findings.html page (which is rendered next).
+    findings_count = _count_workspace_findings(ws_root)
     out.write_text(tpl.render(
         workspace_name=ws["name"],
         generated_at=today,
         models=ws.get("models", {}),
         decisions=decisions,
+        findings_count=findings_count,
+    ))
+    # Always render the findings index page too — even when empty, so the
+    # link from index.html resolves (empty-state copy lives in the template).
+    render_workspace_findings_index(ws_root, today=today)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Pass 10B: cross-study findings index
+# ---------------------------------------------------------------------------
+
+
+def _first_sentence(text: str, *, max_chars: int = 220) -> str:
+    """Pull the first sentence (or first line) for a one-liner preview.
+
+    Heuristic: split on the first sentence terminator (``. ! ?``) followed
+    by whitespace or end-of-string. If the result is longer than
+    ``max_chars`` (e.g. terse find with no terminator), truncate with an
+    ellipsis. Newlines collapse to a single space.
+    """
+    if not text:
+        return ""
+    flat = re.sub(r"\s+", " ", text.strip())
+    m = re.search(r"(?<=[.!?])\s", flat)
+    s = (flat[: m.start() + 1] if m else flat).rstrip()
+    if len(s) > max_chars:
+        s = s[: max_chars - 1].rstrip() + "…"
+    return s
+
+
+def _harvest_findings(ws_root: Path) -> list[dict]:
+    """Walk ``studies/*/study.yaml`` and return one row per finding.
+
+    Each row has the keys the template expects:
+    ``study_slug``, ``study_link`` (str | None), ``id``, ``kind``, ``status``,
+    ``statement``, ``statement_oneliner``, ``cites`` (list[str]),
+    ``expert_doc`` (str | None).
+
+    Rows with malformed findings (missing required keys, non-canonical
+    enum values) are skipped — the linter is the right place to surface
+    those, not the rendering pipeline.
+    """
+    studies_dir = ws_root / "studies"
+    if not studies_dir.is_dir():
+        return []
+    valid_status = {"confirms", "partial", "contradicts", "novel"}
+    valid_kind = {"biological", "computational", "methodological"}
+    out: list[dict] = []
+    for sd in sorted(p for p in studies_dir.iterdir() if p.is_dir()):
+        sy = sd / "study.yaml"
+        if not sy.is_file():
+            continue
+        try:
+            study = yaml.safe_load(sy.read_text()) or {}
+        except yaml.YAMLError:
+            continue
+        slug = study.get("name") or sd.name
+        # Per-study report.html may not exist (no per-study reports today,
+        # but link anyway when found — keeps the page useful as the
+        # workspace grows).
+        per_study_report = sd / "reports" / "index.html"
+        # Relative path from reports/findings.html (one level under ws_root)
+        # to studies/<slug>/reports/index.html.
+        study_link = (
+            f"../studies/{slug}/reports/index.html"
+            if per_study_report.is_file() else None
+        )
+        for f in (study.get("findings") or []):
+            if not isinstance(f, dict):
+                continue
+            fid = f.get("id")
+            kind = f.get("kind")
+            status = f.get("status")
+            statement = f.get("statement", "")
+            if not (isinstance(fid, str) and isinstance(statement, str)
+                    and kind in valid_kind and status in valid_status):
+                continue
+            ev = f.get("expected") or {}
+            cites = ev.get("cites") if isinstance(ev, dict) else None
+            cites = [c for c in cites if isinstance(c, str)] if isinstance(cites, list) else []
+            xr = f.get("expert_reference") or {}
+            expert_doc = xr.get("doc") if isinstance(xr, dict) else None
+            if not isinstance(expert_doc, str):
+                expert_doc = None
+            out.append({
+                "study_slug": slug,
+                "study_link": study_link,
+                "id": fid,
+                "kind": kind,
+                "status": status,
+                "statement": statement,
+                "statement_oneliner": _first_sentence(statement),
+                "cites": cites,
+                "expert_doc": expert_doc,
+            })
+    return out
+
+
+def _count_workspace_findings(ws_root: Path) -> int:
+    """Cheap count used for the dashboard link badge. Tolerant of missing dirs."""
+    return len(_harvest_findings(ws_root))
+
+
+def render_workspace_findings_index(
+    ws_root: Path,
+    *,
+    today: str | None = None,
+) -> Path:
+    """Render ``<ws_root>/reports/findings.html`` — cross-study findings.
+
+    Aggregates every ``findings[]`` entry across every ``studies/*/study.yaml``
+    into a single flat list, then renders two pre-grouped views:
+
+      - Group by ``status`` (default visible) — sorted within each group by
+        kind then id, so the eye lands on similar findings first.
+      - Group by ``kind`` (hidden until toggle) — same secondary sort.
+
+    Filter chips at the top let the reader toggle individual status /
+    kind values on or off; the in-page JS is a few lines, no framework.
+
+    Empty workspaces (no findings at all) render a friendly empty-state
+    panel pointing at ``/pbg-study findings <slug>``.
+
+    Linked from ``reports/index.html`` via the "Findings index" panel.
+    """
+    today = today or date.today().isoformat()
+    ws = yaml.safe_load((ws_root / "workspace.yaml").read_text())
+    findings = _harvest_findings(ws_root)
+
+    by_status: dict[str, list[dict]] = defaultdict(list)
+    by_kind: dict[str, list[dict]] = defaultdict(list)
+    # Sort each group: secondary by kind (or status), tertiary by id.
+    for f in findings:
+        by_status[f["status"]].append(f)
+        by_kind[f["kind"]].append(f)
+    for rows in by_status.values():
+        rows.sort(key=lambda r: (r["kind"], r["id"]))
+    for rows in by_kind.values():
+        rows.sort(key=lambda r: (r["status"], r["id"]))
+
+    env = _env(resource_dir("templates") / "workspace" / "reports")
+    tpl = env.get_template("findings_index.html.j2")
+    out = ws_root / "reports" / "findings.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    _copy_assets(ws_root / "reports" / "assets")
+    out.write_text(tpl.render(
+        workspace_name=ws.get("name", ws_root.name),
+        generated_at=today,
+        findings=findings,
+        by_status=dict(by_status),
+        by_kind=dict(by_kind),
     ))
     return out
 
