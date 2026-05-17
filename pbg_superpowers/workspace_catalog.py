@@ -261,6 +261,110 @@ def find_running(path) -> dict | None:
     return None
 
 
+def list_servers() -> list[dict]:
+    """Return every entry under ~/.pbg/servers/*.json.
+
+    Each entry is augmented with two derived fields:
+
+    * ``_file``  — absolute path to the JSON record on disk.
+    * ``_alive`` — bool, result of probing the recorded PID.
+
+    Corrupt or unreadable files are skipped silently. Order is undefined.
+    """
+    if not _servers_dir().is_dir():
+        return []
+    out: list[dict] = []
+    for f in _servers_dir().glob("*.json"):
+        try:
+            data = json.loads(f.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        data["_file"] = str(f)
+        data["_alive"] = _pid_alive(int(data.get("pid") or 0))
+        out.append(data)
+    return out
+
+
+def find_duplicates_for_path(path) -> list[dict]:
+    """Return every server record whose ``path`` matches ``path``.
+
+    Used by ``/pbg-server start`` to decide whether to dedup a stale entry
+    before booting a new server in the same worktree. Multiple records for
+    the SAME path are always considered duplicates regardless of liveness;
+    records at OTHER paths are intentional (parallel worktrees) and are
+    excluded from the result.
+    """
+    target_str = str(_safe_resolve(path))
+    return [e for e in list_servers() if e.get("path") == target_str]
+
+
+def cleanup_orphans() -> dict:
+    """Remove server records whose PID is dead OR whose path no longer exists.
+
+    Returns ``{"removed": [{file, name, path, pid, reason}, ...], "kept": int}``.
+    Safe to run repeatedly; never touches files for live processes whose
+    worktree path still exists on disk.
+    """
+    removed: list[dict] = []
+    kept = 0
+
+    def _do_cleanup() -> None:
+        nonlocal kept
+        for entry in list_servers():
+            fpath = Path(entry["_file"])
+            pid = int(entry.get("pid") or 0)
+            path = entry.get("path") or ""
+            reasons: list[str] = []
+            if not _pid_alive(pid):
+                reasons.append("pid-dead")
+            if path and not Path(path).is_dir():
+                reasons.append("path-missing")
+            if reasons:
+                try:
+                    fpath.unlink()
+                    removed.append({
+                        "file":   str(fpath),
+                        "name":   entry.get("name"),
+                        "path":   path,
+                        "pid":    pid,
+                        "reason": ",".join(reasons),
+                    })
+                except FileNotFoundError:
+                    pass
+            else:
+                kept += 1
+
+    _with_servers_lock(_do_cleanup)
+    return {"removed": removed, "kept": kept}
+
+
+def remove_server_file(file_path: str | Path) -> bool:
+    """Delete one server JSON record by absolute file path.
+
+    Used by ``/pbg-server start`` to dedup a stale entry before registering
+    a new one. Returns True if the file existed and was removed, False
+    otherwise. No-op (returns False) if the file is outside the servers
+    directory — defensive against path traversal via stale data.
+    """
+    fpath = Path(file_path).expanduser().resolve()
+    servers_root = _servers_dir().resolve()
+    try:
+        fpath.relative_to(servers_root)
+    except ValueError:
+        return False
+
+    def _do_remove() -> bool:
+        try:
+            fpath.unlink()
+            return True
+        except FileNotFoundError:
+            return False
+
+    return _with_servers_lock(_do_remove)
+
+
 def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pbg_superpowers.workspace_catalog")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -285,6 +389,12 @@ def _main(argv: list[str] | None = None) -> int:
     p_unr = sub.add_parser("unregister-server")
     p_unr.add_argument("--path", required=True)
 
+    sub.add_parser("list-servers")
+    sub.add_parser("cleanup-servers")
+
+    p_dup = sub.add_parser("duplicates-for-path")
+    p_dup.add_argument("--path", required=True)
+
     args = parser.parse_args(argv)
 
     if args.cmd == "add":
@@ -302,6 +412,15 @@ def _main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "unregister-server":
         unregister_server(args.path)
+        return 0
+    if args.cmd == "list-servers":
+        print(json.dumps(list_servers(), indent=2))
+        return 0
+    if args.cmd == "cleanup-servers":
+        print(json.dumps(cleanup_orphans(), indent=2))
+        return 0
+    if args.cmd == "duplicates-for-path":
+        print(json.dumps(find_duplicates_for_path(args.path), indent=2))
         return 0
     return 2
 

@@ -253,3 +253,154 @@ def test_cli_add_and_list(pbg_home, workspace_dir):
     parsed = json.loads(listed)
     assert len(parsed) == 1
     assert parsed[0]["path"] == str(workspace_dir.resolve())
+
+
+# -------------------------------------------------------------------- Pass C:
+# list_servers / find_duplicates_for_path / cleanup_orphans helpers used by
+# the cross-worktree dashboard switcher and /pbg-server dedup.
+
+
+def test_list_servers_returns_empty_when_no_dir(pbg_home):
+    from pbg_superpowers.workspace_catalog import list_servers
+    assert list_servers() == []
+
+
+def test_list_servers_augments_with_file_and_alive(pbg_home, workspace_dir):
+    from pbg_superpowers.workspace_catalog import register_server, list_servers
+    register_server("my-workspace", workspace_dir, os.getpid(), 8731,
+                    "http://127.0.0.1:8731")
+    entries = list_servers()
+    assert len(entries) == 1
+    assert entries[0]["_alive"] is True
+    assert entries[0]["_file"].endswith(".json")
+    assert entries[0]["path"] == str(workspace_dir.resolve())
+
+
+def test_list_servers_marks_dead_pid(pbg_home, workspace_dir):
+    import subprocess as _sp
+    from pbg_superpowers.workspace_catalog import register_server, list_servers
+    proc = _sp.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    register_server("my-workspace", workspace_dir, proc.pid, 8731,
+                    "http://127.0.0.1:8731")
+    entries = list_servers()
+    assert len(entries) == 1
+    assert entries[0]["_alive"] is False
+
+
+def test_find_duplicates_for_path_returns_only_same_path(pbg_home, tmp_path):
+    from pbg_superpowers.workspace_catalog import (
+        register_server, find_duplicates_for_path,
+    )
+    w1 = tmp_path / "w1"; w1.mkdir()
+    w2 = tmp_path / "w2"; w2.mkdir()
+    (w1 / "workspace.yaml").write_text("name: w1\n")
+    (w2 / "workspace.yaml").write_text("name: w2\n")
+
+    register_server("w1", w1, os.getpid(), 8001, "http://127.0.0.1:8001")
+    register_server("w2", w2, os.getpid(), 8002, "http://127.0.0.1:8002")
+
+    dups_w1 = find_duplicates_for_path(w1)
+    dups_w2 = find_duplicates_for_path(w2)
+    assert len(dups_w1) == 1 and dups_w1[0]["path"] == str(w1.resolve())
+    assert len(dups_w2) == 1 and dups_w2[0]["path"] == str(w2.resolve())
+
+
+def test_cleanup_orphans_removes_dead_pid_records(pbg_home, workspace_dir):
+    import subprocess as _sp
+    from pbg_superpowers.workspace_catalog import (
+        register_server, cleanup_orphans, list_servers,
+    )
+    proc = _sp.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    register_server("dead", workspace_dir, proc.pid, 9001,
+                    "http://127.0.0.1:9001")
+    register_server("alive", workspace_dir, os.getpid(), 9002,
+                    "http://127.0.0.1:9002")
+    # Two records share workspace_dir.path; both are eligible orphan checks
+    # via PID alive/dead test only.
+    result = cleanup_orphans()
+    assert len(result["removed"]) == 1
+    assert result["removed"][0]["pid"] == proc.pid
+    assert result["removed"][0]["reason"] == "pid-dead"
+    remaining = list_servers()
+    assert len(remaining) == 1
+    assert remaining[0]["pid"] == os.getpid()
+
+
+def test_cleanup_orphans_removes_missing_path_records(pbg_home, tmp_path):
+    from pbg_superpowers.workspace_catalog import (
+        register_server, cleanup_orphans, list_servers,
+    )
+    gone = tmp_path / "will-be-gone"
+    gone.mkdir()
+    (gone / "workspace.yaml").write_text("name: gone\n")
+    register_server("gone", gone, os.getpid(), 9003,
+                    "http://127.0.0.1:9003")
+    # Now remove the directory but keep the registry record.
+    import shutil
+    shutil.rmtree(gone)
+    result = cleanup_orphans()
+    assert len(result["removed"]) == 1
+    assert "path-missing" in result["removed"][0]["reason"]
+    assert list_servers() == []
+
+
+def test_cleanup_orphans_is_noop_when_clean(pbg_home, workspace_dir):
+    from pbg_superpowers.workspace_catalog import (
+        register_server, cleanup_orphans,
+    )
+    register_server("alive", workspace_dir, os.getpid(), 9004,
+                    "http://127.0.0.1:9004")
+    result = cleanup_orphans()
+    assert result["removed"] == []
+    assert result["kept"] == 1
+
+
+def test_remove_server_file_rejects_path_outside_servers_dir(pbg_home, tmp_path):
+    from pbg_superpowers.workspace_catalog import remove_server_file
+    bogus = tmp_path / "elsewhere.json"
+    bogus.write_text("{}")
+    # Path is outside ~/.pbg/servers/ → must refuse and return False.
+    assert remove_server_file(bogus) is False
+    assert bogus.exists()
+
+
+def test_remove_server_file_removes_valid_record(pbg_home, workspace_dir):
+    from pbg_superpowers.workspace_catalog import (
+        register_server, remove_server_file, list_servers,
+    )
+    fpath = register_server("rm-me", workspace_dir, os.getpid(), 9005,
+                            "http://127.0.0.1:9005")
+    assert fpath.exists()
+    assert remove_server_file(fpath) is True
+    assert not fpath.exists()
+    assert list_servers() == []
+
+
+def test_cli_list_servers_and_cleanup(pbg_home, workspace_dir):
+    import subprocess as _sp
+    from pbg_superpowers.workspace_catalog import register_server
+
+    proc = _sp.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    register_server("dead", workspace_dir, proc.pid, 9006,
+                    "http://127.0.0.1:9006")
+
+    env = {**os.environ, "PBG_HOME": str(pbg_home)}
+    listed = subprocess.check_output(
+        [sys.executable, "-m", "pbg_superpowers.workspace_catalog", "list-servers"],
+        env=env,
+    )
+    parsed = json.loads(listed)
+    assert len(parsed) == 1
+    assert parsed[0]["_alive"] is False
+
+    cleaned = subprocess.check_output(
+        [sys.executable, "-m", "pbg_superpowers.workspace_catalog",
+         "cleanup-servers"],
+        env=env,
+    )
+    cresult = json.loads(cleaned)
+    assert len(cresult["removed"]) == 1
+    assert cresult["kept"] == 0

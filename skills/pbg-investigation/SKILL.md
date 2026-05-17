@@ -1,6 +1,6 @@
 ---
 name: pbg-investigation
-description: "Manage Investigations — named collections of Studies grouped under a shared research question. Subcommands: new, list, add-study, remove-study, set-overview, set-status, scaffold-from-plan."
+description: "Manage Investigations — named collections of Studies grouped under a shared research question. Subcommands: new, open, list, add-study, remove-study, set-overview, set-status, scaffold-from-plan."
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: <subcmd> [args...]
@@ -13,6 +13,14 @@ The interface for **Investigations** in the vivarium-dashboard: named collection
 An Investigation lives at `investigations/<slug>/investigation.yaml`. It lists member studies by slug, carries its own question/hypothesis/description, and links acceptance criteria to specific `expected_behavior[i].name` entries on member studies.
 
 See [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md) for the canonical data model.
+
+## Investigation ≡ branch ≡ worktree
+
+An Investigation slug is also a **git branch name** and a **worktree directory name**. The three are kept in 1:1 correspondence so that parallel agents can each work on a different Investigation without trampling each other's files, runtime DBs (`.pbg/composite-runs.db`), or dashboard ports.
+
+- `new <slug>` creates `investigations/<slug>/investigation.yaml` AND the git branch `<slug>`, then commits the new YAML on that branch.
+- `open <slug>` creates (or reuses) a worktree at `<workspace>/.pbg/worktrees/<slug>/` checked out to branch `<slug>`. By default it also boots a per-worktree dashboard server (one server per worktree — intentional parallelism).
+- The cross-worktree sidebar switcher in the dashboard reads `~/.pbg/servers/*.json` so every worktree's dashboard sees every other live worktree's Investigation as a clickable row.
 
 ## Write strategy
 
@@ -36,14 +44,16 @@ All `<slug>` arguments must match `^[a-z0-9][a-z0-9_-]*$`. Reject with a clear e
 
 ### `new <slug>`
 
-Create `investigations/<slug>/investigation.yaml` with placeholder fields.
+Create `investigations/<slug>/investigation.yaml` with placeholder fields, create a matching git branch `<slug>`, and commit the new YAML on it.
 
 **Steps:**
 
 1. Validate slug format. Fail if invalid.
 2. Check `investigations/<slug>/investigation.yaml` does NOT already exist. Fail with "Investigation '<slug>' already exists at investigations/<slug>/investigation.yaml. Use set-overview to update fields." if it does.
-3. Create the `investigations/<slug>/` directory if absent.
-4. Write `investigation.yaml` with:
+3. Check no git branch named `<slug>` exists (`git show-ref --verify --quiet refs/heads/<slug>`). Fail with: "Branch '<slug>' already exists. Pick a different slug or rename the existing branch." if it does.
+4. Create branch `<slug>` from current HEAD and switch to it: `git checkout -b <slug>`.
+5. Create the `investigations/<slug>/` directory if absent.
+6. Write `investigation.yaml` with:
 
 ```yaml
 schema_version: 1
@@ -68,7 +78,10 @@ expert_docs: []
 acceptance_criteria: []
 ```
 
-5. Print: `Created investigations/<slug>/investigation.yaml. Use /pbg-investigation add-study <slug> <study-slug> to add member studies.`
+7. `git add investigations/<slug>/investigation.yaml` then commit: `git commit -m "feat(investigation): scaffold <slug>"`. Do NOT push — the user pushes manually when ready.
+8. Print: `Created branch '<slug>' + investigations/<slug>/investigation.yaml (committed). Use /pbg-investigation open <slug> to create a worktree and start a dashboard, or /pbg-investigation add-study <slug> <study-slug> to add member studies.`
+
+**Rollback on failure:** if step 4 succeeds but a later step fails, the assistant must `git checkout -` back to the previous branch and `git branch -D <slug>` to leave the repo in a clean state before reporting the error.
 
 **Atomic write pattern:**
 
@@ -82,6 +95,33 @@ with open(tmp, "w") as f:
     yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 os.replace(tmp, path)
 ```
+
+---
+
+### `open <slug> [--no-server]`
+
+Create (or re-use) a git worktree for branch `<slug>` at the standard location `<workspace>/.pbg/worktrees/<slug>/`, then optionally start a per-worktree dashboard server in it.
+
+**Steps:**
+
+1. Validate slug format.
+2. Check branch `<slug>` exists (`git show-ref --verify --quiet refs/heads/<slug>`). If not, fail with: `No branch named '<slug>'. Create it first with /pbg-investigation new <slug>, or rename an existing branch with git branch -m <old> <slug>.`
+3. Compute `worktree_path = <WORKSPACE_ROOT>/.pbg/worktrees/<slug>`.
+4. If `worktree_path` already exists AND is registered as a git worktree (check `git worktree list --porcelain`), print: `Worktree already exists at <worktree_path> (branch <slug>).` and skip to step 6.
+5. Otherwise, run `git worktree add <worktree_path> <slug>`. Surface any git error verbatim (most common: branch already checked out elsewhere — the standard worktree path is the only sanctioned mount point, so the user should `git worktree remove` the conflicting one first).
+6. Unless `--no-server` is given, start a dashboard server in the new worktree:
+   ```bash
+   cd "<worktree_path>" && bash scripts/serve.sh &
+   ```
+   The server self-registers in `~/.pbg/servers/<name>.<hash>.json` on boot. Wait briefly (poll `~/.pbg/servers/` up to ~5 s) and capture the URL for printing. If no record appears, print: `Server did not register within 5s — check scripts/serve.sh logs.` and continue (worktree is still usable).
+7. Print summary:
+   ```
+   Worktree:   <worktree_path>
+   Branch:     <slug>
+   Dashboard:  <url>          (omit if --no-server)
+   ```
+
+**Standard location rationale.** Putting all worktrees under `<workspace>/.pbg/worktrees/` (a) keeps them close to the parent checkout for discovery and (b) lives inside `.pbg/` which is already conventionally git-ignored by workspace scaffolds, so the worktree directories themselves never accidentally show up in the parent's `git status`.
 
 ---
 
@@ -306,8 +346,14 @@ def atomic_write_yaml(path: str, data: dict) -> None:
 ## Examples
 
 ```text
-# Create a new empty investigation
+# Create a new empty investigation (also creates branch + commits YAML)
 /pbg-investigation new dnaa-replication
+
+# Open an isolated worktree for that investigation + boot a dashboard
+/pbg-investigation open dnaa-replication
+
+# Open the worktree without starting a server (e.g., for a scripted run)
+/pbg-investigation open dnaa-replication --no-server
 
 # List all investigations
 /pbg-investigation list
