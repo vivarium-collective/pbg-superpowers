@@ -1,6 +1,6 @@
 ---
 name: pbg-report
-description: Regenerate the workspace dashboard and per-model reports. Pulls workspace.yaml, decisions log, and (per model) the live process-bigraph registry; renders to <workspace>/reports/index.html and models/<model>/reports/index.html. Pass B (Pre-publication lint): runs the report linter first; blocking errors refuse to render unless --force logs an override. Idempotent.
+description: Regenerate the workspace dashboard and per-model reports. Pulls workspace.yaml, decisions log, and (per model) the live process-bigraph registry; renders to <workspace>/reports/index.html and models/<model>/reports/index.html. Pre-publication lint runs first — blocking errors refuse to render unless --force logs an override. Idempotent.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: [model-name | --all | --lint | --force]
