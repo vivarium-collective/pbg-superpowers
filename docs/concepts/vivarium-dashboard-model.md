@@ -490,6 +490,66 @@ fresh checkout regenerate it: at minimum a `model_commit_hash` + one of
 `raw_data_artifact` / `analysis_script`. Without provenance, a finding is a
 claim with no audit trail — a later pass will surface this in a linter.
 
+### Findings protocol (Pass 10A) {#findings-protocol-pass-10a}
+
+Pass 10A formalizes the `findings:` shape introduced in Pass A. The
+authoritative spec is
+[`2026-05-16-findings-protocol.md`](https://github.com/vivarium-collective/v2ecoli/blob/main/docs/superpowers/notes/2026-05-16-findings-protocol.md);
+this section is a one-paragraph summary plus a tooling map.
+
+**Shape.** Each finding still requires `id` + `statement`; Pass 10A adds
+two more required enums — `kind` ∈ {biological | computational | methodological}
+and `status` ∈ {confirms | partial | contradicts | novel}. The four optional
+sub-objects `evidence`, `expected`, `expert_reference`, and `provenance`
+remain `additionalProperties: true` so authors can extend them per study.
+Plus `explanation` (multi-paragraph rationale), `next_action` (concrete
+one-liner), and `obsoleted_by` (chain to a superseding finding).
+
+```yaml
+findings:
+  - id: F-01
+    kind: biological
+    status: contradicts
+    statement: |
+      v2ecoli's baseline emits ~115 DnaA/cell — 5x below the literature band.
+    evidence:
+      from_run: baseline-heavy-tf
+      from_test: dnaA-count-in-range
+      observed: 115
+      units: molecules/cell
+    expected:
+      cites: [Schmidt2016NatBiotechnol, Sekimizu1991JBacteriol]
+      range: [300, 800]
+      summary: "Mass-spec puts DnaA at 300-800 copies/cell."
+    expert_reference:
+      doc: chromosome_replication_plan
+      section: "§2.1"
+      note: "Plan lists 'DnaA per-cell count' as a layer-1 sanity check."
+    explanation: |
+      Shortfall is consistent across timepoints — likely EG10235 TE miscalibration.
+    next_action: Seed calibration_task follow-up.
+```
+
+**Five tooling components.** Pass 10A delivers components A, B, C; D and E
+are explicitly deferred to Pass 10B.
+
+| Component | Status | Where |
+|---|---|---|
+| A. `/pbg-study findings` interactive walk | shipped (10A) | `skills/pbg-study/SKILL.md` → `pbg_superpowers/study_findings.py` |
+| B. `search_expert_docs()` helper | shipped (10A) | `pbg_superpowers/expert_search.py` |
+| C. Findings linter | shipped (10A) | `pbg_superpowers/report_linter.py` (4 new checks) |
+| D. Cross-study findings index on `/pbg-report` | **deferred to Pass 10B** | — |
+| E. Findings-aware `seed-from-followup` | **deferred to Pass 10B** | — |
+
+The four new linter checks (C):
+
+  - `decide_phase_missing_findings` (error) — study reached Decide/Evaluated with zero findings[].
+  - `finding_without_evidence` (warning) — biological/computational finding with no `evidence.from_run` and no `evidence.from_test`.
+  - `finding_cites_unknown_bib_key` (error) — `expected.cites[]` entry not in `references/papers.bib`.
+  - `finding_references_unknown_expert_doc` (error) — `expert_reference.doc` not in `workspace.yaml.expert_docs[]`.
+
+All four plug into the existing `/pbg-report --lint` override mechanism.
+
 ### Dependency-with-hashes ({#dependency-with-hashes})
 
 `pipeline_gate.prerequisites` items already accept (a) a bare slug string or
