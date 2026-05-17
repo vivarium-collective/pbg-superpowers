@@ -347,7 +347,7 @@ Lift a parent's `followup_proposals[id == <proposal-id>]` entry into a brand-new
 - `<parent-slug>` (required) — existing parent study.
 - `<proposal-id>` (required) — id of the proposal entry to seed from. Status must be `proposed` or `accepted`; abort on `seeded` (already seeded) or `rejected`.
 - `--new-slug <slug>` (optional) — slug for the new study. Default: the proposal's `id`. Abort if `studies/<new-slug>/` already exists.
-- `--from-finding <finding-id>` (optional, **Pass 10B**) — id of a finding (e.g. `F-03`) on the parent's `findings[]`. When passed, pre-populates the child's `purpose:` / `key_assumptions:` from that finding's `explanation` + `next_action` + `evidence.smoking_gun` (see heuristic below), stamps `seeded_from.finding: <id>` on the child, and records `linked_finding: <id>` on the parent's proposal entry so the lineage from finding → proposal → child study is queryable. Abort if the finding id isn't on the parent.
+- `--from-finding <finding-id>` (optional, **Pass 10B**) — id of a finding (e.g. `F-03`) on the parent's `findings[]`. When passed, pre-populates the child from that finding: `purpose:` / `key_assumptions:` from `explanation` + `next_action` + `evidence.smoking_gun`; `seeded_from.evidence` from the finding's `evidence` block; `pipeline_gate.proceed_condition` from `next_action`; `behavior_tests` carries over the parent test referenced by `evidence.from_test` (reclassified as `primary`); `model_change.notes` is stamped with a TBD pointer when `explanation` is set. The child is also stamped with `seeded_from.finding: <id>`, and the parent's proposal entry records `linked_finding: <id>` so the lineage finding → proposal → child study is queryable. Abort if the finding id isn't on the parent.
 - `--dry-run` (optional) — print both proposed diffs and stop.
 
 **Behavior (steps Claude follows):**
@@ -360,7 +360,7 @@ Lift a parent's `followup_proposals[id == <proposal-id>]` entry into a brand-new
      studies/<parent-slug>/study.yaml <proposal-id> <finding-id> \
      --new-slug <new_slug>
    ```
-   This prints a YAML preview of (a) the child seed (`purpose` + `key_assumptions` + `seeded_from`) and (b) the updated parent-proposal entry. If the helper exits 2, the finding id is unknown — abort with the printed error. The helper never writes; the prose flow does.
+   This prints a YAML preview of (a) the child seed (`purpose` + `key_assumptions` + `seeded_from` + `pipeline_gate` + `behavior_tests` + `model_change`) and (b) the updated parent-proposal entry. If the helper exits 2, the finding id is unknown — abort with the printed error. The helper never writes; the prose flow does.
 4. **Build child `study.yaml` dict** with this skeleton:
    ```yaml
    schema_version: 3
@@ -380,12 +380,16 @@ Lift a parent's `followup_proposals[id == <proposal-id>]` entry into a brand-new
    ```
    The purpose-fallback question is `"<proposal.title> — <proposal.motivation>"` (single line, truncated tastefully) when `proposal.seed.purpose` is absent.
 
-   **Pass 10B finding-to-purpose merge** (when `--from-finding` is passed): merge the helper's `ChildSeed` over the skeleton above with **existing keys winning** — the propose-followup seed.purpose still has priority, the finding only fills empty slots. The mapping:
+   **Pass 10B finding-to-child merge** (when `--from-finding` is passed): merge the helper's `ChildSeed` over the skeleton above with **existing keys winning** — the propose-followup seed.purpose still has priority, the finding only fills empty slots. The mapping:
    - `purpose.question` ← derived from the finding's `next_action` (e.g. "Calibrate X to match Y" → "How do we calibrate X to match Y?"). Falls back to "Investigate <statement>?" when `next_action` is absent.
    - `purpose.mechanism` ← the finding's `explanation` verbatim (when set).
    - `purpose.expected_outcome` ← the trailing clause of `next_action` if it contains target cues ("to match", "within", "in range", numeric thresholds); else empty.
    - `key_assumptions[]` ← appended with the finding's `evidence.smoking_gun` string (when present and not already in the list).
    - `seeded_from.finding` ← `<finding-id>`.
+   - `seeded_from.evidence` ← a copy of the finding's `evidence` block, so the child's lineage is self-contained.
+   - `pipeline_gate.proceed_condition` ← the finding's `next_action` verbatim (when set), as a starting point. Existing `proceed_condition` wins.
+   - `behavior_tests[]` ← appended with the parent's behavior_test named by `evidence.from_test` (or each in `evidence.from_tests[]`), reclassified as `classification: primary` — it's the test the follow-up exists to make pass. Dedup'd by name; an existing same-named entry wins.
+   - `model_change.notes` ← `"TBD — see purpose.mechanism for the hypothesized mechanism."` when the finding has an `explanation`. Skipped if the child's `model_change` is already a string (terse summary) — promote manually if you want enrichment.
 
 5. **Build parent diff.** Flip the proposal entry: set `status: seeded` and `seeded_study: <new_slug>`. When `--from-finding` was passed AND the proposal doesn't already have a `linked_finding:` key, also set `linked_finding: <finding-id>`.
 6. **Preview both diffs.** Show (a) the new `studies/<new_slug>/study.yaml` content, (b) the parent's `followup_proposals[<i>]` before/after.
