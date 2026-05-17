@@ -387,6 +387,131 @@ Skills that read dashboard state do so via these HTTP endpoints:
 | `/pbg-report` | Study | Report file | Renders study summary to markdown. |
 | `/pbg-workspace` | Workspace | Workspace state | Workspace-level commands. |
 
+## Pass A — multi-axis status, finding provenance, dependency hashes {#pass-a}
+
+> **Status:** Pass A of the infrastructure-feedback roadmap. Schema lives in
+> [`study.schema.json`](https://github.com/vivarium-collective/pbg-template/blob/main/template/.pbg/schemas/study.schema.json);
+> dashboard surface in [vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard).
+> Sweep tables · linting · scaffold tracking · failure modes · expert questions ·
+> dashboard filters · claim-traceability view · JSON bundle export come in later passes.
+
+Three orthogonal additions on `study.yaml`. **All new fields are optional**, so
+v3 studies that set only the legacy `status:` continue to validate and render
+unchanged.
+
+### Multi-axis status {#multi-axis-status}
+
+Six independent status axes replace the single coarse-grained `status:` field
+for new specs. Each axis tracks one dimension of a study's lifecycle and is
+nullable.
+
+| Axis                    | Enum values                                                          |
+|-------------------------|----------------------------------------------------------------------|
+| `design_status`         | `planned · drafted · expert_reviewed · approved`                     |
+| `implementation_status` | `not_started · partial · complete`                                   |
+| `simulation_status`     | `not_run · running · ran · failed`                                   |
+| `evaluation_status`     | `not_evaluated · evaluated · failed_evaluation`                      |
+| `gate_status`           | `blocked · needs_calibration · passed · failed · stale`              |
+| `expert_review_status`  | `not_requested · requested · reviewed · approved · disputed`         |
+
+```yaml
+design_status: drafted
+implementation_status: partial
+simulation_status: ran
+evaluation_status: not_evaluated
+gate_status: needs_calibration
+expert_review_status: requested
+```
+
+**Dashboard rendering** (Pass A):
+
+- **Headline pill priority** on the study-detail page:
+  1. If `gate_status` is set, render it as the headline pill, colored per
+     `blocked=gray · needs_calibration=amber · passed=green · failed=red · stale=purple`.
+  2. Else if the legacy single `status:` is set, render it (existing behavior).
+  3. Else fall back to `planned`.
+- **Status detail panel** below the header: one chip per axis that is set;
+  rows for unset axes are hidden. The panel itself is hidden when none of the
+  six axes are set, so legacy studies look identical to before.
+- **Iset endpoint passthrough**: `GET /api/iset/<name>` surfaces all six
+  axes per member study (`None` when unset) so future Investigation-level
+  rollups can aggregate them.
+
+The legacy `status:` field stays in the schema for back-compat and is the
+field the dashboard's existing `effective_status` derivation reads from. The
+new axes are additive; they do not (yet) feed the existing derivations.
+
+### finding_provenance {#finding-provenance}
+
+The `findings:` array (proposed in
+[`2026-05-16-findings-protocol.md`](https://github.com/vivarium-collective/v2ecoli/blob/main/docs/superpowers/notes/2026-05-16-findings-protocol.md))
+is formally added to the schema as an optional top-level array. Each entry
+requires `id` (kebab-slug) and `statement` (English claim); the full structure
+(`kind`, `evidence`, `expected`, `expert_reference`, `next_action`, …) is
+still being worked out across passes, so the entry is `additionalProperties:
+true` — authors can include whichever fields the protocol calls for without
+re-versioning the schema.
+
+Each finding may carry a `provenance:` object with everything needed to
+reproduce it. All sub-fields optional — populate what you have.
+
+```yaml
+findings:
+  - id: F-02
+    statement: |
+      Autorepression of DnaA is missing in v2ecoli's transcription model.
+    provenance:
+      run_ids: [run-001, run-002]
+      simulation_config_hash: sha256:abc...
+      model_commit_hash: deadbeef
+      parca_cache_hash: sha256:def...
+      random_seeds: [0, 1, 2]
+      analysis_script: scripts/measure_autorepression.py
+      evaluator_version: v0.4.1
+      raw_data_artifact: runs.db
+      metric_table_artifact: out/metrics.csv
+```
+
+**When to populate.** A finding is *reproducible* once `provenance` lets a
+fresh checkout regenerate it: at minimum a `model_commit_hash` + one of
+`raw_data_artifact` / `analysis_script`. Without provenance, a finding is a
+claim with no audit trail — a later pass will surface this in a linter.
+
+### Dependency-with-hashes ({#dependency-with-hashes})
+
+`pipeline_gate.prerequisites` items already accept (a) a bare slug string or
+(b) `{study, condition: tests-passed | ran | complete}`. Pass A extends the
+object form with three new optional fields that let downstream studies declare
+*which* upstream outputs they consume and *which* artifact hashes they were
+last validated against. Both legacy forms continue to validate.
+
+```yaml
+pipeline_gate:
+  prerequisites:
+    - study: dnaa-01-expression-dynamics
+      condition: tests-passed            # existing
+      required_gate_status: passed       # NEW: min gate_status the parent must reach
+      outputs_used:                       # NEW: named outputs this study consumes
+        - autorepression_signal
+        - dnaA_steady_count
+      artifact_hashes:                   # NEW: parent artifact hashes validated against
+        model_commit: deadbeef
+        parca_cache: sha256:abc...
+        analysis_script: null
+```
+
+**Semantics.**
+
+- `required_gate_status` ANDs with `condition`: both must hold for the
+  dependency to count as satisfied.
+- `outputs_used` lets the linter detect over-broad deps and lets the dashboard
+  draw targeted dataflow edges instead of one fat "depends on" arrow.
+- `artifact_hashes` enables **stale propagation**: when a parent regenerates
+  an artifact whose hash diverges from the value recorded here, the dashboard
+  flips this study's `gate_status` to `stale`. The matching axes are intended
+  to mirror `finding_provenance.{model_commit_hash, parca_cache_hash,
+  analysis_script}` so the same hashes flow up the dependency graph.
+
 ## v4 reserved field names {#v4-reserved-fields}
 
 Schema v4 (the current dashboard validation target) reserves these top-level
