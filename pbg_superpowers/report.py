@@ -9,6 +9,29 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ._resources import resource_dir
+from .report_linter import (
+    LintFinding,
+    apply_overrides,
+    format_findings,
+    has_blocking_errors,
+    lint_workspace_report,
+    load_overrides,
+    write_override,
+)
+
+
+class ReportLintBlocked(RuntimeError):
+    """Raised by render_workspace_report when blocking lint findings exist.
+
+    Carries the list of findings so the caller can surface them. The
+    ``/pbg-report`` skill catches this and asks for ``--force`` (which
+    writes each blocking finding's override key to
+    ``.pbg/report-lint-overrides.json`` and retries).
+    """
+
+    def __init__(self, findings: list[LintFinding]):
+        self.findings = findings
+        super().__init__(format_findings(findings))
 
 
 def _env(template_dir: Path) -> Environment:
@@ -34,8 +57,47 @@ def _copy_assets(target_assets_dir: Path) -> None:
         shutil.copy2(client_js, target_assets_dir / "client.js")
 
 
-def render_workspace_report(ws_root: Path, *, today: str | None = None) -> Path:
-    """Build <ws_root>/reports/index.html from workspace.yaml + decisions log."""
+def render_workspace_report(
+    ws_root: Path,
+    *,
+    today: str | None = None,
+    lint: bool = True,
+    force: bool = False,
+    on_force_log_overrides: bool = True,
+) -> Path:
+    """Build <ws_root>/reports/index.html from workspace.yaml + decisions log.
+
+    Pass B: by default, runs the report linter first. If any blocking
+    error-level findings exist (and are not yet in the override file),
+    raises :class:`ReportLintBlocked` and refuses to render — UNLESS
+    ``force=True``, in which case each blocking finding's override_key
+    is appended to ``<ws_root>/.pbg/report-lint-overrides.json`` and the
+    render proceeds. This satisfies the spec's "lint failures block
+    publication unless explicitly overridden and logged" acceptance.
+
+    Args:
+        lint: Run the linter pre-render. Default True. Pass False to
+            preserve the pre-Pass-B unconditional behavior (e.g. for
+            internal callers that have already linted).
+        force: If True, blocking errors are written to the override file
+            and the render proceeds. Default False.
+        on_force_log_overrides: If True (default), --force writes any
+            blocking errors to the override file. If False, --force
+            silently bypasses without logging — STRONGLY discouraged;
+            kept for unit tests.
+    """
+    if lint:
+        findings = lint_workspace_report(ws_root)
+        overrides = load_overrides(ws_root)
+        if has_blocking_errors(findings, overrides):
+            if not force:
+                raise ReportLintBlocked(
+                    [f for f in findings if f.level == "error" and f.override_key not in overrides]
+                )
+            if on_force_log_overrides:
+                for f in findings:
+                    if f.level == "error" and f.override_key not in overrides:
+                        write_override(ws_root, f)
     today = today or date.today().isoformat()
     ws = yaml.safe_load((ws_root / "workspace.yaml").read_text())
     decisions_file = ws_root / "docs" / "decisions.yaml"
