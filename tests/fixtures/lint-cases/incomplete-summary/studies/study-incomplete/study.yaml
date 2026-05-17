@@ -6,3 +6,15 @@ evaluation_status: evaluated
 simulation_status: ran
 implementation_status: complete
 # conclusion_logic intentionally absent — should fire incomplete_summaries.
+# A minimal finding is present so this fixture isolates the
+# incomplete_summaries check (the Pass 10A decide_phase_missing_findings
+# check would otherwise also fire on this combination).
+findings:
+  - id: F-01
+    kind: methodological
+    status: confirms
+    statement: "Placeholder finding so the Pass 10A decide-phase check is satisfied."
+    evidence:
+      from_test: t1
+    provenance:
+      run_ids: ["run-001"]

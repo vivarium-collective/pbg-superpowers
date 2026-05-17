@@ -169,6 +169,71 @@ def test_truncated_takeaways_fires_on_short_or_unterminated_text(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Pass 10A — findings-protocol checks
+# ---------------------------------------------------------------------------
+
+
+def test_decide_phase_missing_findings_fires_on_decide_with_no_findings(tmp_path):
+    ws = _copy_fixture("decide-missing-findings", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    decide = by_check.get("decide_phase_missing_findings", [])
+    assert len(decide) == 1
+    f = decide[0]
+    assert f.level == "error"
+    assert f.study_slug == "study-decide"
+    assert "/pbg-study findings" in f.message
+    assert "study-decide" in f.message
+
+
+def test_finding_without_evidence_fires_for_biological_with_no_link(tmp_path):
+    ws = _copy_fixture("finding-no-evidence", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    no_ev = by_check.get("finding_without_evidence", [])
+    # Only F-01 (biological, no evidence link) should fire.
+    # F-02 has evidence.from_run.
+    # F-03 is methodological — kind not in the warned set.
+    # F-04 has evidence.from_test.
+    assert len(no_ev) == 1
+    f = no_ev[0]
+    assert f.level == "warning"
+    assert "F-01" in f.message
+    assert "biological" in f.message
+
+
+def test_finding_cites_unknown_bib_key_fires_per_unknown_key(tmp_path):
+    ws = _copy_fixture("finding-unknown-bib", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    unknown = by_check.get("finding_cites_unknown_bib_key", [])
+    # F-01 cites 2 unknown keys (MadeUpKey2099, AnotherFakeRef); F-02 is clean.
+    assert len(unknown) == 2
+    assert all(f.level == "error" for f in unknown)
+    keys_called_out = sorted(
+        msg
+        for f in unknown
+        for msg in [f.message]
+    )
+    assert any("MadeUpKey2099" in m for m in keys_called_out)
+    assert any("AnotherFakeRef" in m for m in keys_called_out)
+
+
+def test_finding_references_unknown_expert_doc_fires(tmp_path):
+    ws = _copy_fixture("finding-unknown-expert", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    unk = by_check.get("finding_references_unknown_expert_doc", [])
+    # F-01 references known_expert_doc -> ok.
+    # F-02 references mystery_doc_not_in_workspace -> fires.
+    assert len(unk) == 1
+    f = unk[0]
+    assert f.level == "error"
+    assert "F-02" in f.message
+    assert "mystery_doc_not_in_workspace" in f.message
+
+
+# ---------------------------------------------------------------------------
 # Override file roundtrip
 # ---------------------------------------------------------------------------
 

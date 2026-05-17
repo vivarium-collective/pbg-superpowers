@@ -293,6 +293,11 @@ CHECKS = (
     "unresolved_placeholders",
     "duplicate_modal_phrases",
     "truncated_takeaways",
+    # Pass 10A findings linter additions
+    "decide_phase_missing_findings",
+    "finding_without_evidence",
+    "finding_cites_unknown_bib_key",
+    "finding_references_unknown_expert_doc",
 )
 
 
@@ -607,6 +612,170 @@ def _flag_if_truncated(ctx: _LintContext, path: str, value: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Pass 10A — findings-protocol checks
+# ---------------------------------------------------------------------------
+
+
+def _bib_keys_for_workspace(ws_root: Path) -> set[str]:
+    """Read every @entry key from <ws>/references/papers.bib. Cached per call."""
+    bib = ws_root / "references" / "papers.bib"
+    if not bib.is_file():
+        return set()
+    keys: set[str] = set()
+    for line in bib.read_text().splitlines():
+        s = line.strip()
+        if not s.startswith("@") or "{" not in s:
+            continue
+        try:
+            after_brace = s.split("{", 1)[1]
+            key = after_brace.split(",", 1)[0].split()[0].rstrip("}").strip()
+            if key:
+                keys.add(key)
+        except (IndexError, ValueError):
+            continue
+    return keys
+
+
+def _expert_doc_names_for_workspace(ws_root: Path) -> set[str]:
+    """Set of expert_docs[].name from workspace.yaml. Empty if absent."""
+    ws_yaml = ws_root / "workspace.yaml"
+    if not ws_yaml.is_file():
+        return set()
+    try:
+        data = yaml.safe_load(ws_yaml.read_text()) or {}
+    except yaml.YAMLError:
+        return set()
+    docs = data.get("expert_docs") or []
+    out: set[str] = set()
+    if isinstance(docs, list):
+        for d in docs:
+            if isinstance(d, dict) and isinstance(d.get("name"), str):
+                out.add(d["name"])
+    return out
+
+
+def _check_decide_phase_missing_findings(ctx: _LintContext) -> None:
+    """Phase=Decide OR (simulation_status=ran AND evaluation_status=evaluated)
+    with zero findings is a Pass 10A error.
+    """
+    spec = ctx.spec
+    findings = spec.get("findings") or []
+    if findings:
+        return
+    phase = spec.get("phase")
+    sim = spec.get("simulation_status")
+    evalst = spec.get("evaluation_status")
+    triggered = phase == "Decide" or (sim == "ran" and evalst == "evaluated")
+    if not triggered:
+        return
+    ctx.add(
+        level="error",
+        field_path="findings",
+        message=(
+            "Study reached Decide/Evaluated but has no findings[]. "
+            f"Run `/pbg-study findings {ctx.slug}` to draft them."
+        ),
+        check="decide_phase_missing_findings",
+    )
+
+
+def _check_finding_without_evidence(ctx: _LintContext) -> None:
+    """A biological/computational finding with no evidence.from_run AND no
+    evidence.from_test cannot be linked back to an artifact. Warning."""
+    findings = ctx.spec.get("findings") or []
+    if not isinstance(findings, list):
+        return
+    for idx, f in enumerate(findings):
+        if not isinstance(f, dict):
+            continue
+        kind = f.get("kind")
+        if kind not in {"biological", "computational"}:
+            continue
+        ev = f.get("evidence") or {}
+        if not isinstance(ev, dict):
+            ev = {}
+        has_link = bool(ev.get("from_run") or ev.get("from_test"))
+        if has_link:
+            continue
+        fid = f.get("id", f"<index-{idx}>")
+        ctx.add(
+            level="warning",
+            field_path=f"findings[{idx}].evidence",
+            message=(
+                f"Finding {fid!r} claims a {kind} status but has no "
+                "evidence.from_run and no evidence.from_test. Add a link "
+                "to the run / behavior_test that produced it."
+            ),
+            check="finding_without_evidence",
+        )
+
+
+def _check_finding_cites_unknown_bib_key(ctx: _LintContext) -> None:
+    """Any expected.cites entry not in references/papers.bib is an error."""
+    findings = ctx.spec.get("findings") or []
+    if not isinstance(findings, list):
+        return
+    known = _bib_keys_for_workspace(ctx.ws_root)
+    if not known:
+        # No bibliography to compare against — surface nothing rather than
+        # spamming errors. Authors who reference bib_keys without papers.bib
+        # are caught by other parts of the report pipeline.
+        return
+    for idx, f in enumerate(findings):
+        if not isinstance(f, dict):
+            continue
+        expected = f.get("expected") or {}
+        if not isinstance(expected, dict):
+            continue
+        cites = expected.get("cites") or []
+        if not isinstance(cites, list):
+            continue
+        for cidx, key in enumerate(cites):
+            if not isinstance(key, str):
+                continue
+            if key not in known:
+                fid = f.get("id", f"<index-{idx}>")
+                ctx.add(
+                    level="error",
+                    field_path=f"findings[{idx}].expected.cites[{cidx}]",
+                    message=(
+                        f"Finding {fid!r} cites unknown bib_key {key!r}. "
+                        "Add it to references/papers.bib first."
+                    ),
+                    check="finding_cites_unknown_bib_key",
+                )
+
+
+def _check_finding_references_unknown_expert_doc(ctx: _LintContext) -> None:
+    """expert_reference.doc must resolve to a workspace.yaml.expert_docs[] entry."""
+    findings = ctx.spec.get("findings") or []
+    if not isinstance(findings, list):
+        return
+    known = _expert_doc_names_for_workspace(ctx.ws_root)
+    for idx, f in enumerate(findings):
+        if not isinstance(f, dict):
+            continue
+        ref = f.get("expert_reference") or {}
+        if not isinstance(ref, dict):
+            continue
+        doc = ref.get("doc")
+        if not isinstance(doc, str):
+            continue
+        if doc in known:
+            continue
+        fid = f.get("id", f"<index-{idx}>")
+        ctx.add(
+            level="error",
+            field_path=f"findings[{idx}].expert_reference.doc",
+            message=(
+                f"Finding {fid!r} references unknown expert doc {doc!r}. "
+                "Add it to workspace.yaml.expert_docs[] first."
+            ),
+            check="finding_references_unknown_expert_doc",
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -618,6 +787,10 @@ _CHECK_FUNCTIONS = (
     _check_unresolved_placeholders,
     _check_duplicate_modal_phrases,
     _check_truncated_takeaways,
+    _check_decide_phase_missing_findings,
+    _check_finding_without_evidence,
+    _check_finding_cites_unknown_bib_key,
+    _check_finding_references_unknown_expert_doc,
 )
 
 

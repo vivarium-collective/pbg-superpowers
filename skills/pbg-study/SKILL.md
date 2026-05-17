@@ -3,7 +3,7 @@ name: pbg-study
 description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|run-baseline|run-variant|set-conclusion|propose-followup|seed-from-followup|open [args]
+argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|run-baseline|run-variant|set-conclusion|findings|propose-followup|seed-from-followup|open [args]
 ---
 
 # pbg-study
@@ -277,6 +277,42 @@ Replace the Study's conclusion. POST `/api/study-set-conclusion`:
 ```
 
 The markdown is canonically structured under H2 headers: `## Claims`, `## Evidence`, `## Limitations`, `## Next steps`.
+
+#### `findings <study-slug> [--auto] [--dry-run]`
+
+Walk the study's `behavior_tests[]` outcomes (under `runs[]`) and propose
+one structured finding per outcome not already covered by an entry in
+`findings[]`. The Pass 10A findings protocol (see
+[`vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md#findings-protocol-pass-10a))
+formalizes each finding as `{id, kind, status, statement}` plus optional
+`evidence` / `expected` / `expert_reference` / `explanation` / `next_action`
+sub-objects.
+
+**Arguments:**
+
+- `<study-slug>` (required) — study under `studies/<slug>/`. Abort if `study.yaml` is missing.
+- `--auto` (optional) — skip the interactive curation loop; write the heuristic drafts as-is. Useful for an LLM agent that has already decided what to write.
+- `--dry-run` (optional) — print the proposed `findings[]` additions as a YAML diff; do not write.
+
+**Behavior (steps Claude follows when running this subcommand):**
+
+1. **Resolve study.** Read `studies/<slug>/study.yaml`. Abort if absent: "Study '<slug>' not found. Run `/pbg-study new` to create it."
+2. **Extract outcomes.** Walk `runs[].outcomes[]` (or `runs[].test_results[]` for the flat form). For each `behavior_tests[]` outcome not already covered by a finding (match on existing `findings[].evidence.from_test`), produce a draft via the heuristic:
+   - PASS → `kind: biological`, `status: confirms`, statement = "v2ecoli reproduces `<test-description>` within tolerance".
+   - FAIL → ask the user: biological (`contradicts`) vs computational (`novel`). If `--auto`, default to biological/contradicts.
+3. **Auto-assign `id`.** Use the next free `F-NN` (skipping any used by existing findings).
+4. **Pre-fill from heuristics.** `evidence.from_run` + `evidence.from_test` + (when present) `evidence.observed`; `expected.summary` from the test's `expected_summary` or `calibration_anchor.literature_summary` when set.
+5. **Surface candidate quotes.** Call `pbg_superpowers.expert_search.search_expert_docs(ws_root, terms, max_hits=3)` on a small set of keywords extracted from the test name + description. Display the top hits (doc, page, snippet) and offer them as candidate `expert_reference.quote` + `expected.cites` entries.
+6. **Interactive curation (default, skipped when `--auto`).** For each draft, ask the user to fill / refine: `statement`, `expected.summary`, `expected.cites` (bib_keys), `expert_reference` (doc + quote + note), `next_action`. The user can reject the draft outright.
+7. **Append to `study.yaml.findings[]`.** Atomic write: serialize updated YAML to `study.yaml.tmp`, then `os.replace()` over the original. Preserve all other top-level keys verbatim.
+8. **Bibliography crosscheck (warn).** After the walk, compare every `expected.cites` entry against `references/papers.bib` keys; print a warning for any unknown bib_key so the user can decide whether to add it.
+9. **Report.** Print a one-line summary: appended count, skipped (already-covered) count, unknown bib_keys count.
+
+**Implementation note:** the bulk of the logic lives in
+[`pbg_superpowers/study_findings.py`](../../pbg_superpowers/study_findings.py).
+The skill shells out to it via `python -m pbg_superpowers.study_findings <slug> [--auto] [--dry-run]`,
+in the same shape as the other YAML-direct subcommands (`propose-followup`, `seed-from-followup`).
+The interactive step (6) is performed by the host Claude instance following the prose flow above; the Python helper handles workspace discovery, draft heuristics, expert-PDF search, atomic-write, and the bib-key crosscheck.
 
 #### `propose-followup <parent-slug> --id <id> --title '<t>' --motivation '<m>' [--mechanism '<hyp>'] [--seed-from-file <path>] [--dry-run]`
 
@@ -629,6 +665,23 @@ print(json.dumps({'route': f'/studies/{os.environ[\"NAME\"]}'}))")
     [ -n "$SLUG" ] || { echo "ERROR: $sub requires a parent study slug." >&2; exit 1; }
     ;;
 
+  findings)
+    # Pass 10A. YAML-direct subcommand; the Python helper does workspace
+    # discovery, draft heuristics, atomic write, and bib-key crosscheck.
+    # Interactive curation (step 6 in SKILL.md) is performed by Claude.
+    SLUG="${1:-}"
+    [ -n "$SLUG" ] || { echo "ERROR: findings requires a study slug." >&2; exit 1; }
+    shift
+    EXTRA_FLAGS=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --auto|--dry-run) EXTRA_FLAGS+=("$1"); shift ;;
+        *) echo "unknown flag: $1" >&2; exit 1 ;;
+      esac
+    done
+    python3 -m pbg_superpowers.study_findings "$SLUG" --ws "$DIR" "${EXTRA_FLAGS[@]}"
+    ;;
+
   *)
     cat <<EOF
 Usage:
@@ -649,6 +702,8 @@ Usage:
   /pbg-study intervention-add    <study-name> --name <n> [--description '<text>']
   /pbg-study intervention-update <study-name> --name <n> --description '<text>'
   /pbg-study intervention-delete <study-name> --name <n>
+
+  /pbg-study findings            <study-slug> [--auto] [--dry-run]
 
   /pbg-study propose-followup    <parent-slug> --id <id> --title '<t>' --motivation '<m>' [--mechanism '<hyp>'] [--seed-from-file <path>] [--dry-run]
   /pbg-study seed-from-followup  <parent-slug> <proposal-id> [--new-slug <slug>] [--dry-run]
@@ -697,6 +752,13 @@ esac
 - Single-cell only
 ## Next steps
 - Multi-cell run"
+
+# Walk a study's behavior_test outcomes and propose structured findings
+/pbg-study findings dnaa-01-expression-dynamics
+# Skip interactive prompts; write heuristic drafts as-is
+/pbg-study findings dnaa-01-expression-dynamics --auto
+# Dry-run: print the proposed YAML diff, don't write
+/pbg-study findings dnaa-01-expression-dynamics --dry-run
 
 # Propose a Decide-phase follow-up study
 /pbg-study propose-followup dnaa-binding \
