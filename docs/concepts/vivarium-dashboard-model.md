@@ -297,11 +297,24 @@ An Investigation is a **named collection of studies** with an explicit cross-stu
 - **API**:
   - `GET /api/iset-list` — summaries (name, title, status, n_studies).
   - `GET /api/iset/<name>` — full investigation + resolved studies (each carrying normalized `parent_studies` for DAG layout).
+  - `GET /api/investigation-registry` — cross-worktree view: this server's "current" Investigation + every OTHER live server's `{slug, worktree_path, url, effective_status, pid}`. Powers the left-rail Investigation switcher across worktrees. (Pass C, 2026-05-17.)
   - No write endpoints exist yet; skills write YAML directly (atomic tmp-file + rename).
 - **Dashboard render**: Investigations tab cards → DAG canvas on click; rail sidebar groups studies under their investigation header; "Ungrouped" bucket for studies not in any investigation; topological order within each group.
-- **Skill**: `/pbg-investigation` for CRUD + scaffold-from-plan.
+- **Skill**: `/pbg-investigation` for CRUD + scaffold-from-plan + worktree open.
 
 > Note: the DAG topology is computed from each member study's `parent_studies:` field at render time. The `studies:` list on the investigation controls visibility/grouping only, not execution order.
+
+#### Investigation ≡ branch ≡ worktree (Pass C, 2026-05-17)
+
+An Investigation slug is also a **git branch name** and a **worktree directory name**. The three are kept in 1:1 correspondence so that parallel agents can each work on a different Investigation without trampling each other's files, runtime DBs (`.pbg/composite-runs.db`), or dashboard ports.
+
+- **`/pbg-investigation new <slug>`** creates `investigations/<slug>/investigation.yaml` AND a git branch `<slug>`, then commits the YAML on that branch. It does NOT push.
+- **`/pbg-investigation open <slug>`** creates (or reuses) a worktree at the standard location `<workspace>/.pbg/worktrees/<slug>/` checked out to branch `<slug>`. By default it also boots a per-worktree dashboard server. (`--no-server` skips that.) The standard location keeps worktrees discoverable next to the parent checkout and inside `.pbg/`, which is conventionally git-ignored.
+- **One dashboard server per worktree** — intentional. Each worktree has its own runtime state (`.pbg/composite-runs.db`, server log, ports). The server self-registers in `~/.pbg/servers/<name>.<hash>.json` on boot, with `path` set to the worktree (not the parent checkout).
+- **Sidebar = cross-worktree switcher.** The left-rail Investigation dropdown queries `/api/investigation-registry`, which fans out across every record under `~/.pbg/servers/*.json` (except its own) to surface their `current` Investigation. Rows for OTHER worktrees are clickable → opens that server's URL in a new tab.
+- **Dedup is per-worktree path.** `/pbg-server start` removes only records that point at the SAME worktree path (after prompting if the PID is still alive). Records at different worktree paths coexist — that's how parallel agents work. `/pbg-server cleanup` removes orphaned records (PID dead OR worktree path missing).
+
+**Known migration note (v2ecoli).** The `dnaa-replication` investigation in v2ecoli was created before this convention, on a branch named `dnaa-replication-studies` (slug-vs-branch mismatch). To bring it into compliance, run `git branch -m dnaa-replication-studies dnaa-replication` on the relevant worktree's checkout, then `/pbg-investigation open dnaa-replication` to materialize it at the standard worktree location.
 
 ### Study dependencies (DAG)
 
