@@ -584,7 +584,7 @@ def chromosome_circle_svg(
     # Track unique legend entries
     legend_entries: dict[str, dict] = {}  # category -> {marker, color, size}
 
-    def marker_path(cx, cy, mk, size, color):
+    def marker_path(cx, cy, mk, size, color, angle=0.0):
         if mk == 'circle':
             return f'<circle cx="{cx}" cy="{cy}" r="{size}" fill="{color}"/>'
         elif mk == 'square':
@@ -593,8 +593,13 @@ def chromosome_circle_svg(
             return (f'<polygon points="{cx},{cy-size} '
                     f'{cx-size},{cy+size*0.7} {cx+size},{cy+size*0.7}" fill="{color}"/>')
         elif mk == 'tick':
-            # short line outside the ring — used for many small boxes
-            return f'<line x1="{cx}" y1="{cy-size}" x2="{cx}" y2="{cy+size}" stroke="{color}" stroke-width="1.2"/>'
+            # Radial tick — line points outward along the radius at the given angle.
+            # The radial unit vector at angle θ (0 = top, clockwise) is (sin θ, -cos θ).
+            # We draw a tick straddling the placement point, half inside and half outside.
+            dx = math.sin(angle) * size
+            dy = -math.cos(angle) * size
+            return (f'<line x1="{cx-dx}" y1="{cy-dy}" x2="{cx+dx}" y2="{cy+dy}" '
+                    f'stroke="{color}" stroke-width="1.2"/>')
         return f'<circle cx="{cx}" cy="{cy}" r="{size}" fill="{color}"/>'
 
     for pi, panel in enumerate(panels):
@@ -635,7 +640,7 @@ def chromosome_circle_svg(
                 cy = cy_center - r * math.cos(angle)
                 color = item.get("color", "#64748b")
                 marker = item.get("marker", "circle")
-                parts.append(marker_path(cx, cy, marker, size, color))
+                parts.append(marker_path(cx, cy, marker, size, color, angle))
                 # Legend dedup
                 cat_name = item.get("category", cat_key)
                 if cat_name not in legend_entries:
