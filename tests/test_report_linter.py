@@ -290,6 +290,74 @@ def test_visualization_address_check_tolerates_missing_visualizations_field(tmp_
 
 
 # ---------------------------------------------------------------------------
+# 12. dag_edges_* — F3 (canonical pipeline_gate.prerequisites)
+# ---------------------------------------------------------------------------
+
+
+def test_dag_edges_legacy_only_fires_migration_warning(tmp_path):
+    """A study with parent_studies but no pipeline_gate.prerequisites fires
+    the soft migration warning — same shape as the runtime DeprecationWarning
+    the dashboard emits."""
+    ws = _copy_fixture("dag-edges-legacy-only", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    legacy = by_check.get("dag_edges_legacy_only", [])
+    assert len(legacy) == 1
+    f = legacy[0]
+    assert f.level == "warning"
+    assert f.study_slug == "legacy"
+    assert "pipeline_gate.prerequisites" in f.message
+    assert "back-compat fallback" in f.message
+    # The disagreement and redundant variants must NOT fire for this case.
+    assert by_check.get("dag_edges_legacy_redundant", []) == []
+    assert by_check.get("dag_edges_legacy_and_canonical_disagree", []) == []
+
+
+def test_dag_edges_both_agree_fires_redundancy_warning(tmp_path):
+    """When both fields list the same parent SLUG SET (regardless of per-entry
+    condition), the legacy field is redundant — warn so the workspace drops
+    it during the next edit."""
+    ws = _copy_fixture("dag-edges-both-agree", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    redundant = by_check.get("dag_edges_legacy_redundant", [])
+    assert len(redundant) == 1
+    f = redundant[0]
+    assert f.level == "warning"
+    assert f.study_slug == "agree"
+    assert "Drop the `parent_studies` field" in f.message
+    # The legacy-only warning must NOT fire — the canonical field IS set.
+    assert by_check.get("dag_edges_legacy_only", []) == []
+
+
+def test_dag_edges_both_conflict_fires_error(tmp_path):
+    """When both fields list DIFFERENT parent sets, the dashboard silently
+    ignores the legacy entries — that's a real foot-gun, so it's an error."""
+    ws = _copy_fixture("dag-edges-both-conflict", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    disagree = by_check.get("dag_edges_legacy_and_canonical_disagree", [])
+    assert len(disagree) == 1
+    f = disagree[0]
+    assert f.level == "error"
+    assert f.study_slug == "conflict"
+    # Message names both sets so the author can see which side is which.
+    assert "upstream-a" in f.message
+    assert "upstream-z" in f.message
+    assert "silently ignored" in f.message
+
+
+def test_dag_edges_check_silent_on_clean_baseline(tmp_path):
+    """A study with neither field set produces no DAG-edge findings."""
+    ws = _copy_fixture("clean-baseline", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    assert by_check.get("dag_edges_legacy_only", []) == []
+    assert by_check.get("dag_edges_legacy_redundant", []) == []
+    assert by_check.get("dag_edges_legacy_and_canonical_disagree", []) == []
+
+
+# ---------------------------------------------------------------------------
 # Override file roundtrip
 # ---------------------------------------------------------------------------
 

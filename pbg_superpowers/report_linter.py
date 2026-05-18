@@ -873,6 +873,91 @@ def _check_visualization_addresses(ctx: _LintContext) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 12. dag_edges_legacy_and_canonical_both_set
+# ---------------------------------------------------------------------------
+
+
+def _parent_slug(entry) -> str | None:
+    """Pull the parent slug out of either entry shape (bare-string or dict)."""
+    if isinstance(entry, str):
+        return entry
+    if isinstance(entry, dict) and isinstance(entry.get("study"), str):
+        return entry["study"]
+    return None
+
+
+def _check_dag_edges_legacy_and_canonical_both_set(ctx: _LintContext) -> None:
+    """A study should declare DAG edges via ``pipeline_gate.prerequisites``
+    (canonical, Section 2 of the 8-section structure). The legacy
+    ``parent_studies`` field still works as a back-compat fallback, but
+    setting BOTH risks drift — the dashboard reads only the canonical
+    field, so a parent added to ``parent_studies`` after migration goes
+    silently unused.
+
+    Three findings shapes:
+
+    - error: both fields set with DIFFERENT parent sets (real drift —
+      the legacy entries are being silently ignored)
+    - warning: both fields set with the SAME parent set (redundant; drop
+      ``parent_studies``)
+    - warning: only ``parent_studies`` set (migration deferred — same
+      message as the runtime DeprecationWarning)
+    """
+    pg = ctx.spec.get("pipeline_gate") or {}
+    canonical_raw = pg.get("prerequisites") if isinstance(pg, dict) else None
+    legacy_raw = ctx.spec.get("parent_studies") or []
+
+    canonical = {s for s in (_parent_slug(e) for e in (canonical_raw or [])) if s}
+    legacy = {s for s in (_parent_slug(e) for e in legacy_raw) if s}
+
+    if not canonical and not legacy:
+        return
+
+    if canonical and legacy:
+        if canonical == legacy:
+            ctx.add(
+                level="warning",
+                field_path="parent_studies",
+                message=(
+                    "Study declares the same parents in both "
+                    "`pipeline_gate.prerequisites` (canonical) and "
+                    "`parent_studies` (legacy). Drop the `parent_studies` "
+                    "field — the dashboard reads only the canonical one."
+                ),
+                check="dag_edges_legacy_redundant",
+            )
+        else:
+            ctx.add(
+                level="error",
+                field_path="parent_studies",
+                message=(
+                    "Study declares conflicting DAG edges: "
+                    f"`pipeline_gate.prerequisites` lists {sorted(canonical)} "
+                    f"but `parent_studies` lists {sorted(legacy)}. The "
+                    "dashboard reads only `pipeline_gate.prerequisites`, so "
+                    "the legacy entries are silently ignored. Reconcile or "
+                    "drop `parent_studies`."
+                ),
+                check="dag_edges_legacy_and_canonical_disagree",
+            )
+        return
+
+    if legacy and not canonical:
+        ctx.add(
+            level="warning",
+            field_path="parent_studies",
+            message=(
+                "Study uses the legacy `parent_studies` field for DAG edges. "
+                "Migrate to `pipeline_gate.prerequisites` (canonical, "
+                "Section 2). The dashboard still reads `parent_studies` as a "
+                "back-compat fallback, but a future version will require "
+                "the canonical field."
+            ),
+            check="dag_edges_legacy_only",
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -889,6 +974,7 @@ _CHECK_FUNCTIONS = (
     _check_finding_cites_unknown_bib_key,
     _check_finding_references_unknown_expert_doc,
     _check_visualization_addresses,
+    _check_dag_edges_legacy_and_canonical_both_set,
 )
 
 
