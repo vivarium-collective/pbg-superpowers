@@ -234,6 +234,62 @@ def test_finding_references_unknown_expert_doc_fires(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# 11. visualization_address_unresolved
+# ---------------------------------------------------------------------------
+
+
+def test_visualization_address_unresolved_fires_on_missing_local_class(tmp_path):
+    """Both `local:DnaAStateVisualization` and `local:DnaABoxOccupancyVisualization`
+    point at classes that don't exist anywhere under pkg/visualizations/."""
+    ws = _copy_fixture("viz-address-unresolved", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    unresolved = by_check.get("visualization_address_unresolved", [])
+    assert len(unresolved) == 2
+    assert all(f.level == "error" for f in unresolved)
+    classes_called_out = sorted(f.message for f in unresolved)
+    assert any("DnaAStateVisualization" in m for m in classes_called_out)
+    assert any("DnaABoxOccupancyVisualization" in m for m in classes_called_out)
+    # Field path points at the offending visualizations[] entry, not the study root.
+    assert all(f.field_path.startswith("visualizations[") for f in unresolved)
+
+
+def test_visualization_address_unresolved_skips_dotted_and_empty(tmp_path):
+    """The fixture also declares a dotted address, an empty address, and a
+    bare class name without the local: prefix. None of those should fire."""
+    ws = _copy_fixture("viz-address-unresolved", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    unresolved = by_check.get("visualization_address_unresolved", [])
+    # Exactly the two local: entries with missing classes fired — no more.
+    assert len(unresolved) == 2
+    # The viz names of the skipped entries must not appear in any finding.
+    flagged_viz_names = [
+        f.message.split("'")[1] for f in unresolved  # `Visualization 'NAME' …`
+    ]
+    assert "ts-from-obs" not in flagged_viz_names  # dotted path skipped
+    assert "empty-addr" not in flagged_viz_names   # empty address skipped
+    assert "bare-name" not in flagged_viz_names    # no local: prefix skipped
+
+
+def test_visualization_address_resolved_produces_no_findings(tmp_path):
+    """Classes declared via subclassing OR via @as_visualization update_*
+    factories resolve cleanly. Both PascalCase and snake_case forms work."""
+    ws = _copy_fixture("viz-address-resolved", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    assert by_check.get("visualization_address_unresolved", []) == []
+
+
+def test_visualization_address_check_tolerates_missing_visualizations_field(tmp_path):
+    """A study with no visualizations[] block must not crash the linter."""
+    ws = _copy_fixture("clean-baseline", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    assert by_check.get("visualization_address_unresolved", []) == []
+
+
+# ---------------------------------------------------------------------------
 # Override file roundtrip
 # ---------------------------------------------------------------------------
 
