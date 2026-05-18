@@ -211,3 +211,52 @@ def test_as_visualization_aliases():
     assert 'Primary' in update_aliased.__pb_aliases__
     assert 'alt1' in update_aliased.__pb_aliases__
     assert 'alt2' in update_aliased.__pb_aliases__
+
+
+# ----------------------------------------------------------------------------
+# F4 — as_visualization is deprecated in favor of subclassing
+# ----------------------------------------------------------------------------
+
+
+def test_as_visualization_emits_deprecation_warning():
+    """The decorator continues to work but warns at decoration time so
+    authors are nudged toward the canonical subclass form."""
+    import warnings
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+
+        @as_visualization(inputs={'x': 'list[float]'}, name='_F4_TestViz')
+        def update__f4_test_viz(state):
+            return {'html': '<x>' + str(state['x']) + '</x>'}
+
+    dep = [w for w in captured if issubclass(w.category, DeprecationWarning)]
+    assert dep, "expected a DeprecationWarning from as_visualization"
+    msg = str(dep[0].message)
+    assert "deprecated" in msg.lower()
+    assert "subclass Visualization" in msg
+    # The decorated class is still a real Visualization subclass with the
+    # pb-discovery markers; instantiation requires a core (not the point
+    # of this test — covered by the older test_as_visualization_synthesizes_subclass).
+    assert update__f4_test_viz.__name__ == '_F4_TestViz'
+    assert update__f4_test_viz.__pb_kind__ == 'visualization'
+    assert '_F4_TestViz' in update__f4_test_viz.__pb_aliases__
+    assert issubclass(update__f4_test_viz, Visualization)
+
+
+def test_visualization_subclass_does_not_warn():
+    """The canonical subclass path produces no DeprecationWarning. Anchors
+    the recommended pattern as the silent one — workspaces that adopt it
+    don't see migration nudges."""
+    import warnings
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+
+        class _F4_CanonicalViz(Visualization):
+            def inputs(self):
+                return {'x': 'list[float]'}
+
+            def update(self, state):
+                return {'html': '<x>' + str(state.get('x', [])) + '</x>'}
+
+    dep = [w for w in captured if issubclass(w.category, DeprecationWarning)]
+    assert not dep, f"subclass form must be silent; got {[str(w.message) for w in dep]}"

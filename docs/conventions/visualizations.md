@@ -65,6 +65,42 @@ accumulate state in instance attributes (`self.history`, `self.frames`, etc.)
 and produce a fresh figure each step. Plotly and matplotlib both handle the
 resulting recomputation fine for typical workspace simulations.
 
+## Canonical registration: subclass `Visualization`
+
+There is **one canonical way** to register a Visualization: subclass
+`pbg_superpowers.visualization.Visualization` directly. Every shipped
+Visualization in `pbg_superpowers.visualizations.*` follows this pattern,
+and every Visualization in real workspaces (v2ecoli) does too.
+
+The legacy `@as_visualization(...)` decorator continues to work for
+back-compat but emits a `DeprecationWarning` at decoration time. New
+code should not use it. Reasons:
+
+- The decorator registers TWO names per class (PascalCase from `name=`
+  AND the snake_case `update_<x>` suffix), forcing the workspace lint
+  to grep for both forms when resolving `local:Foo` addresses.
+- Subclassing makes the input/output contract explicit at the class
+  definition site instead of buried in decorator kwargs.
+- Subclassing supports the new-style `accumulate()` / `render()` split
+  (see "Render timing convention" above); the decorator only emits the
+  legacy update-every-tick form.
+
+## Canonical address: `local:<ClassName>`
+
+There is **one canonical way** to reference a Visualization from a
+Composite spec or `study.yaml.visualizations[].address`: the
+`local:<ClassName>` form. Every v2ecoli study uses this. The
+`pbg-superpowers` workspace lint validates `local:Foo` addresses by
+scanning every `<package>/visualizations/` subtree for a matching
+`class Foo` declaration.
+
+Dotted module-path addresses (`pkg.module.ClassName`) are *technically*
+accepted by the dashboard's `build_viz_composite`, but they're not used
+in any production study and the lint can't validate them without
+importing arbitrary workspace code. Prefer `local:` for everything you
+declare in `study.yaml`; reserve dotted paths for cross-package
+references where the canonical-form discovery wouldn't reach.
+
 ## Wiring into a Composite spec
 
 A Visualization can be included in a composite spec as a Step, wired to
