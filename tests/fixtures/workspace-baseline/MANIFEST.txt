@@ -11,6 +11,11 @@
 ./docs/decisions.yaml
 ./experiments/README.md
 ./experiments/_runs.yaml
+./notes/README.md
+./notes/agent-notes/.keep
+./notes/decisions/.keep
+./notes/friction/.keep
+./notes/walkthroughs/.keep
 ./pbg_snap/__init__.py
 ./pbg_snap/core.py
 ./pyproject.toml

@@ -31,6 +31,7 @@ If either is missing, the skill should fail with a clear actionable error pointi
 - **One change per commit.** Rebasing/squashing later is fine; cohesive diffs are better than big PRs.
 - **Tests live in `tests/`.** Most skills don't have unit tests (they're shell + curl); the Python package `pbg_superpowers/` does. Run `pytest -q` before committing Python changes.
 - **Don't commit secrets, credentials, or workspace data** (no `.pbg/` state, no `workspace.yaml` from real workspaces).
+- **Cleanup PRs must spare `notes/` and `references/notes/` in workspaces.** Those directories hold the field records (friction logs, walkthroughs, agent transcripts, per-paper notes) that feed the next round of infrastructure improvements. A `chore(cleanup): …` PR that deletes anything under those paths is suspect — surface the deletion to the user and ask for per-file confirmation. See the scaffold's `notes/README.md` for the convention.
 
 ## Common operations cheat-sheet
 
