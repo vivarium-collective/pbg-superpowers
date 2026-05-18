@@ -32,6 +32,18 @@ from pathlib import Path
 
 import pytest
 
+# This integration test crosses the pbg-superpowers ↔ vivarium-dashboard
+# boundary on purpose — that's the whole point of F5. CI environments that
+# don't install vivarium-dashboard (it's a sibling pip-editable dep, not on
+# PyPI) skip cleanly instead of failing. Local developers with the dashboard
+# installed get the full coverage. Same convention test_workspace_scaffold_snapshot
+# uses for its $PBG_TEMPLATE dependency.
+pytest.importorskip(
+    "vivarium_dashboard",
+    reason="integration test needs vivarium-dashboard installed; "
+           "pip install -e ../vivarium-dashboard (sibling checkout)",
+)
+
 from process_bigraph import Composite, allocate_core
 
 from pbg_superpowers.visualization import Visualization
