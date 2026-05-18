@@ -3,7 +3,7 @@ name: pbg-study
 description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|run-baseline|run-variant|set-conclusion|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
+argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|run-baseline|run-variant|set-conclusion|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
 ---
 
 # pbg-study
@@ -238,6 +238,52 @@ POST `/api/study-intervention-delete`:
 ```json
 {"study": "<study-name>", "name": "<n>"}
 ```
+
+### Design→Build gate
+
+#### `verify <slug> [--strict] [--json] [--quiet]`
+
+Spec-verify a study before running it. Catches the cross-reference errors that would otherwise show up only after a Simulate phase: behavior_tests referencing simulations that don't exist, variants pointing at unknown baselines, parent_studies that don't resolve, cite keys missing from the workspace bibliography, findings referencing tests that aren't declared, follow-up proposals linking findings that don't exist.
+
+**What's checked** (workspace-agnostic):
+
+- Every baseline has `name` + `composite`.
+- Every variant references a real baseline (`base_composite` resolves).
+- Every `simulation_set[].from` references a baseline or variant.
+- Every `behavior_tests[].requires_simulation` references a baseline / variant / simulation_set entry.
+- Every `behavior_tests[].measure.observable` references a declared `observables[]` entry (soft-skipped when `observables[]` is absent — many workspaces inline measure shapes).
+- Every `parent_studies` slug resolves under the workspace.
+- Every `cites` bibtex key appears in `references/references.bib` (soft-skipped when no bib file exists).
+- Every `findings[].evidence.from_test` (or `from_tests[]`) resolves to a `behavior_tests[].name`.
+- Every `followup_proposals[].linked_finding` resolves to a `findings[].id`.
+
+**What's NOT checked** (requires workspace runtime; out of scope for the design→build gate):
+
+- Whether the composite actually accepts the variant's parameter overrides (would require importing the composite — needs the workspace venv).
+- Whether observable store paths actually resolve in a real simulation run (would require running the composite or reading initial_state.json — workspace-specific cache layout).
+
+**Arguments:**
+
+- `<slug>` (required) — study under `studies/<slug>/`. Abort if `study.yaml` is missing.
+- `--strict` (optional) — also fail (exit 1) on warnings. Useful in CI.
+- `--json` (optional) — emit `{study_yaml, findings, summary}` JSON for tooling.
+- `--quiet` (optional) — suppress output on success (still nonzero exit on failure).
+
+**Behavior:**
+
+1. Walk up from cwd to find `workspace.yaml`.
+2. Resolve `studies/<slug>/study.yaml`. Abort if absent.
+3. Shell out to the helper:
+   ```bash
+   python3 -m pbg_superpowers.study_verify studies/<slug>/study.yaml
+   ```
+4. Surface findings grouped by level (error / warning / info). Each finding includes a `check:` identifier, dotted `field_path`, and a one-line message.
+5. Exit 0 if clean; exit 1 if any error (or any warning with `--strict`); exit 2 if the study.yaml file doesn't exist.
+
+**Notes:**
+
+- This is a thin wrapper around the Python helper — no dashboard API. The check set lives in `pbg_superpowers/study_verify.py`; tests pin each check (`tests/test_study_verify.py`).
+- Run this after every Design-phase edit. The dashboard's save-time schema validator catches structural errors; `verify` catches semantic cross-reference errors that the schema can't express.
 
 ### Simulate subcommands
 
@@ -703,6 +749,28 @@ print(json.dumps({'route': f'/studies/{os.environ[\"NAME\"]}'}))")
     python3 -m pbg_superpowers.study_findings "$SLUG" --ws "$DIR" "${EXTRA_FLAGS[@]}"
     ;;
 
+  verify)
+    # Design→Build gate. Pure spec check; no API call. The Python helper
+    # walks workspace.yaml + studies/<slug>/study.yaml and surfaces
+    # cross-reference errors before any sim runs.
+    SLUG="${1:-}"
+    [ -n "$SLUG" ] || { echo "ERROR: verify requires a study slug." >&2; exit 1; }
+    shift
+    EXTRA_FLAGS=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --strict|--json|--quiet) EXTRA_FLAGS+=("$1"); shift ;;
+        *) echo "unknown flag: $1" >&2; exit 1 ;;
+      esac
+    done
+    STUDY_YAML="$DIR/studies/$SLUG/study.yaml"
+    if [ ! -f "$STUDY_YAML" ]; then
+      echo "ERROR: $STUDY_YAML not found." >&2
+      exit 2
+    fi
+    python3 -m pbg_superpowers.study_verify "$STUDY_YAML" "${EXTRA_FLAGS[@]}"
+    ;;
+
   *)
     cat <<EOF
 Usage:
@@ -724,6 +792,7 @@ Usage:
   /pbg-study intervention-update <study-name> --name <n> --description '<text>'
   /pbg-study intervention-delete <study-name> --name <n>
 
+  /pbg-study verify              <study-slug> [--strict] [--json] [--quiet]
   /pbg-study findings            <study-slug> [--auto] [--dry-run]
 
   /pbg-study propose-followup    <parent-slug> --id <id> --title '<t>' --motivation '<m>' [--mechanism '<hyp>'] [--seed-from-file <path>] [--dry-run]
@@ -773,6 +842,13 @@ esac
 - Single-cell only
 ## Next steps
 - Multi-cell run"
+
+# Verify the spec before kicking off a Simulate phase
+/pbg-study verify dnaa-01-expression-dynamics
+# CI-style: fail on warnings too
+/pbg-study verify dnaa-01-expression-dynamics --strict
+# Tooling-style: emit JSON for a wrapper script
+/pbg-study verify dnaa-01-expression-dynamics --json
 
 # Walk a study's behavior_test outcomes and propose structured findings
 /pbg-study findings dnaa-01-expression-dynamics
