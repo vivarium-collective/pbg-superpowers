@@ -958,6 +958,60 @@ def _check_dag_edges_legacy_and_canonical_both_set(ctx: _LintContext) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 13. status_legacy_only — F1 (multi-axis status canonical)
+# ---------------------------------------------------------------------------
+
+
+_MULTI_AXIS_STATUS_FIELDS = (
+    "design_status",
+    "implementation_status",
+    "simulation_status",
+    "evaluation_status",
+    "gate_status",
+    "expert_review_status",
+)
+
+
+def _check_status_legacy_only(ctx: _LintContext) -> None:
+    """A study should set at least one Pass A multi-axis status field
+    (design_status, implementation_status, simulation_status,
+    evaluation_status, gate_status, expert_review_status) instead of the
+    legacy `status` enum. The dashboard's effective_status() helper still
+    falls back to `status` for back-compat, but the legacy field can't
+    carry the orthogonal-axes semantics — a study can be
+    `simulation_status: ran` AND `evaluation_status: failed_evaluation`
+    at the same time, which a single `status` can't express.
+
+    Fires a warning when `status` is set and NO multi-axis field is set.
+    Silent when at least one multi-axis field is set (regardless of
+    whether `status` is ALSO set — the dashboard prefers the multi-axis
+    value, so redundancy here is harmless drift, not a foot-gun).
+    """
+    legacy = ctx.spec.get("status")
+    if not legacy:
+        return
+    has_multi_axis = any(ctx.spec.get(f) for f in _MULTI_AXIS_STATUS_FIELDS)
+    if has_multi_axis:
+        return
+    ctx.add(
+        level="warning",
+        field_path="status",
+        message=(
+            f"Study uses the legacy `status: {legacy!r}` field with no "
+            "multi-axis status set. The canonical fields are the six "
+            "Pass A axes (design_status, implementation_status, "
+            "simulation_status, evaluation_status, gate_status, "
+            "expert_review_status). The dashboard still reads `status` "
+            "as a back-compat fallback, but the legacy enum can't carry "
+            "the orthogonal-axes semantics — e.g. a study can be "
+            "simulation_status:ran AND evaluation_status:failed_evaluation "
+            "simultaneously, which `status` alone cannot express."
+        ),
+        check="status_legacy_only",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -975,6 +1029,7 @@ _CHECK_FUNCTIONS = (
     _check_finding_references_unknown_expert_doc,
     _check_visualization_addresses,
     _check_dag_edges_legacy_and_canonical_both_set,
+    _check_status_legacy_only,
 )
 
 
