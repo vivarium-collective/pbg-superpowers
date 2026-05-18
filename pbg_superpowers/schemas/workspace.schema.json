@@ -20,6 +20,10 @@
         "workspace_bootstrap": {"$ref": "#/definitions/stageStatus"}
       }
     },
+    "phases": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/phase"}
+    },
     "observables": {
       "type": "array",
       "items": {"$ref": "#/definitions/observable"}
@@ -56,6 +60,16 @@
     "tasks": {
       "type": "array",
       "items": {"$ref": "#/definitions/task"}
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "composite_view": {
+          "enum": ["loom-explore", "bigraph-viz"],
+          "description": "Which renderer the dashboard uses for composite wiring. Default 'loom-explore' (interactive React Flow). Set to 'bigraph-viz' to fall back to the legacy static SVG render."
+        }
+      }
     }
   },
   "definitions": {
@@ -87,6 +101,26 @@
         }
       }
     },
+    "phase": {
+      "type": "object",
+      "required": ["n", "name", "status"],
+      "properties": {
+        "n": {"type": "integer", "minimum": 1},
+        "name": {"type": "string"},
+        "status": {"enum": ["planned", "in_progress", "gate_pending", "complete"]},
+        "pr": {"type": ["integer", "null"]},
+        "gate_passed": {"type": "boolean"},
+        "opened_pr": {"type": ["integer", "null"]},
+        "prereq_phases": {"type": "array", "items": {"type": "integer"}},
+        "source_artifact": {
+          "type": "object",
+          "properties": {
+            "kind": {"enum": ["expert_doc", "dataset", "reference", "claim"]},
+            "ref": {"type": "string"}
+          }
+        }
+      }
+    },
     "observable": {
       "type": "object",
       "required": ["name", "store_path"],
@@ -104,8 +138,13 @@
       "properties": {
         "name": {"type": "string", "minLength": 1, "pattern": "^[a-zA-Z0-9_-]+$"},
         "description": {"type": "string"},
+        "class": {
+          "type": "string",
+          "description": "Registered Visualization class name (e.g. 'TimeSeriesPlot'). When set, the entry is a configured instance of that class and is renderable immediately without /pbg-viz code generation."
+        },
         "type": {"enum": ["time-series", "phase-space", "heatmap", "histogram"]},
         "observables": {"type": "array", "items": {"type": "string"}},
+        "phases": {"type": "array", "items": {"type": "integer", "minimum": 1}},
         "simulation": {"type": "string"},
         "config": {"type": "object"}
       }
@@ -122,6 +161,7 @@
         "initial_state": {"type": "object", "description": "Path-keyed initial values; structure free-form"},
         "parameter_overrides": {"type": "object", "description": "Process-config overrides; structure free-form"},
         "emitter_config": {"type": "object", "description": "Emitter settings (paths to record, sample interval, etc.)"},
+        "phases": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "Phase numbers this simulation belongs to (empty = global)"},
         "processes": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Names of processes from the registry that this simulation expects (declarative tag — does not drive composite construction)"},
         "composite": {
           "type": "string",
