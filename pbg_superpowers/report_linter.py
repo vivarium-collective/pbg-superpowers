@@ -1012,6 +1012,110 @@ def _check_status_legacy_only(ctx: _LintContext) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 14. runs_yaml_vs_db_drift — F2 (runs.db is canonical)
+# ---------------------------------------------------------------------------
+
+
+def _runs_db_path(ws_root: Path, slug: str) -> Path:
+    return ws_root / "studies" / slug / "runs.db"
+
+
+def _runs_db_run_ids(ws_root: Path, slug: str) -> set[str]:
+    """Return the set of run_ids in studies/<slug>/runs.db (runs_meta +
+    simulations). Empty set if the DB is missing or broken."""
+    db = _runs_db_path(ws_root, slug)
+    if not db.is_file():
+        return set()
+    import sqlite3 as _sql
+    out: set[str] = set()
+    try:
+        conn = _sql.connect(str(db))
+        tables = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        if "runs_meta" in tables:
+            for r in conn.execute("SELECT run_id FROM runs_meta"):
+                out.add(r[0])
+        if "simulations" in tables:
+            for r in conn.execute("SELECT simulation_id FROM simulations"):
+                out.add(r[0])
+        conn.close()
+    except _sql.Error:
+        return set()
+    return out
+
+
+def _check_runs_yaml_vs_db_drift(ctx: _LintContext) -> None:
+    """Per F2, runs.db is the canonical record of which runs exist. The
+    `study.yaml.runs[]` field stays in the schema as a soft-deprecated
+    back-compat shim — the dashboard still reads it as a fallback count,
+    but new runs land only in runs.db.
+
+    Drift is a foot-gun in two directions:
+
+    - WARNING: `runs[]` has run_ids that runs.db does NOT have. Either
+      the run records were copied from a previous workspace without
+      copying runs.db, or the DB was wiped and the yaml wasn't —
+      either way the dashboard will keep showing those runs but the
+      Runs tab can't pull their metadata. Tell the user to either
+      restore runs.db or migrate (drop the legacy entries).
+
+    - INFO: `runs[]` and runs.db both list the same run_ids. Redundant
+      but not broken — the workspace is mid-migration. Migrate at next
+      edit.
+
+    Silent when:
+    - `runs[]` is absent or empty (the F2 target state).
+    - runs.db doesn't exist AND `runs[]` is also empty (pristine study).
+    """
+    yaml_runs = ctx.spec.get("runs") or []
+    if not yaml_runs:
+        return
+
+    yaml_ids = {
+        r.get("run_id") for r in yaml_runs
+        if isinstance(r, dict) and r.get("run_id")
+    }
+    if not yaml_ids:
+        return  # malformed entries — out of scope
+
+    db_ids = _runs_db_run_ids(ctx.ws_root, ctx.slug)
+    yaml_only = yaml_ids - db_ids
+
+    if yaml_only:
+        ctx.add(
+            level="warning",
+            field_path="runs",
+            message=(
+                f"study.yaml.runs[] lists {len(yaml_only)} run_id(s) absent "
+                f"from runs.db: {sorted(yaml_only)[:3]}"
+                + (" …" if len(yaml_only) > 3 else "")
+                + ". F2: runs.db is the canonical source of truth. The "
+                "dashboard reads runs[] as a back-compat fallback, but "
+                "metadata (params, started_at, log_path) only lives in "
+                "runs.db. Either restore the runs.db rows or migrate by "
+                "dropping these entries from study.yaml.runs[]."
+            ),
+            check="runs_yaml_vs_db_drift",
+        )
+        return
+
+    # All yaml ids are also in db_ids — redundant entries from a legacy
+    # write path. Migration is to drop runs[] entirely.
+    ctx.add(
+        level="info",
+        field_path="runs",
+        message=(
+            f"study.yaml.runs[] redundantly lists {len(yaml_ids)} run_id(s) "
+            "that runs.db already records. F2 makes runs.db canonical — "
+            "drop study.yaml.runs[] at the next edit. The dashboard reads "
+            "it only as a back-compat fallback count."
+        ),
+        check="runs_yaml_vs_db_redundant",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -1030,6 +1134,7 @@ _CHECK_FUNCTIONS = (
     _check_visualization_addresses,
     _check_dag_edges_legacy_and_canonical_both_set,
     _check_status_legacy_only,
+    _check_runs_yaml_vs_db_drift,
 )
 
 

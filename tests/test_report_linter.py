@@ -404,6 +404,83 @@ def test_status_legacy_only_silent_on_findings_internal_status(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# 14. runs_yaml_vs_db_drift — F2 (runs.db is canonical)
+# ---------------------------------------------------------------------------
+
+
+def _seed_runs_db(ws: Path, study_slug: str, run_ids: list[str]) -> None:
+    """Populate studies/<slug>/runs.db with runs_meta rows for the given ids."""
+    import sqlite3
+    db = ws / "studies" / study_slug / "runs.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db))
+    conn.execute("""
+        CREATE TABLE runs_meta (
+            run_id      TEXT PRIMARY KEY,
+            spec_id     TEXT NOT NULL,
+            started_at  REAL NOT NULL,
+            status      TEXT NOT NULL,
+            sim_name    TEXT
+        )
+    """)
+    for rid in run_ids:
+        conn.execute(
+            "INSERT INTO runs_meta (run_id, spec_id, started_at, status, sim_name) "
+            "VALUES (?, 'pkg.x', 1.0, 'completed', ?)", (rid, rid),
+        )
+    conn.commit()
+    conn.close()
+
+
+def test_runs_yaml_vs_db_drift_warns_on_yaml_only_entries(tmp_path):
+    """study.yaml.runs[] lists run_ids that runs.db doesn't have. The
+    dashboard shows them via the back-compat count fallback but can't
+    pull metadata — flag as warning so the author either restores
+    runs.db or drops the legacy entries."""
+    ws = _copy_fixture("runs-yaml-drift-missing-db", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    drift = by_check.get("runs_yaml_vs_db_drift", [])
+    assert len(drift) == 1
+    f = drift[0]
+    assert f.level == "warning"
+    assert f.study_slug == "drift"
+    # Names at least one of the offending run_ids
+    assert "ghost-1" in f.message or "ghost-2" in f.message
+    assert "runs.db" in f.message
+    # The redundant variant must NOT fire.
+    assert by_check.get("runs_yaml_vs_db_redundant", []) == []
+
+
+def test_runs_yaml_vs_db_redundant_fires_info(tmp_path):
+    """yaml entries that exactly match runs.db are redundant — info-level
+    (not a warning) because nothing is actually broken; the workspace is
+    mid-migration."""
+    ws = _copy_fixture("runs-yaml-redundant", tmp_path / "ws")
+    _seed_runs_db(ws, "redundant", ["r1", "r2"])
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    redundant = by_check.get("runs_yaml_vs_db_redundant", [])
+    assert len(redundant) == 1
+    f = redundant[0]
+    assert f.level == "info"
+    assert f.study_slug == "redundant"
+    assert "drop study.yaml.runs[]" in f.message
+    # The drift warning must NOT fire — all yaml ids are in db.
+    assert by_check.get("runs_yaml_vs_db_drift", []) == []
+
+
+def test_runs_yaml_vs_db_drift_silent_when_yaml_empty(tmp_path):
+    """The F2 target state — study.yaml has no runs[] field — must be
+    silent regardless of what's in runs.db."""
+    ws = _copy_fixture("clean-baseline", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    assert by_check.get("runs_yaml_vs_db_drift", []) == []
+    assert by_check.get("runs_yaml_vs_db_redundant", []) == []
+
+
+# ---------------------------------------------------------------------------
 # Override file roundtrip
 # ---------------------------------------------------------------------------
 
