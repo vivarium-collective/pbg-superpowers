@@ -12,9 +12,19 @@ Usage (from a composite or investigation spec):
         config: {observable: free_DnaA, sources: [baseline]}
 """
 from pbg_superpowers.visualizations.time_series import TimeSeriesPlot
+from pbg_superpowers.visualizations.timeseries_from_observables import (
+    TimeSeriesFromObservables,
+)
 from pbg_superpowers.visualizations.param_vs_observable import ParamVsObservable
 from pbg_superpowers.visualizations.distribution import Distribution
 from pbg_superpowers.visualizations.phase_space import PhaseSpace
 from pbg_superpowers.visualizations.heatmap import Heatmap
 
-__all__ = ["TimeSeriesPlot", "ParamVsObservable", "Distribution", "PhaseSpace", "Heatmap"]
+__all__ = [
+    "TimeSeriesPlot",
+    "TimeSeriesFromObservables",
+    "ParamVsObservable",
+    "Distribution",
+    "PhaseSpace",
+    "Heatmap",
+]
