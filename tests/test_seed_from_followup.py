@@ -38,6 +38,25 @@ def _make_parent_study(tmp_path: Path) -> Path:
     spec = {
         "name": "dnaa-01",
         "baseline": [{"name": "b1", "composite": "pkg.composites.x"}],
+        "behavior_tests": [
+            {
+                "name": "dnaA-atp-fraction",
+                "classification": "supporting",
+                "description": "DnaA-ATP fraction tracks literature band.",
+                "measure": {"kind": "ratio", "numerator": "DnaA_ATP",
+                            "denominator": "DnaA_total"},
+                "pass_if": {"op": "between", "lo": 0.2, "hi": 0.3},
+                "units": "dimensionless",
+                "requires_simulation": "baseline",
+                "cites": ["boesen2024"],
+            },
+            {
+                "name": "unrelated-test",
+                "classification": "diagnostic",
+                "measure": {"kind": "scalar"},
+                "pass_if": {"op": ">", "value": 0},
+            },
+        ],
         "findings": [
             {
                 "id": "F-03",
@@ -107,12 +126,11 @@ def test_build_child_seed_from_finding_populates_all_three_blocks(tmp_path):
     # key_assumptions picks up the smoking_gun string
     assert len(seed.key_assumptions) == 1
     assert "DnaA-ATP" in seed.key_assumptions[0]
-    # seeded_from has all three sub-fields
-    assert seed.seeded_from == {
-        "study": "dnaa-01",
-        "proposal_id": "calibrate-dars",
-        "finding": "F-03",
-    }
+    # seeded_from carries study + proposal + finding + a copy of evidence
+    assert seed.seeded_from["study"] == "dnaa-01"
+    assert seed.seeded_from["proposal_id"] == "calibrate-dars"
+    assert seed.seeded_from["finding"] == "F-03"
+    assert seed.seeded_from["evidence"]["from_test"] == "dnaA-atp-fraction"
 
 
 def test_build_child_seed_handles_finding_without_optional_fields(tmp_path):
@@ -129,6 +147,88 @@ def test_build_child_seed_handles_finding_without_optional_fields(tmp_path):
     assert "expected_outcome" not in seed.purpose
     assert seed.key_assumptions == []
     assert seed.seeded_from["finding"] == "F-04"
+    # Without next_action / explanation / from_test, the enriched blocks
+    # are empty — the seed degrades gracefully.
+    assert seed.pipeline_gate == {}
+    assert seed.behavior_tests == []
+    assert seed.model_change == {}
+    assert "evidence" not in seed.seeded_from
+
+
+def test_build_child_seed_carries_parent_behavior_test(tmp_path):
+    """The behavior_test named by finding.evidence.from_test is copied
+    into the child as ``classification: primary`` — it's the test the
+    follow-up exists to make pass."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    seed = sff.build_child_seed_from_finding(
+        parent, "dnaa-01", "calibrate-dars", "F-03",
+    )
+    assert len(seed.behavior_tests) == 1
+    bt = seed.behavior_tests[0]
+    assert bt["name"] == "dnaA-atp-fraction"
+    # Reclassified — this is the child's reason to exist.
+    assert bt["classification"] == "primary"
+    # Measure/pass_if/cites copied through.
+    assert bt["measure"]["kind"] == "ratio"
+    assert bt["pass_if"]["op"] == "between"
+    assert "boesen2024" in bt["cites"]
+
+
+def test_build_child_seed_populates_pipeline_gate_from_next_action(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    seed = sff.build_child_seed_from_finding(
+        parent, "dnaa-01", "calibrate-dars", "F-03",
+    )
+    assert seed.pipeline_gate["proceed_condition"].startswith(
+        "Calibrate the DARS reactivation rate"
+    )
+
+
+def test_build_child_seed_populates_model_change_when_explanation_present(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    seed = sff.build_child_seed_from_finding(
+        parent, "dnaa-01", "calibrate-dars", "F-03",
+    )
+    # The model_change notes points the reader at purpose.mechanism so the
+    # explanation isn't duplicated.
+    assert "TBD" in seed.model_change["notes"]
+    assert "purpose.mechanism" in seed.model_change["notes"]
+
+
+def test_build_child_seed_skips_carryover_when_from_test_unknown(tmp_path):
+    """If the finding names a test that doesn't exist in the parent's
+    behavior_tests, we silently skip the carryover (the prose flow will
+    still propose primary tests during Build)."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    # Mutate F-03 to point at a non-existent test name.
+    for f in parent["findings"]:
+        if f["id"] == "F-03":
+            f["evidence"]["from_test"] = "no-such-test"
+    seed = sff.build_child_seed_from_finding(
+        parent, "dnaa-01", "calibrate-dars", "F-03",
+    )
+    assert seed.behavior_tests == []
+
+
+def test_build_child_seed_supports_evidence_from_tests_list(tmp_path):
+    """A finding can list multiple tests via evidence.from_tests; all
+    matched parent tests are carried over."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    for f in parent["findings"]:
+        if f["id"] == "F-03":
+            f["evidence"].pop("from_test", None)
+            f["evidence"]["from_tests"] = ["dnaA-atp-fraction", "unrelated-test"]
+    seed = sff.build_child_seed_from_finding(
+        parent, "dnaa-01", "calibrate-dars", "F-03",
+    )
+    names = [t["name"] for t in seed.behavior_tests]
+    assert names == ["dnaA-atp-fraction", "unrelated-test"]
+    assert all(t["classification"] == "primary" for t in seed.behavior_tests)
 
 
 def test_build_child_seed_raises_on_unknown_finding(tmp_path):
@@ -222,7 +322,8 @@ def test_child_seed_merge_into_dedups_key_assumptions(tmp_path):
 
 def test_child_seed_merge_into_merges_seeded_from_with_existing(tmp_path):
     """If the propose-followup step already wrote {study, proposal_id},
-    the --from-finding helper adds `finding:` without nuking the rest."""
+    the --from-finding helper adds `finding:` + `evidence:` without
+    nuking the rest."""
     parent_yaml = _make_parent_study(tmp_path)
     parent = yaml.safe_load(parent_yaml.read_text())
     seed = sff.build_child_seed_from_finding(
@@ -230,11 +331,66 @@ def test_child_seed_merge_into_merges_seeded_from_with_existing(tmp_path):
     )
     child = {"seeded_from": {"study": "dnaa-01", "proposal_id": "calibrate-dars"}}
     merged = seed.merge_into(child)
-    assert merged["seeded_from"] == {
-        "study": "dnaa-01",
-        "proposal_id": "calibrate-dars",
-        "finding": "F-03",
+    assert merged["seeded_from"]["study"] == "dnaa-01"
+    assert merged["seeded_from"]["proposal_id"] == "calibrate-dars"
+    assert merged["seeded_from"]["finding"] == "F-03"
+    assert merged["seeded_from"]["evidence"]["from_test"] == "dnaA-atp-fraction"
+
+
+def test_child_seed_merge_into_preserves_existing_pipeline_gate_keys(tmp_path):
+    """If a prior step wrote pipeline_gate.proceed_condition, the seed
+    must not overwrite it. New keys still add."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    seed = sff.build_child_seed_from_finding(
+        parent, "dnaa-01", "calibrate-dars", "F-03",
+    )
+    child = {
+        "pipeline_gate": {
+            "proceed_condition": "Hand-written condition wins.",
+            "prerequisites": ["dnaa-01"],
+        }
     }
+    merged = seed.merge_into(child)
+    assert merged["pipeline_gate"]["proceed_condition"] == (
+        "Hand-written condition wins."
+    )
+    assert merged["pipeline_gate"]["prerequisites"] == ["dnaa-01"]
+
+
+def test_child_seed_merge_into_dedups_behavior_tests_by_name(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    seed = sff.build_child_seed_from_finding(
+        parent, "dnaa-01", "calibrate-dars", "F-03",
+    )
+    child = {
+        "behavior_tests": [
+            {"name": "dnaA-atp-fraction", "classification": "primary",
+             "description": "Hand-edited; should win."},
+        ]
+    }
+    merged = seed.merge_into(child)
+    # Existing entry kept; carryover suppressed because name matches.
+    assert len(merged["behavior_tests"]) == 1
+    assert merged["behavior_tests"][0]["description"] == (
+        "Hand-edited; should win."
+    )
+
+
+def test_child_seed_merge_into_skips_model_change_when_child_has_string_shape(tmp_path):
+    """If the child already has a string-shape model_change (terse summary),
+    leave it alone — the operator can promote to object form manually."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    seed = sff.build_child_seed_from_finding(
+        parent, "dnaa-01", "calibrate-dars", "F-03",
+    )
+    child = {"model_change": "Recalibrate DARS rate (1 param change)."}
+    merged = seed.merge_into(child)
+    assert merged["model_change"] == (
+        "Recalibrate DARS rate (1 param change)."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +447,11 @@ def test_cli_happy_path_exits_zero_and_prints_diffs(tmp_path):
     assert "F-03" in cp.stdout
     assert "calibrate-dars" in cp.stdout
     assert "dnaa-02-dars-calibration" in cp.stdout
+    # Enrichment surfaces in the preview.
+    assert "pipeline_gate" in cp.stdout
+    assert "behavior_tests" in cp.stdout
+    assert "dnaA-atp-fraction" in cp.stdout
+    assert "model_change" in cp.stdout
 
 
 def test_cli_unknown_finding_exits_2(tmp_path):
