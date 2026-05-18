@@ -331,6 +331,16 @@ Run a variant. The server resolves the variant's `base_composite` against the St
 {"study": "<study-name>", "variant": "<n>", "steps": 5}
 ```
 
+> **Gap — declarative sweeps not yet runnable.** The `study.yaml` schema
+> (`pbg-template`, Pass B) accepts `simulation_set` entries with
+> `kind: sweep`, `axes`, `seeds`, `metrics`, `candidate_selection`, and
+> populated-after-execution fields (`runs[]`, `aggregate_metrics`,
+> `candidates_selected`, `rejection_reasons`). No `run-sweep` subcommand
+> consumes that shape today — `run-baseline` / `run-variant` only handle
+> single entries. Adding a runner is tracked as Tier-B/B3 from the v2ecoli
+> feedback synthesis; build it when a real workspace needs to execute a
+> declared sweep.
+
 ### Evaluate subcommands
 
 No `pbg-study` subcommands run here directly. Evaluation is driven by:
