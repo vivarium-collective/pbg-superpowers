@@ -124,14 +124,42 @@ def _is_new_style(instance) -> bool:
 
 
 def as_visualization(inputs, name=None, demo=None, aliases=None):
-    """Decorator: convert an ``update_*`` pure function into a Visualization subclass.
+    """**Deprecated** — prefer subclassing ``Visualization`` directly.
 
+    Decorator: convert an ``update_*`` pure function into a Visualization subclass.
     The function must be named ``update_<viz_name>`` and accept
     ``state: dict`` -> ``{'html': str}``.
 
-    Functions decorated this way use the LEGACY contract — every call to
-    ``update(state)`` renders. This is appropriate for stateless renderers
-    that take a full-trajectory state dict in dashboard post-hoc mode.
+    Why deprecated (F4 of the framework cleanup):
+
+    - Every shipped Visualization in ``pbg_superpowers.visualizations.*`` and
+      every Visualization in real workspaces (v2ecoli) uses explicit
+      subclassing. The decorator path is only exercised by tests.
+    - The decorator registers TWO names per class (PascalCase from ``name``
+      AND the snake_case ``update_<x>`` suffix), forcing the workspace lint
+      to grep for both forms when resolving ``local:Foo`` addresses.
+    - Subclassing makes the input/output contract explicit at the class
+      definition site instead of buried in decorator kwargs, which is
+      easier to read and to extend (accumulate/render new-style).
+
+    Migration::
+
+        # before
+        @as_visualization(inputs={'x': 'list[float]'}, name='MyViz')
+        def update_my_viz(state):
+            return {'html': '<x>' + str(state['x']) + '</x>'}
+
+        # after
+        class MyViz(Visualization):
+            def inputs(self):
+                return {'x': 'list[float]'}
+
+            def update(self, state):
+                return {'html': '<x>' + str(state['x']) + '</x>'}
+
+    The decorator continues to work for back-compat — existing call sites
+    don't need to migrate immediately. A DeprecationWarning fires at
+    decoration time so authors see the nudge.
 
     Args:
         inputs:  typed input port map (same shape as Visualization.inputs()).
@@ -143,6 +171,17 @@ def as_visualization(inputs, name=None, demo=None, aliases=None):
     Returns the synthesized Visualization subclass, ready to be registered by
     ``bigraph_schema.discover_packages()`` when the enclosing module is walked.
     """
+    import warnings as _warnings
+    _warnings.warn(
+        "as_visualization is deprecated; subclass Visualization directly. "
+        "See the docstring for a migration example. The decorator continues "
+        "to work but new code should use the subclass form for clarity and "
+        "to avoid the double-name (snake_case + PascalCase) registration "
+        "the decorator emits.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     def decorator(func):
         if not func.__name__.startswith("update_"):
             raise AssertionError(
