@@ -358,6 +358,52 @@ def test_dag_edges_check_silent_on_clean_baseline(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# 13. status_legacy_only — F1 (multi-axis status canonical)
+# ---------------------------------------------------------------------------
+
+
+def test_status_legacy_only_fires_migration_warning(tmp_path):
+    """A study with top-level `status` but no multi-axis fields fires the
+    migration warning — same message shape as the runtime DeprecationWarning
+    from effective_status()."""
+    ws = _copy_fixture("status-legacy-only", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    legacy = by_check.get("status_legacy_only", [])
+    assert len(legacy) == 1
+    f = legacy[0]
+    assert f.level == "warning"
+    assert f.study_slug == "legacy-status"
+    assert "in-progress" in f.message
+    # Names all six axes so the author can pick the right one.
+    for axis in ("design_status", "implementation_status", "simulation_status",
+                 "evaluation_status", "gate_status", "expert_review_status"):
+        assert axis in f.message
+
+
+def test_status_legacy_only_silent_when_multi_axis_set(tmp_path):
+    """The `clean-baseline` fixture sets `status` alongside multi-axis
+    fields. The check is silent there because at least one multi-axis
+    field carries the canonical value — redundancy is harmless drift,
+    not a foot-gun."""
+    ws = _copy_fixture("clean-baseline", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    assert by_check.get("status_legacy_only", []) == []
+
+
+def test_status_legacy_only_silent_on_findings_internal_status(tmp_path):
+    """`findings[].status` is a different field (confirms/contradicts/etc).
+    The check reads spec.get("status") which targets the TOP LEVEL only,
+    so the finding-related fixtures with nested status fields stay silent
+    on this check."""
+    ws = _copy_fixture("finding-unknown-bib", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    assert by_check.get("status_legacy_only", []) == []
+
+
+# ---------------------------------------------------------------------------
 # Override file roundtrip
 # ---------------------------------------------------------------------------
 
