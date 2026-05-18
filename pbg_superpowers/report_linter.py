@@ -776,6 +776,103 @@ def _check_finding_references_unknown_expert_doc(ctx: _LintContext) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 11. visualization_address_unresolved
+# ---------------------------------------------------------------------------
+
+
+import re as _re
+
+_VIZ_CLASS_RE = _re.compile(r"^\s*class\s+(\w+)\s*[\(:]", _re.MULTILINE)
+_VIZ_DEF_RE = _re.compile(r"^\s*def\s+update_(\w+)\s*\(", _re.MULTILINE)
+
+
+def _viz_classes_in_workspace(ws_root: Path) -> set[str]:
+    """Scan every <ws_root>/*/visualizations/ and <ws_root>/visualizations/
+    for class definitions and `update_*` factory functions. Returns the set
+    of names that a `local:<Name>` address could resolve to.
+
+    Static analysis only — no module import. For `update_foo_bar` the helper
+    yields both `foo_bar` and `FooBar` (the `as_visualization` decorator
+    derives the registered class name from the function's snake_case
+    suffix, and dashboard usage uses either form).
+    """
+    out: set[str] = set()
+    candidates: list[Path] = []
+    try:
+        children = list(ws_root.iterdir())
+    except OSError:
+        return out
+    for child in children:
+        if not child.is_dir():
+            continue
+        v = child / "visualizations"
+        if v.is_dir():
+            candidates.append(v)
+    direct = ws_root / "visualizations"
+    if direct.is_dir():
+        candidates.append(direct)
+    for d in candidates:
+        for py in d.rglob("*.py"):
+            try:
+                src = py.read_text()
+            except (OSError, UnicodeDecodeError):
+                continue
+            for m in _VIZ_CLASS_RE.finditer(src):
+                out.add(m.group(1))
+            for m in _VIZ_DEF_RE.finditer(src):
+                snake = m.group(1)
+                pascal = "".join(part.capitalize() for part in snake.split("_"))
+                out.add(snake)
+                out.add(pascal)
+    return out
+
+
+def _check_visualization_addresses(ctx: _LintContext) -> None:
+    """Each ``study.visualizations[].address`` of the form ``local:<Name>``
+    must resolve to a class declared somewhere under a workspace
+    ``<package>/visualizations/`` directory. Otherwise the dashboard renders
+    the entry as text with no chart and gives no clue why.
+
+    Dotted-path addresses (``pkg.module.ClassName``) are intentionally NOT
+    checked here — that would require importing arbitrary workspace code
+    inside the linter. Authors of dotted addresses should test them with
+    ``/pbg-study preview-viz``.
+    """
+    viz = ctx.spec.get("visualizations") or []
+    if not isinstance(viz, list):
+        return
+    known: set[str] | None = None  # lazy: only scan the FS when needed
+    for idx, v in enumerate(viz):
+        if not isinstance(v, dict):
+            continue
+        addr = v.get("address")
+        if not isinstance(addr, str) or not addr:
+            continue
+        if not addr.startswith("local:"):
+            continue  # dotted paths out of scope
+        cls = addr[len("local:"):].strip()
+        if not cls:
+            continue
+        if known is None:
+            known = _viz_classes_in_workspace(ctx.ws_root)
+        if cls in known:
+            continue
+        viz_name = v.get("name", f"<index-{idx}>")
+        ctx.add(
+            level="error",
+            field_path=f"visualizations[{idx}].address",
+            message=(
+                f"Visualization {viz_name!r} address {addr!r} is not registered. "
+                f"No class {cls!r} was found under any workspace "
+                f"<package>/visualizations/ directory. Add the class there, "
+                f"or change the address to a dotted module path "
+                f"(e.g. 'pbg_superpowers.visualizations.TimeSeriesFromObservables')."
+            ),
+            check="visualization_address_unresolved",
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -791,6 +888,7 @@ _CHECK_FUNCTIONS = (
     _check_finding_without_evidence,
     _check_finding_cites_unknown_bib_key,
     _check_finding_references_unknown_expert_doc,
+    _check_visualization_addresses,
 )
 
 
