@@ -3,7 +3,7 @@ name: pbg-study
 description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|run-baseline|run-variant|set-conclusion|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
+argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|set-conclusion|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
 ---
 
 # pbg-study
@@ -284,6 +284,32 @@ Spec-verify a study before running it. Catches the cross-reference errors that w
 
 - This is a thin wrapper around the Python helper — no dashboard API. The check set lives in `pbg_superpowers/study_verify.py`; tests pin each check (`tests/test_study_verify.py`).
 - Run this after every Design-phase edit. The dashboard's save-time schema validator catches structural errors; `verify` catches semantic cross-reference errors that the schema can't express.
+
+#### `preview-viz <slug> [--name <viz-name>]`
+
+Re-render the study's declared `visualizations[]` against whatever data exists, so a misconfigured viz fails in seconds instead of after a full Simulate phase. POST `/api/study-viz-render`:
+
+```json
+{"name": "<slug>"}
+```
+
+The dashboard builds a 1-step composite for each viz entry, runs it against the workspace's `core`, and writes the rendered HTML to `studies/<slug>/viz/<viz-name>.html`. The response lists the rendered paths and surfaces per-viz render errors so you can fix them before kicking off a long run.
+
+**Arguments:**
+
+- `<slug>` (required) — study under `studies/<slug>/`.
+- `--name <viz-name>` (optional) — server-side filtering by viz name is not yet implemented; this flag is reserved for forward compatibility. Today the endpoint always re-renders all declared viz; the skill still accepts the flag and grep-filters the response client-side.
+
+**Behavior:**
+
+1. Walk up from cwd to find `workspace.yaml`.
+2. POST `{name: <slug>}` to `/api/study-viz-render`. Surfaces a 404 if the study doesn't exist; a 500 with `error: render failed: ...` if a viz raised.
+3. Print the JSON response: `{ok, study, n_visualizations, viz_paths}`. When `--name` is set, restrict the printed `viz_paths` to entries ending with `/<viz-name>.html`.
+
+**Notes:**
+
+- This is the build-phase counterpart of `verify`. `verify` catches static spec errors; `preview-viz` catches dynamic render errors (missing observables in the composite, wrong registry address for the Visualization class, bad config kwargs).
+- Repeated invocations are idempotent — each viz HTML is overwritten in place.
 
 ### Simulate subcommands
 
@@ -771,6 +797,44 @@ print(json.dumps({'route': f'/studies/{os.environ[\"NAME\"]}'}))")
     python3 -m pbg_superpowers.study_verify "$STUDY_YAML" "${EXTRA_FLAGS[@]}"
     ;;
 
+  preview-viz)
+    # Build-phase render dry-run. Re-renders the study's declared
+    # visualizations[] via the dashboard's /api/study-viz-render endpoint
+    # so render errors (missing observables, wrong viz address, bad config)
+    # surface in seconds instead of after a full Simulate.
+    SLUG="${1:-}"
+    [ -n "$SLUG" ] || { echo "ERROR: preview-viz requires a study slug." >&2; exit 1; }
+    shift
+    FILTER_NAME=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --name) FILTER_NAME="$2"; shift 2 ;;
+        *) echo "unknown flag: $1" >&2; exit 1 ;;
+      esac
+    done
+    BODY=$(NAME="$SLUG" python3 -c "
+import json, os
+print(json.dumps({'name': os.environ['NAME']}))")
+    RAW=$(curl -sf -X POST -H "Content-Type: application/json" \
+      -d "$BODY" "$URL/api/study-viz-render" || true)
+    if [ -z "$RAW" ]; then
+      echo "ERROR: /api/study-viz-render returned no body (study missing or server error)." >&2
+      exit 1
+    fi
+    if [ -n "$FILTER_NAME" ]; then
+      RAW=$(FILTER="$FILTER_NAME" python3 -c "
+import json, os, sys
+data = json.load(sys.stdin)
+if isinstance(data.get('viz_paths'), list):
+    needle = '/' + os.environ['FILTER'] + '.html'
+    data['viz_paths'] = [p for p in data['viz_paths'] if p.endswith(needle)]
+    data['n_visualizations'] = len(data['viz_paths'])
+print(json.dumps(data))
+" <<<"$RAW")
+    fi
+    echo "$RAW" | python3 -m json.tool
+    ;;
+
   *)
     cat <<EOF
 Usage:
@@ -793,6 +857,8 @@ Usage:
   /pbg-study intervention-delete <study-name> --name <n>
 
   /pbg-study verify              <study-slug> [--strict] [--json] [--quiet]
+  /pbg-study preview-viz         <study-slug> [--name <viz-name>]
+
   /pbg-study findings            <study-slug> [--auto] [--dry-run]
 
   /pbg-study propose-followup    <parent-slug> --id <id> --title '<t>' --motivation '<m>' [--mechanism '<hyp>'] [--seed-from-file <path>] [--dry-run]
@@ -849,6 +915,11 @@ esac
 /pbg-study verify dnaa-01-expression-dynamics --strict
 # Tooling-style: emit JSON for a wrapper script
 /pbg-study verify dnaa-01-expression-dynamics --json
+
+# Render declared viz against any existing data to catch config errors fast
+/pbg-study preview-viz dnaa-01-expression-dynamics
+# Filter to a single viz (server-side filter not yet implemented; client-side filter)
+/pbg-study preview-viz dnaa-01-expression-dynamics --name autorepression-pearson
 
 # Walk a study's behavior_test outcomes and propose structured findings
 /pbg-study findings dnaa-01-expression-dynamics
