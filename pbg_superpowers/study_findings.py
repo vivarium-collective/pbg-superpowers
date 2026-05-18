@@ -119,13 +119,14 @@ def save_study_atomic(study_yaml: Path, data: dict) -> None:
 
 
 def find_workspace_root(start: Path) -> Path:
-    """Walk up from start to find workspace.yaml. Raise FileNotFoundError if absent.
-
-    Back-compat shim. New code should import workspace_root() from
-    pbg_superpowers.paths.
-    """
-    from pbg_superpowers.paths import workspace_root
-    return workspace_root(start)
+    """Walk up from start to find workspace.yaml. Raise FileNotFoundError if absent."""
+    cur = start.resolve()
+    while True:
+        if (cur / "workspace.yaml").is_file():
+            return cur
+        if cur.parent == cur:
+            raise FileNotFoundError(f"No workspace.yaml found at or above {start}")
+        cur = cur.parent
 
 
 def study_dir_from_slug(ws_root: Path, slug: str) -> Path:
