@@ -223,3 +223,38 @@ def test_browser_default_is_off_in_start(tmp_path, monkeypatch):
     # restart() should match — it composes stop + start.
     sig_r = inspect.signature(dash_mod.restart)
     assert sig_r.parameters["open_browser"].default is False
+
+
+# ---------------------------------------------------------------------------
+# v2ecoli friction #9: restart pre-checks venv before killing the running
+# dashboard. Stop is unaffected — it's already venv-agnostic.
+# ---------------------------------------------------------------------------
+
+
+def test_restart_refuses_when_venv_bin_missing(tmp_path, monkeypatch):
+    """If start() would fail the venv check, restart() refuses BEFORE
+    calling stop. The running dashboard is preserved."""
+    ws = _make_workspace_with_venv_bin(tmp_path, has_bin=False)
+    monkeypatch.setenv("PATH", "")
+    # Seed a fake PID file so stop would have something to kill if it ran.
+    pid_file = ws / ".pbg" / "dashboard" / "dashboard.pid"
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    pid_file.write_text("99999\n")
+
+    with pytest.raises(RuntimeError) as ei:
+        dash_mod.restart(ws, open_browser=False)
+    msg = str(ei.value)
+    assert "Refusing to restart" in msg
+    assert "stop is venv-agnostic" in msg
+    # The pid file must still be there — stop was not called.
+    assert pid_file.is_file()
+
+
+def test_stop_is_venv_agnostic_when_no_pid(tmp_path):
+    """Stop with no running dashboard returns not-running cleanly. The
+    function never consults the venv — it only needs the PID file."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    # No .venv at all in the workspace.
+    out = dash_mod.stop(ws)
+    assert out["action"] == "not-running"

@@ -184,8 +184,28 @@ def discover_generators(
         for finder, sub_name, is_pkg in pkgutil.walk_packages(
             pkg_path, prefix=mod_name + ".", onerror=_walk_onerror,
         ):
+            # v2ecoli friction #4: skip subpaths that look like CLI scripts
+            # (e.g. `<pkg>.scripts.compare_runs`). Discovery should walk the
+            # library, not the CLI tool layer — and CLI scripts commonly
+            # have module-level `sys.exit()` / argparse / etc. that crash
+            # under import.
+            tail = sub_name.split(".")
+            if any(seg == "scripts" for seg in tail):
+                continue
             try:
                 importlib.import_module(sub_name)
+            except SystemExit as e:  # noqa: BLE001
+                # `sys.exit(N)` at module level is NOT a subclass of
+                # Exception; without this branch it would propagate out of
+                # discover_generators and crash the dashboard. v2ecoli's
+                # `scripts/compare-runs.py` had a top-level sys.exit(0)
+                # that took the whole subprocess down before this catch.
+                warnings.warn(
+                    f"discover_generators: subpackage {sub_name!r} called "
+                    f"sys.exit({e.code!r}) at import time; skipping. "
+                    "Wrap top-level CLI logic in `if __name__ == \"__main__\":`.",
+                    stacklevel=2,
+                )
             except Exception as e:  # noqa: BLE001
                 warnings.warn(
                     f"discover_generators: skipping subpackage {sub_name!r}: "

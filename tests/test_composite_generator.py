@@ -311,3 +311,91 @@ def test_discover_generators_walks_subpackages_without_eager_import(tmp_path):
                 del sys.modules[k]
         _REGISTRY.clear()
         importlib.invalidate_caches()
+
+
+def test_discover_generators_traps_sys_exit_from_imported_subpackage(tmp_path):
+    """v2ecoli friction #4: a subpackage that calls sys.exit() at module
+    level (typical for CLI scripts without `if __name__ == "__main__":`)
+    used to take the whole subprocess down. Now it warns + continues."""
+    import sys
+    import importlib
+    from pbg_superpowers.composite_generator import (
+        _REGISTRY, discover_generators,
+    )
+
+    # Build a pkg whose subpackage exits at import time.
+    pkg_dir = tmp_path / "_exiter_demo"
+    pkg_dir.mkdir()
+    (pkg_dir / "__init__.py").write_text(
+        '"""Top-level package; subpackage below sys.exits at import."""\n'
+    )
+    (pkg_dir / "ill_behaved.py").write_text(
+        "import sys\n"
+        "sys.exit(0)\n"   # this used to kill the discovery subprocess
+    )
+
+    sys.path.insert(0, str(tmp_path))
+    _REGISTRY.clear()
+    try:
+        # Must NOT raise SystemExit — the trap converts it to a warning.
+        found = discover_generators(extra_packages=["_exiter_demo"])
+        # The badly-behaved subpackage is skipped; nothing registers.
+        assert all(not k.startswith("_exiter_demo.") for k in found.keys())
+    finally:
+        sys.path.remove(str(tmp_path))
+        for k in list(sys.modules):
+            if k == "_exiter_demo" or k.startswith("_exiter_demo."):
+                del sys.modules[k]
+        _REGISTRY.clear()
+        importlib.invalidate_caches()
+
+
+def test_discover_generators_skips_scripts_subpackage(tmp_path):
+    """v2ecoli friction #4: a `scripts/` subpackage holds CLI tools, not
+    library code; discovery should skip it entirely to avoid importing
+    argparse-driven modules that crash under bare import."""
+    import sys
+    import importlib
+    from pbg_superpowers.composite_generator import (
+        _REGISTRY, discover_generators, composite_generator,
+    )
+
+    pkg_dir = tmp_path / "_libscripts_demo"
+    scripts_dir = pkg_dir / "scripts"
+    scripts_dir.mkdir(parents=True)
+    (pkg_dir / "__init__.py").write_text("")
+    # A generator in the LIBRARY half — must be discovered.
+    (pkg_dir / "lib_module.py").write_text(
+        "from pbg_superpowers.composite_generator import composite_generator\n"
+        "\n"
+        "@composite_generator(name='libscripts_demo_baseline')\n"
+        "def libscripts_demo_baseline():\n"
+        "    return {'state': {}}\n"
+    )
+    # A would-be generator in scripts/ — must be SKIPPED even though it's
+    # otherwise valid.
+    (scripts_dir / "__init__.py").write_text("")
+    (scripts_dir / "would_register.py").write_text(
+        "from pbg_superpowers.composite_generator import composite_generator\n"
+        "\n"
+        "@composite_generator(name='libscripts_demo_should_be_skipped')\n"
+        "def libscripts_demo_should_be_skipped():\n"
+        "    return {'state': {}}\n"
+    )
+
+    sys.path.insert(0, str(tmp_path))
+    _REGISTRY.clear()
+    try:
+        found = discover_generators(extra_packages=["_libscripts_demo"])
+        libs = [k for k in found if "libscripts_demo" in k]
+        # Library generator landed.
+        assert any("baseline" in k for k in libs)
+        # scripts/ generator did not.
+        assert not any("should_be_skipped" in k for k in libs)
+    finally:
+        sys.path.remove(str(tmp_path))
+        for k in list(sys.modules):
+            if k == "_libscripts_demo" or k.startswith("_libscripts_demo."):
+                del sys.modules[k]
+        _REGISTRY.clear()
+        importlib.invalidate_caches()
