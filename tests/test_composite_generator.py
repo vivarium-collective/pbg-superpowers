@@ -250,3 +250,64 @@ def test_discover_all_merges_specs_and_generators(tmp_path, installed_fake_pkg):
     # visualizations is always propagated as a list (empty when the generator
     # omits it) so dashboard callers can rely on the key existing.
     assert merged[gen_id].get("visualizations") == []
+
+
+# ---------------------------------------------------------------------------
+# Slice H / friction #22: subpackage @composite_generator decorators are
+# discovered even when the top-level __init__.py doesn't eagerly import
+# the subpackage.
+# ---------------------------------------------------------------------------
+
+
+def test_discover_generators_walks_subpackages_without_eager_import(tmp_path):
+    """A workspace package that ships its generators in
+    `<pkg>/composites/__init__.py` should have those decorators fire on
+    discovery — even when `<pkg>/__init__.py` doesn't do
+    `from . import composites`. Before the walk_packages fix, the
+    subpackage was invisible to discover_generators() and the dashboard
+    Run handler would silently reject the composite as "not in registry."
+    """
+    import sys
+    import importlib
+    from pbg_superpowers.composite_generator import (
+        _REGISTRY, discover_generators,
+    )
+
+    # Build a minimal package on disk:
+    #   tmp/_walkpkg_demo/__init__.py          (NO eager subpackage import)
+    #   tmp/_walkpkg_demo/composites/__init__.py  (@composite_generator decorator)
+    pkg_dir = tmp_path / "_walkpkg_demo"
+    sub_dir = pkg_dir / "composites"
+    sub_dir.mkdir(parents=True)
+    (pkg_dir / "__init__.py").write_text(
+        '"""Top-level package with NO eager subpackage import — the walk\n'
+        'should pick up the subpackage decorators anyway."""\n'
+    )
+    (sub_dir / "__init__.py").write_text(
+        "from pbg_superpowers.composite_generator import composite_generator\n"
+        "\n"
+        "@composite_generator(name='walkpkg_demo_baseline')\n"
+        "def walkpkg_demo_baseline():\n"
+        "    return {'state': {'x': 1.0}}\n"
+    )
+
+    sys.path.insert(0, str(tmp_path))
+    _REGISTRY.clear()
+    try:
+        # Without the walk_packages fix, this returns {} because importing
+        # `_walkpkg_demo` alone doesn't fire decorators in `_walkpkg_demo.composites`.
+        found = discover_generators(extra_packages=["_walkpkg_demo"])
+        # The expected entry id is "<pkg>.composites.<name>"; the @composite_generator
+        # decorator builds it from func.__module__ + entry.name.
+        matching = [eid for eid in found if eid.endswith(".walkpkg_demo_baseline")]
+        assert matching, (
+            f"discover_generators didn't find the subpackage decorator. "
+            f"Got: {sorted(found.keys())}"
+        )
+    finally:
+        sys.path.remove(str(tmp_path))
+        for k in list(sys.modules):
+            if k == "_walkpkg_demo" or k.startswith("_walkpkg_demo."):
+                del sys.modules[k]
+        _REGISTRY.clear()
+        importlib.invalidate_caches()

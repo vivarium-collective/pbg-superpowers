@@ -148,16 +148,49 @@ def discover_generators(
             if fallback and not fallback.startswith("_"):
                 targets.add(fallback)
 
+    import pkgutil
+    import warnings
+
     for mod_name in sorted(targets):
         try:
-            importlib.import_module(mod_name)
+            top = importlib.import_module(mod_name)
         except Exception as e:  # noqa: BLE001 — skip any unimportable package
-            import warnings
             warnings.warn(
                 f"discover_generators: skipping {mod_name!r}: "
                 f"{type(e).__name__}: {e}",
                 stacklevel=2,
             )
             continue
+        # mem3dg-readdy friction #22: @composite_generator decorators
+        # only fire when their containing module is imported. Importing
+        # the top-level package alone misses subpackages like
+        # `pbg_<ws>/composites/__init__.py` unless the top-level
+        # __init__.py eagerly does `from . import composites`. Walk the
+        # subpackage tree so workspaces don't have to remember.
+        pkg_path = getattr(top, "__path__", None)
+        if not pkg_path:
+            continue  # single-file module — nothing to walk
+        # pkgutil.walk_packages imports each subpackage during descent;
+        # without `onerror`, any subpackage that raises at top level
+        # (e.g. ecoli.analysis.antibiotics_colony's data-file probe)
+        # would abort the whole walk. Swallow + warn via the same path
+        # the per-import try/except below uses.
+        def _walk_onerror(name, _e=None):
+            warnings.warn(
+                f"discover_generators: skipping subpackage {name!r} "
+                f"(walk failed during import)",
+                stacklevel=2,
+            )
+        for finder, sub_name, is_pkg in pkgutil.walk_packages(
+            pkg_path, prefix=mod_name + ".", onerror=_walk_onerror,
+        ):
+            try:
+                importlib.import_module(sub_name)
+            except Exception as e:  # noqa: BLE001
+                warnings.warn(
+                    f"discover_generators: skipping subpackage {sub_name!r}: "
+                    f"{type(e).__name__}: {e}",
+                    stacklevel=2,
+                )
 
     return dict(_REGISTRY)
