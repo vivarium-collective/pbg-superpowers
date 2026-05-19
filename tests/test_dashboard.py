@@ -160,3 +160,66 @@ def test_try_render_dashboard_handles_missing_import(monkeypatch, tmp_path):
     assert rendered is False
     assert err is not None
     assert "not importable" in err
+
+
+# ---------------------------------------------------------------------------
+# Preferred-port persistence (mem3dg-readdy friction #33)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_port_writes_explicit_port_to_disk(tmp_path):
+    """Explicit --port overrides everything AND becomes the new saved
+    preferred port for subsequent restarts."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    assert dash_mod._resolve_port(ws, 9999) == 9999
+    assert dash_mod._read_preferred_port(ws) == 9999
+
+
+def test_resolve_port_reuses_saved_port_when_free(tmp_path, monkeypatch):
+    """Subsequent restarts read the saved port and reuse it — that's the
+    whole friction #33 fix; bookmarkable URLs across restarts."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    dash_mod._write_preferred_port(ws, 8777)
+    # Force the "is this port free?" probe to return True regardless of
+    # actual socket state — the test must work whether or not 8777 happens
+    # to be in use on the dev machine.
+    monkeypatch.setattr(dash_mod, "_is_port_free", lambda p: True)
+    assert dash_mod._resolve_port(ws, None) == 8777
+
+
+def test_resolve_port_rerolls_when_saved_port_taken(tmp_path, monkeypatch):
+    """If the saved port is now occupied (e.g. a peer workspace grabbed
+    it after a kernel restart), pick a fresh one and persist that. The
+    user gets a new bookmarkable URL; no clobbering the peer."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    dash_mod._write_preferred_port(ws, 8777)
+    monkeypatch.setattr(dash_mod, "_is_port_free", lambda p: False)
+    monkeypatch.setattr(dash_mod, "_pick_free_port", lambda preferred=8765: 8800)
+    assert dash_mod._resolve_port(ws, None) == 8800
+    assert dash_mod._read_preferred_port(ws) == 8800
+
+
+def test_resolve_port_picks_default_then_writes(tmp_path, monkeypatch):
+    """Fresh workspace with no saved port and no explicit port → picks
+    via _pick_free_port (8765 if free, else any) AND writes the result."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    assert dash_mod._read_preferred_port(ws) is None
+    monkeypatch.setattr(dash_mod, "_pick_free_port", lambda preferred=8765: 8765)
+    assert dash_mod._resolve_port(ws, None) == 8765
+    assert dash_mod._read_preferred_port(ws) == 8765
+
+
+def test_browser_default_is_off_in_start(tmp_path, monkeypatch):
+    """start() defaults to open_browser=False — the agentic case where
+    the user is already on a tab. Verify by inspecting the signature
+    (don't actually start a subprocess)."""
+    import inspect
+    sig = inspect.signature(dash_mod.start)
+    assert sig.parameters["open_browser"].default is False
+    # restart() should match — it composes stop + start.
+    sig_r = inspect.signature(dash_mod.restart)
+    assert sig_r.parameters["open_browser"].default is False
