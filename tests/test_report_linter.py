@@ -289,6 +289,25 @@ def test_visualization_address_check_tolerates_missing_visualizations_field(tmp_
     assert by_check.get("visualization_address_unresolved", []) == []
 
 
+def test_visualization_address_missing_fires_per_entry(tmp_path):
+    """mem3dg-readdy friction #26: study.yaml.visualizations[] entries
+    without `address:` 500 at render time with KeyError('address'). The
+    fixture has two entries without address (one omitted, one empty
+    string); both must fire `visualization_address_missing`."""
+    ws = _copy_fixture("viz-address-missing", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    missing = by_check.get("visualization_address_missing", [])
+    assert len(missing) == 2
+    assert all(f.level == "error" for f in missing)
+    viz_names_called_out = sorted(f.message for f in missing)
+    assert any("barrier-kinematics" in m for m in viz_names_called_out)
+    assert any("phase-space" in m for m in viz_names_called_out)
+    # The actionable hint must name both fix paths.
+    assert all("local:<ClassName>" in f.message for f in missing)
+    assert all("workspace.yaml.visualizations" in f.message for f in missing)
+
+
 # ---------------------------------------------------------------------------
 # 12. dag_edges_* — F3 (canonical pipeline_gate.prerequisites)
 # ---------------------------------------------------------------------------

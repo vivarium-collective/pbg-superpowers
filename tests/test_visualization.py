@@ -260,3 +260,64 @@ def test_visualization_subclass_does_not_warn():
 
     dep = [w for w in captured if issubclass(w.category, DeprecationWarning)]
     assert not dep, f"subclass form must be silent; got {[str(w.message) for w in dep]}"
+
+
+# ---------------------------------------------------------------------------
+# stable_div_id helper (mem3dg-readdy friction #28)
+#
+# The method only reads `type(self).__name__` and `self.config`; it doesn't
+# touch any process_bigraph machinery. Instantiating a real Visualization
+# requires a `core` (process_bigraph framework requirement) which is heavy
+# for a pure-string test. Call the method against a minimal duck object
+# instead — same code path, no framework dependency.
+# ---------------------------------------------------------------------------
+
+
+def _div_id(name: str, config: dict | None, *parts: str) -> str:
+    """Invoke Visualization.stable_div_id against a duck object whose
+    class name is `name` (set via dynamic class creation so the formatted
+    prefix is deterministic)."""
+    cls = type(name, (object,), {})
+    obj = cls()
+    if config is not None:
+        obj.config = config
+    return Visualization.stable_div_id(obj, *parts)
+
+
+def test_stable_div_id_is_deterministic_per_class_and_title():
+    """Two duck objects with the same class name + title produce the SAME
+    div_id — the whole point. The friction #28 case used id(self), which
+    is CPython's object address; stable_div_id is content-addressed."""
+    a = _div_id("DivIDViz", {"title": "growth"})
+    b = _div_id("DivIDViz", {"title": "growth"})
+    assert a == b
+    # Format: lowercased-classname-8hex.
+    import re
+    assert re.fullmatch(r"dividviz-[0-9a-f]{8}", a)
+
+
+def test_stable_div_id_differs_by_title():
+    """Same class, different config title → different ids. A workspace
+    shipping two instances of one Viz class with distinct titles (e.g.
+    'baseline' vs 'variant') gets two distinct DOM ids without manual
+    discriminators."""
+    a = _div_id("DivIDViz", {"title": "baseline"})
+    b = _div_id("DivIDViz", {"title": "variant"})
+    assert a != b
+
+
+def test_stable_div_id_accepts_extra_discriminator_parts():
+    """Callers can pass extra `parts` (e.g. a per-run id) to disambiguate
+    further. Distinct parts → distinct ids; repeated parts → same id."""
+    p1 = _div_id("DivIDViz", {"title": "x"}, "run-1")
+    p2 = _div_id("DivIDViz", {"title": "x"}, "run-2")
+    p1_again = _div_id("DivIDViz", {"title": "x"}, "run-1")
+    assert p1 != p2
+    assert p1 == p1_again
+
+
+def test_stable_div_id_handles_missing_config():
+    """A subclass that doesn't set self.config (e.g. mid-init) shouldn't
+    crash — the helper falls back to empty title."""
+    result = _div_id("NoConfigViz", config=None)
+    assert result.startswith("noconfigviz-")

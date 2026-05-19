@@ -331,6 +331,22 @@ Run a variant. The server resolves the variant's `base_composite` against the St
 {"study": "<study-name>", "variant": "<n>", "steps": 5}
 ```
 
+> **Clearing stale runs between reruns.** `runs.db` accumulates a fresh
+> row each invocation; the auto-renderer reads the *latest* row, so a
+> failed debug run followed by a good one can produce mixed traces in
+> the viz tab. Clear the per-study DB via:
+>
+> ```bash
+> curl -X POST -H 'Content-Type: application/json' \
+>   -d '{"study": "<slug>"}' \
+>   "$URL/api/study-runs-clear"
+> ```
+>
+> The endpoint truncates `runs_meta` + `history` for the named study
+> and removes any `runs:` entries from `study.yaml`. Safe to call
+> before re-running a problematic baseline / variant. See
+> mem3dg-readdy friction log #27.
+
 > **Gap — declarative sweeps not yet runnable.** The `study.yaml` schema
 > (`pbg-template`, Pass B) accepts `simulation_set` entries with
 > `kind: sweep`, `axes`, `seeds`, `metrics`, `candidate_selection`, and
