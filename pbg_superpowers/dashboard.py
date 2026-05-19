@@ -120,21 +120,62 @@ def _clear_state(workspace: Path) -> None:
 def _resolve_dashboard_cmd(workspace: Path) -> list[str] | None:
     """Pick the vivarium-dashboard launcher to use.
 
-    Order: workspace .venv → PATH → editable install via python -m.
-    Returns argv-style list, or None if nothing works.
+    F-friction #13 (mem3dg-readdy log) bit a user when the resolution
+    order fell through to `which vivarium-dashboard` and silently picked
+    up a SIBLING venv that had `pbg-compucell3d` installed. The dashboard
+    then discovered composites from THAT venv's site-packages and showed
+    the wrong simulators. Silent cross-venv resolution is the worst-case
+    UX, so we drop both the PATH-search and the `python -m` fallback.
+
+    Workspace .venv MUST contain vivarium-dashboard. If it doesn't,
+    return None and let `start()` print a clear install command. The user
+    can always set up a venv manually and re-run.
     """
     venv_bin = workspace / ".venv" / "bin" / "vivarium-dashboard"
     if venv_bin.is_file() and os.access(venv_bin, os.X_OK):
         return [str(venv_bin), "serve"]
-    on_path = shutil.which("vivarium-dashboard")
-    if on_path:
-        return [on_path, "serve"]
-    # Fall back to python -m if the package is importable.
+    return None
+
+
+# Placeholder body shipped by pbg-template's reports/index.html.j2 before
+# /pbg-report (or render_dashboard()) populates the SPA. Detecting this
+# string lets `start()` decide whether to auto-render or refuse-with-hint
+# before the user sees the bootstrap stub at the dashboard URL.
+_REPORTS_PLACEHOLDER_MARKER = "No models registered yet"
+
+
+def _reports_index(workspace: Path) -> Path:
+    return workspace / "reports" / "index.html"
+
+
+def _is_placeholder_or_missing(reports_path: Path) -> bool:
+    """True if reports/index.html is absent OR still the pbg-template stub."""
+    if not reports_path.is_file():
+        return True
     try:
-        import vivarium_dashboard  # noqa: F401
-        return [sys.executable, "-m", "vivarium_dashboard.server"]
-    except ImportError:
-        return None
+        return _REPORTS_PLACEHOLDER_MARKER in reports_path.read_text(errors="replace")
+    except OSError:
+        return True
+
+
+def _try_render_dashboard(workspace: Path) -> tuple[bool, str | None]:
+    """Try to render the workspace SPA before serving. Returns (rendered,
+    error_msg). When vivarium-dashboard isn't importable from THIS Python,
+    rendered=False and error_msg names the install command — the caller
+    decides whether to refuse-to-start or proceed with the placeholder."""
+    try:
+        from vivarium_dashboard.lib.report import render_dashboard
+    except ImportError as e:
+        return False, (
+            f"vivarium-dashboard not importable from {sys.executable}: {e}. "
+            f"Run `{workspace}/.venv/bin/python scripts/render-dashboard.py` "
+            "to render the SPA, then re-run dashboard start."
+        )
+    try:
+        render_dashboard(workspace)
+    except Exception as e:  # noqa: BLE001 — render errors must surface
+        return False, f"render_dashboard({workspace}) raised: {type(e).__name__}: {e}"
+    return True, None
 
 
 # ---------------------------------------------------------------------------
@@ -171,10 +212,32 @@ def start(workspace: Path, port: int | None = None,
     cmd_prefix = _resolve_dashboard_cmd(workspace)
     if cmd_prefix is None:
         raise RuntimeError(
-            "vivarium-dashboard is not installed. Install it into the "
-            "workspace venv (`.venv/bin/pip install vivarium-dashboard`) "
-            "or globally."
+            "vivarium-dashboard is not installed in the workspace venv at "
+            f"{workspace}/.venv/. Install it before starting the dashboard:\n"
+            f"  uv pip install --python {workspace}/.venv/bin/python -e "
+            "/path/to/vivarium-dashboard\n"
+            "Cross-venv fallback is intentionally disabled — a sibling "
+            "venv's vivarium-dashboard would discover composites from THAT "
+            "venv's site-packages, not this workspace's. See mem3dg-readdy "
+            "friction log #13."
         )
+
+    # F-friction #1: ensure reports/index.html is the rendered SPA, not the
+    # pbg-template bootstrap placeholder. The vivarium-dashboard server happily
+    # serves whatever's at that path — and the placeholder "No models
+    # registered yet" body is always a bug for an end user to see. Try to
+    # render now; if vivarium-dashboard isn't importable from this Python,
+    # refuse-to-start with the manual command instead of serving the stub.
+    reports = _reports_index(workspace)
+    if _is_placeholder_or_missing(reports):
+        rendered, err = _try_render_dashboard(workspace)
+        if not rendered:
+            raise RuntimeError(
+                f"reports/index.html is still the bootstrap placeholder "
+                f"(or missing) and auto-render failed.\n  {err}\n"
+                "Refusing to start: serving the placeholder would show an "
+                "empty 'No models registered yet' page at the dashboard URL."
+            )
 
     chosen_port = port or _pick_free_port(8765)
     cmd = cmd_prefix + ["--workspace", str(workspace), "--port", str(chosen_port)]
