@@ -10,6 +10,23 @@ argument-hint: <workspace-name> [target-dir] [--upstream <repo>] [--branch <name
 
 Bootstrap stage. Operates on a brand-new workspace directory.
 
+## Which mode? (decision tree)
+
+Pick one based on the operator's starting state — this collapses the friction
+new users hit when "workspace" was ambiguous between three different on-disk
+shapes.
+
+| Starting state | Mode | Command |
+|---|---|---|
+| **No directory yet, no upstream model repo** | standalone | `pbg-workspace <name>` |
+| **No directory yet, want to branch off existing repo** | upstream-branch | `pbg-workspace <name> --upstream owner/repo` |
+| **Already inside a git checkout you want to promote** | in-place | `pbg-workspace <name> --target . --in-place` |
+
+The in-place mode is the right answer for composite-only repos (`pbg-mem3dg`,
+`pbg-membrane-actin-composite`, etc.) that already have their own README,
+pyproject, and package — and you want to add workspace artifacts (workspace.yaml,
+investigations/, notes/, dashboard scripts) on top of them as a new branch.
+
 ## Prerequisites
 - Target directory must not exist or must be empty.
 - `git` and (optionally) `uv` available on PATH.
