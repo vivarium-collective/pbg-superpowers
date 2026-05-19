@@ -408,7 +408,27 @@ def restart(workspace: Path, port: int | None = None,
     """Default open_browser=False (mem3dg-readdy friction #32) — see start().
     `pbg-dashboard restart` is the most-common agent-driven path; pinning the
     workspace's saved port (friction #33) plus skipping the auto-open lets
-    the user keep one tab and just reload it."""
+    the user keep one tab and just reload it.
+
+    v2ecoli friction #9: pre-check the venv BEFORE stopping. The earlier
+    behavior (stop, then start, fail start) killed the running dashboard
+    and left the user with nothing — they had a working server before the
+    restart and no working server after. Refuse-up-front when the venv
+    can't supply vivarium-dashboard, so the running dashboard keeps
+    running.
+    """
+    if _resolve_dashboard_cmd(workspace) is None:
+        raise RuntimeError(
+            "vivarium-dashboard is not installed in the workspace venv at "
+            f"{workspace}/.venv/. Refusing to restart — the running "
+            "dashboard would be stopped and unable to restart. Install "
+            "vivarium-dashboard in the workspace venv first:\n"
+            f"  uv pip install --python {workspace}/.venv/bin/python -e "
+            "/path/to/vivarium-dashboard\n"
+            "If you only want to STOP the running dashboard, run "
+            "`pbg-dashboard stop` instead (stop is venv-agnostic — it "
+            "only needs the PID file)."
+        )
     stop(workspace)
     return start(workspace, port=port, open_browser=open_browser)
 
