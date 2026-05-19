@@ -123,27 +123,42 @@ All subsequent work must happen inside the new repo.
 
 ## Deliverables
 
-Create this package structure:
+Every `pbg-<tool>` repo this skill produces is **also a discoverable
+pbg-workspace** (`workspace.yaml` at root, registered in
+`~/.pbg/workspaces.json`, scanned by the dashboard's Composites tab via
+`@composite_generator` decorators). Heavy-mode is workspace-first; the
+package, demo report, and tests all live inside that workspace shape.
+
+Final layout after Phase 3.5 (workspace promotion):
 
 ```text
 pbg-<tool>/
+├── workspace.yaml              # schema_version: 2, name, package_path
 ├── pyproject.toml
 ├── README.md
 ├── CONTRIBUTING.md
+├── NEXT_STEPS.md               # written by the scaffold
 ├── .gitignore
 ├── .github/
 │   └── workflows/
 │       └── release.yml
 ├── pbg_<tool>/
-│   ├── __init__.py
-│   ├── processes.py
-│   ├── types.py
-│   └── composites.py
+│   ├── __init__.py             # re-exports Process classes + generators
+│   ├── processes.py            # Process / Step subclasses
+│   ├── types.py                # custom bigraph-schema types (optional)
+│   └── composites/             # one module per generator family
+│       ├── __init__.py         # `from . import biofilm  # noqa: F401`
+│       └── <topic>.py          # @composite_generator-decorated functions
 ├── tests/
 │   ├── test_processes.py
-│   └── test_composites.py
-└── demo/
-    └── demo_report.py
+│   └── test_composites.py      # asserts generator registration + run
+├── demo/
+│   └── demo_report.py
+├── protocols/ | datasets/      # raw fixtures the wrapper consumes
+├── experiments/                # scaffolded; populated by /pbg-study
+├── references/                 # scaffolded; papers + expert notes
+├── reports/                    # scaffolded; /pbg-report renders here
+└── scripts/                    # scaffolded; dashboard runtime helpers
 ```
 
 The completed repo must include:
@@ -151,12 +166,16 @@ The completed repo must include:
 1. A wrapped process-bigraph `Step` or `Process`
 2. Appropriate bigraph-schema port and config schemas
 3. Custom type registration if needed
-4. Unit and integration tests
+4. Unit and integration tests (including one that asserts the generator
+   is in `pbg_superpowers.composite_generator._REGISTRY`)
 5. Offline-safe fixtures or examples
-6. Composite factory functions
-7. A README with installation, quick start, API reference, architecture, and demo instructions
+6. **One or more `@composite_generator`-decorated functions** in
+   `pbg_<tool>/composites/` — these are the dashboard-visible entry points
+7. A README with installation, quick start, API reference, architecture,
+   and demo instructions
 8. A self-contained `demo/report.html`
-9. A local git commit
+9. A `workspace.yaml` and registration in `~/.pbg/workspaces.json`
+10. A local git commit
 
 ## Auto-Discovery Convention
 
@@ -331,6 +350,75 @@ document = {
 sim = Composite({"state": document}, core=core)
 sim.run(100.0)
 ```
+
+### Ship composite generators, not free functions
+
+A `pbg-*` package's composites must be **`@composite_generator`-decorated**
+so they surface in `discover_generators()` (and therefore in the
+dashboard's Composites tab). See the canonical spec at
+[docs/conventions/composite_generators.md](../../docs/conventions/composite_generators.md);
+the short version:
+
+```python
+# pbg_<tool>/composites/<topic>.py
+from pbg_superpowers.composite_generator import composite_generator
+
+
+@composite_generator(
+    name="<tool>_baseline",
+    description="One-line summary for the dashboard parameter form.",
+    parameters={
+        "rate":  {"type": "float",  "default": 1.0,
+                  "description": "Multiplicative factor"},
+        "model": {"type": "string", "default": "default"},
+    },
+)
+def baseline(core=None, *, rate=1.0, model="default"):
+    return {
+        "<tool>_process": {
+            "_type": "process",
+            "address": "local:<Tool>Process",
+            "config": {"rate": rate, "model_id": model},
+            "interval": 1.0,
+            "inputs":  {"level": ["stores", "level"]},
+            "outputs": {"level": ["stores", "level"]},
+        },
+        "stores": {"level": 0.0},
+        "emitter": {
+            "_type": "step",
+            "address": "local:RAMEmitter",       # PascalCase alias is canonical
+            "config": {"emit": {"level": "float"}},
+            "inputs": {"level": ["stores", "level"]},
+        },
+    }
+```
+
+`pbg_<tool>/composites/__init__.py` must import each submodule for side
+effects so the decorators fire on package import:
+
+```python
+from . import <topic>  # noqa: F401
+
+from .<topic> import baseline
+
+__all__ = ["baseline"]
+```
+
+Rules:
+
+- **First positional arg is `core=None`** — that's the signature the
+  decorator's `build_generator` calls.
+- **All other args keyword-only with defaults matching `parameters`**.
+- **Resolve any fixture path** (protocols, datasets, ML weights) through a
+  helper that prefers the repo's `protocols/` dir but falls back to a
+  cache location populated by your `runtime.ensure_release()` (or
+  equivalent). The pip-installed wheel often won't see the repo checkout.
+- **Use `local:RAMEmitter`** (the PascalCase alias auto-registered by
+  `process-bigraph`); the `local:ram-emitter` form is not registered.
+
+A free `build_document(...)` function in `composites.py` is **not enough** —
+it isn't discoverable. Convert it to a `@composite_generator` and put it
+in the `composites/` subpackage as above.
 
 Wiring rules:
 
@@ -529,8 +617,11 @@ Implement:
 
 - `pbg_<tool>/processes.py`
 - `pbg_<tool>/types.py`
-- `pbg_<tool>/composites.py`
-- package exports in `__init__.py`
+- `pbg_<tool>/composites/__init__.py` + `pbg_<tool>/composites/<topic>.py`
+  (one or more `@composite_generator`-decorated functions — see
+  **Composite Assembly → Ship composite generators**)
+- package exports in `__init__.py` (re-export Process classes AND the
+  decorated generators by name)
 - `pyproject.toml`
 
 **`pyproject.toml` template** — always include `bigraph-schema` and
@@ -694,6 +785,61 @@ pytest
 ```
 
 Fix all failures before committing.
+
+Add at least one test that asserts the composite generator is in the
+shared registry (cheap protection against forgetting the side-effect
+import in `composites/__init__.py`):
+
+```python
+def test_generator_is_registered():
+    from pbg_superpowers.composite_generator import _REGISTRY
+    matches = [eid for eid in _REGISTRY if eid.endswith(".<tool>_baseline")]
+    assert matches, f"<tool>_baseline missing; have {list(_REGISTRY)[:5]}"
+```
+
+### Phase 4.5: Promote to a discoverable pbg-workspace
+
+After processes, generators, tests, and demo are in place, run the
+in-place workspace scaffolder so the repo also appears in the
+vivarium-dashboard's workspace switcher and Composites tab. This is
+**not optional** — pbg-* repos are workspace-shaped by convention.
+
+```bash
+# Resolve a Python that has pbg-superpowers (often a sibling venv).
+PBG_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv/bin/python)"
+
+# Scaffold in place. Default would create a `<repo>-workspace` branch; for a
+# fresh single-developer wrapper, stay on main by passing --branch main.
+"$PBG_PYTHON" -m pbg_superpowers.scaffold workspace \
+    --in-place \
+    --name <tool> \
+    --target . \
+    --package pbg_<tool> \
+    --branch main
+
+# Register the new workspace so the dashboard's switcher sees it.
+"$PBG_PYTHON" -m pbg_superpowers.workspace_catalog add \
+    --path "$(pwd)" --name <tool> --package pbg_<tool>
+
+# Sanity-check the resulting layout.
+python scripts/lint-workspace.py    # prints "workspace lint: OK"
+```
+
+The scaffolder will:
+
+- Drop `workspace.yaml` at the repo root (schema_version 2).
+- Add top-level `experiments/`, `references/`, `reports/`, `scripts/`,
+  `docs/`, `notes/`, `datasets/`.
+- Merge dashboard deps (`pyyaml`, `jsonschema`, `jinja2`, `vivarium-dashboard`)
+  into the existing `pyproject.toml`.
+- Append `.pbg/` runtime paths to `.gitignore`.
+- Create a single bootstrap commit on the chosen branch.
+
+If a previous run already promoted the repo, `--in-place` refuses to
+re-overlay — that's intentional. Re-run only after deleting `workspace.yaml`.
+
+After scaffolding, re-run the test suite and demo to confirm the
+restructure didn't break anything; then move on to Phase 5 (demo report).
 
 ### Phase 5: Demo Report
 
@@ -909,16 +1055,31 @@ https://docs.pypi.org/trusted-publishers/ and
 
 ## Final Validation and Commit
 
-After implementation:
+After implementation (including the Phase 4.5 workspace promotion):
 
 ```bash
 source .venv/bin/activate
-# Install the package in editable mode so allocate_core() discovers it:
-pip install -e .
+# Install the package so allocate_core() + the composite-generator registry
+# pick it up. Hatchling's editable install does NOT emit top_level.txt,
+# which breaks bigraph-schema's distribution-keyed discovery — use a regular
+# install for the final validation (uv pip install . without -e).
+uv pip install .
+
 python demo/demo_report.py
 pytest
+python scripts/lint-workspace.py    # must print "workspace lint: OK"
+
+# Confirm the generator(s) are visible to the dashboard's discovery path.
+python -c "
+from pbg_superpowers.composite_generator import discover_generators
+gens = discover_generators()
+matches = [g for g in gens if 'pbg_<tool>' in g]
+assert matches, 'no <tool> generators discovered'
+print('discovered:', matches)
+"
+
 git add -A
-git commit -m "Initial pbg-<tool> wrapper: processes, tests, demo report, README"
+git commit -m "Initial pbg-<tool> wrapper: workspace, processes, composite generators, tests, demo, README"
 python -c "import os, webbrowser; webbrowser.open('file://' + os.path.abspath('demo/report.html'))"
 ```
 
@@ -1021,23 +1182,34 @@ Write `.gitignore` (same as single-tool mode — exclude `.venv/`, `__pycache__/
 
 ### Deliverables for composite mode
 
+Same workspace-shaped layout as single-tool mode — `workspace.yaml` at
+root, `experiments/` + `references/` + `reports/` + `scripts/`
+scaffolded, registered in `~/.pbg/workspaces.json`. The package gains a
+`composites/` subpackage whose `@composite_generator` wraps the
+hand-built `document.py` output:
+
 ```text
 pbg-<name>-composite/
+├── workspace.yaml
 ├── pyproject.toml
 ├── README.md
 ├── .gitignore
 ├── pbg_<name>_composite/
 │   ├── __init__.py
-│   ├── core.py          # build_core() registering all wrappers + adapters + stubs + emitter
-│   ├── wiring.py        # WIRING dict: (process, port) → store path
-│   ├── adapters.py      # Step adapters for schema/unit mismatches (may be empty)
-│   ├── stubs.py         # stub Processes for missing inputs (may be empty)
-│   ├── document.py      # build_document() returning the full Composite document
-│   └── types.py         # cross-tool custom types, if needed
+│   ├── core.py            # build_core() registering adapters + stubs
+│   ├── wiring.py          # WIRING dict: (process, port) → store path
+│   ├── adapters.py        # Step adapters for schema/unit mismatches (may be empty)
+│   ├── stubs.py           # stub Processes for missing inputs (may be empty)
+│   ├── document.py        # build_document() returning the full Composite document
+│   ├── types.py           # cross-tool custom types, if needed
+│   └── composites/
+│       ├── __init__.py
+│       └── <name>.py      # @composite_generator wrapping build_document(...)
 ├── tests/
 │   ├── test_assembly.py
 │   ├── test_adapters.py
 │   └── test_run.py
+├── experiments/ references/ reports/ scripts/ docs/ datasets/ notes/   (scaffolded)
 └── demo/
     └── demo_report.py
 ```
@@ -1119,14 +1291,53 @@ Open the report in the default browser after generation.
 
 Include: science motivation, which tools are composed and where to find their wrappers, installation (including editable-local-clone install), wiring diagram (PNG), wiring table, quick start, demo instructions, and known limitations.
 
+#### Step 7.5: Promote to a discoverable pbg-workspace
+
+Same ritual as single-tool mode's Phase 4.5 — `workspace.yaml`,
+`scripts/`, dashboard catalog registration. Wrap the composite's
+`build_document` in a `@composite_generator` (in
+`pbg_<name>_composite/composites/<name>.py`) so the dashboard's Composites
+tab can run it with parameter sweeps:
+
+```python
+from pbg_superpowers.composite_generator import composite_generator
+from ..document import build_document
+
+@composite_generator(
+    name="<name>",
+    description="<one-line: which tools are composed and the science>",
+    parameters={
+        # Surface only the knobs you actually want the dashboard to sweep.
+        "interval": {"type": "float", "default": 1.0,
+                     "description": "Composite tick size"},
+    },
+)
+def <name>(core=None, *, interval=1.0):
+    return build_document(interval=interval)
+```
+
+Run the scaffolder + catalog add:
+
+```bash
+PBG_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv/bin/python)"
+"$PBG_PYTHON" -m pbg_superpowers.scaffold workspace \
+    --in-place --name <name>-composite --target . \
+    --package pbg_<name>_composite --branch main
+"$PBG_PYTHON" -m pbg_superpowers.workspace_catalog add \
+    --path "$(pwd)" --name <name>-composite --package pbg_<name>_composite
+python scripts/lint-workspace.py
+```
+
 #### Step 8: Commit
 
 ```bash
 source .venv/bin/activate
+uv pip install .                   # non-editable so discovery sees the package
 python demo/demo_report.py
 pytest
+python scripts/lint-workspace.py
 git add -A
-git commit -m "Initial pbg-<name>-composite: <tool-a> + <tool-b> wired and validated"
+git commit -m "Initial pbg-<name>-composite: workspace, generators, wiring, demo, tests"
 python -c "import os, webbrowser; webbrowser.open('file://' + os.path.abspath('demo/report.html'))"
 ```
 
@@ -1139,8 +1350,17 @@ Do not push.
 Given `$ARGUMENTS`:
 
 - If the first token is `--lightweight` (alias `--in-workspace`): run **Lightweight Mode** with the remaining args.
-- Else if one positional arg: study the tool, create `pbg-<tool>/`, implement the package, test it, generate the report, commit locally, and open the report.
-- Else if two or more positional args: inventory the listed wrappers, design the wiring table, build `pbg-<name>-composite/`, validate, test, generate the composite report, commit locally, and open the report.
+- Else if one positional arg: study the tool, create `pbg-<tool>/`,
+  implement the package with **`@composite_generator`-decorated
+  composites under `pbg_<tool>/composites/`**, test it, **promote it to a
+  pbg-workspace via `scaffold workspace --in-place` and register it in
+  the dashboard catalog**, generate the report, commit locally, and open
+  the report.
+- Else if two or more positional args: inventory the listed wrappers,
+  design the wiring table, build `pbg-<name>-composite/` (workspace-shaped
+  with a top-level `@composite_generator` wrapping `build_document`),
+  validate, test, **promote to a pbg-workspace and register it**, generate
+  the composite report, commit locally, and open the report.
 
 ---
 
