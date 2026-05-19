@@ -73,6 +73,69 @@ def _pick_free_port(preferred: int = 8765) -> int:
             pass
 
 
+# mem3dg-readdy friction #33: with multiple workspaces, only the first to
+# launch gets the default port (8765); every subsequent workspace ends up
+# on a random kernel-assigned port that shifts on each restart. Users
+# can't bookmark a stable URL. Persist the first-picked port per workspace
+# so `restart` reuses it instead of re-rolling.
+def _preferred_port_file(workspace: Path) -> Path:
+    return workspace / ".pbg" / "dashboard" / "preferred-port"
+
+
+def _read_preferred_port(workspace: Path) -> int | None:
+    path = _preferred_port_file(workspace)
+    if not path.is_file():
+        return None
+    try:
+        return int(path.read_text().strip())
+    except (ValueError, OSError):
+        return None
+
+
+def _write_preferred_port(workspace: Path, port: int) -> None:
+    path = _preferred_port_file(workspace)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(port) + "\n")
+
+
+def _is_port_free(port: int) -> bool:
+    """True if we can bind to 127.0.0.1:port right now."""
+    s = socket.socket()
+    try:
+        s.bind(("127.0.0.1", port))
+        return True
+    except OSError:
+        return False
+    finally:
+        try:
+            s.close()
+        except OSError:
+            pass
+
+
+def _resolve_port(workspace: Path, explicit_port: int | None) -> int:
+    """Decide which port to use for this workspace's dashboard.
+
+    Precedence:
+      1. ``explicit_port`` from the CLI/caller — always wins.
+      2. The workspace's saved preferred-port, IF still free (so a peer
+         on the same port doesn't get clobbered).
+      3. 8765 if free, else any kernel-assigned port.
+
+    The chosen port is written to ``<ws>/.pbg/dashboard/preferred-port``
+    so subsequent restarts reuse it (mem3dg-readdy friction #33).
+    """
+    if explicit_port is not None:
+        _write_preferred_port(workspace, explicit_port)
+        return explicit_port
+    saved = _read_preferred_port(workspace)
+    if saved is not None and _is_port_free(saved):
+        return saved
+    chosen = _pick_free_port(8765)
+    _write_preferred_port(workspace, chosen)
+    return chosen
+
+
 def _pid_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -198,8 +261,15 @@ def status(workspace: Path) -> dict:
 
 
 def start(workspace: Path, port: int | None = None,
-          open_browser: bool = True) -> dict:
-    """Start the dashboard server in the background. Returns the info dict."""
+          open_browser: bool = False) -> dict:
+    """Start the dashboard server in the background. Returns the info dict.
+
+    Default open_browser=False (mem3dg-readdy friction #32). The agent-
+    driven case is the more common one — the user is already on a tab and
+    auto-opening a new tab on every restart is friction-by-default. CLI
+    users get the URL in stdout and can click it; pass --browser to opt
+    in to auto-open.
+    """
     workspace = workspace.resolve()
     s = status(workspace)
     if s["state"] == "alive":
@@ -239,7 +309,9 @@ def start(workspace: Path, port: int | None = None,
                 "empty 'No models registered yet' page at the dashboard URL."
             )
 
-    chosen_port = port or _pick_free_port(8765)
+    # mem3dg-readdy friction #33: prefer the workspace's saved port over
+    # re-rolling, so the user can bookmark a stable URL across restarts.
+    chosen_port = _resolve_port(workspace, port)
     cmd = cmd_prefix + ["--workspace", str(workspace), "--port", str(chosen_port)]
 
     log = _log_file(workspace)
@@ -332,7 +404,11 @@ def open_url(workspace: Path) -> dict:
 
 
 def restart(workspace: Path, port: int | None = None,
-            open_browser: bool = True) -> dict:
+            open_browser: bool = False) -> dict:
+    """Default open_browser=False (mem3dg-readdy friction #32) — see start().
+    `pbg-dashboard restart` is the most-common agent-driven path; pinning the
+    workspace's saved port (friction #33) plus skipping the auto-open lets
+    the user keep one tab and just reload it."""
     stop(workspace)
     return start(workspace, port=port, open_browser=open_browser)
 
@@ -366,13 +442,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--workspace", default=".", type=Path,
                    help="Workspace root (default: cwd).")
     p.add_argument("--port", type=int, default=None,
-                   help="Preferred port (default: 8765, falls back to any free port).")
+                   help="Preferred port (default: workspace's saved port, then 8765, then any free port).")
+    p.add_argument("--browser", action="store_true",
+                   help="Open the dashboard URL in the user's default browser. Default: off (the URL is printed to stdout). The off-by-default matches the agentic case where the user is already on a tab; pre-2026-05-19 behavior was on-by-default and churned tabs on every restart.")
     p.add_argument("--no-browser", action="store_true",
-                   help="Skip opening the browser on start/open/restart.")
+                   help="DEPRECATED — auto-open is now off by default. Pass --browser to opt in.")
     args = p.parse_args(argv)
 
     ws = args.workspace.resolve()
-    open_b = not args.no_browser
+    # `--browser` is the new opt-in; `--no-browser` is kept as a recognized
+    # but redundant flag so existing skill invocations don't error.
+    open_b = bool(args.browser) and not args.no_browser
     try:
         if args.subcommand == "start":
             r = start(ws, port=args.port, open_browser=open_b)
