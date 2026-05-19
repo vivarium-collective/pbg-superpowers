@@ -51,9 +51,9 @@ Then check `~/.pbg/workspaces.json` for registered workspaces and print them:
 
 ```
 catalog (~/.pbg/workspaces.json): 3 registered workspaces:
-  - v2ecoli-workspace  /Users/eranagmon/code/v2ecoli-workspace  (last_opened: 2026-05-15)
-  - viva-munk          /Users/eranagmon/code/viva-munk          (last_opened: 2026-05-15)
-  - pbg-biomodels      /Users/eranagmon/code/pbg-biomodels
+  - v2ecoli-workspace  /Users/you/code/v2ecoli-workspace  (last_opened: 2026-05-15)
+  - viva-munk          /Users/you/code/viva-munk          (last_opened: 2026-05-15)
+  - pbg-biomodels      /Users/you/code/pbg-biomodels
 next:
   /pbg-workspace <name> --upstream <repo>   # scaffold a sibling workspace
   /pbg-workspace <name> --in-place          # turn this existing checkout into a workspace
@@ -279,7 +279,7 @@ fi
 
 ```text
 ✓ workspace: v2ecoli
-  path:         /Users/eranagmon/code/v2ecoli
+  path:         /Users/you/code/v2ecoli
   package:      v2ecoli
   schema_ver:   2
   imports:      0
@@ -292,12 +292,12 @@ studies: 6 total  (draft: 6)
 ## Example output (no workspace found)
 
 ```text
-✗ no workspace.yaml in /Users/eranagmon/code/v2ecoli or any ancestor directory
+✗ no workspace.yaml in /Users/you/code/v2ecoli or any ancestor directory
   -> this directory is not a pbg workspace.
 catalog (~/.pbg/workspaces.json): 3 registered workspaces:
-  - v2ecoli-workspace      /Users/eranagmon/code/v2ecoli-workspace  (last_opened: 2026-05-15)
-  - viva-munk              /Users/eranagmon/code/viva-munk          (last_opened: 2026-05-15)
-  - pbg-biomodels          /Users/eranagmon/code/pbg-biomodels
+  - v2ecoli-workspace      /Users/you/code/v2ecoli-workspace  (last_opened: 2026-05-15)
+  - viva-munk              /Users/you/code/viva-munk          (last_opened: 2026-05-15)
+  - pbg-biomodels          /Users/you/code/pbg-biomodels
 next:
   /pbg-workspace <name> --upstream <repo>   # scaffold a sibling workspace
   /pbg-workspace <name> --in-place          # promote this checkout into a workspace
