@@ -399,8 +399,9 @@ def open_url(workspace: Path) -> dict:
     if s["state"] != "alive":
         return start(workspace, open_browser=True)
     url = s["info"]["url"]
-    _open_browser(url)
-    return {"action": "opened", "url": url}
+    how = _open_browser(url)
+    action = "focused" if how == "focused" else "opened"
+    return {"action": action, "url": url}
 
 
 def restart(workspace: Path, port: int | None = None,
@@ -433,21 +434,146 @@ def restart(workspace: Path, port: int | None = None,
     return start(workspace, port=port, open_browser=open_browser)
 
 
-def _open_browser(url: str) -> None:
-    """Best-effort: open the URL in the user's browser. Silent on failure."""
+# NOTE on AppleScript dictionaries: when ``tell application appName`` uses a
+# variable, AppleScript can't resolve terminology like ``URL of t`` or
+# ``active tab index of w`` at compile time. We wrap each call in
+# ``using terms from application "<concrete>"`` so the right dictionary is
+# loaded — Chrome's terms for the Chromium family (active tab index, tabs
+# of window), Safari's for the WebKit family (current tab, tabs of window).
+_FOCUS_TAB_APPLESCRIPT = r'''
+on tabMatches(tabURL, targetURL)
+    if tabURL is targetURL then return true
+    if tabURL is (targetURL & "/") then return true
+    if tabURL starts with (targetURL & "/") then return true
+    if tabURL starts with (targetURL & "?") then return true
+    if tabURL starts with (targetURL & "#") then return true
+    return false
+end tabMatches
+
+on chromeFind(appName, targetURL)
+    tell application "System Events"
+        if not (exists process appName) then return "skip"
+    end tell
+    using terms from application "Google Chrome"
+        try
+            tell application appName
+                set winIdx to 0
+                repeat with w in windows
+                    set winIdx to winIdx + 1
+                    set tabIdx to 0
+                    repeat with t in tabs of w
+                        set tabIdx to tabIdx + 1
+                        if my tabMatches((URL of t) as string, targetURL) then
+                            set active tab index of w to tabIdx
+                            set index of w to 1
+                            activate
+                            return "found"
+                        end if
+                    end repeat
+                end repeat
+            end tell
+        on error
+            return "skip"
+        end try
+    end using terms from
+    return "notfound"
+end chromeFind
+
+on safariFind(appName, targetURL)
+    tell application "System Events"
+        if not (exists process appName) then return "skip"
+    end tell
+    using terms from application "Safari"
+        try
+            tell application appName
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if my tabMatches((URL of t) as string, targetURL) then
+                            set current tab of w to t
+                            set index of w to 1
+                            activate
+                            return "found"
+                        end if
+                    end repeat
+                end repeat
+            end tell
+        on error
+            return "skip"
+        end try
+    end using terms from
+    return "notfound"
+end safariFind
+
+on run argv
+    set targetURL to item 1 of argv
+    set chromeApps to {"Google Chrome", "Google Chrome Canary", "Brave Browser", "Microsoft Edge", "Arc", "Vivaldi"}
+    repeat with appName in chromeApps
+        set r to chromeFind(appName as string, targetURL)
+        if r is "found" then return "found"
+    end repeat
+    set safariApps to {"Safari", "Safari Technology Preview"}
+    repeat with appName in safariApps
+        set r to safariFind(appName as string, targetURL)
+        if r is "found" then return "found"
+    end repeat
+    return "notfound"
+end run
+'''
+
+
+def _focus_existing_tab(url: str) -> bool:
+    """Try to focus a running browser's existing tab at ``url``.
+
+    Returns True iff one of the supported browsers (Chrome family +
+    Safari family) is running, has a tab whose URL matches, and was
+    activated. Returns False on every other path: non-macOS, osascript
+    missing, no match, AppleScript Automation permission denied, etc.
+
+    mem3dg-readdy friction: ``pbg-dashboard open`` always opened a fresh
+    tab, churning the browser even when the user already had the
+    dashboard up. With multiple workspaces (each on its own port) the
+    pile of duplicate tabs got out of hand fast.
+    """
+    if sys.platform != "darwin":
+        return False
+    if shutil.which("osascript") is None:
+        return False
+    try:
+        result = subprocess.run(
+            ["osascript", "-", url],
+            input=_FOCUS_TAB_APPLESCRIPT,
+            capture_output=True, text=True, timeout=5,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+    return result.stdout.strip() == "found"
+
+
+def _open_browser(url: str) -> str:
+    """Best-effort: focus the URL in an existing browser tab, else open new.
+
+    On macOS, scans running Chrome-family and Safari-family browsers via
+    AppleScript for a tab whose URL matches ``url``; if found, activates
+    that tab and returns "focused". Otherwise falls back to ``open
+    <url>`` (default browser, new tab) and returns "opened-new". Returns
+    "skipped" if no opener applies / fails silently.
+    """
     if sys.platform == "darwin":
+        if _focus_existing_tab(url):
+            return "focused"
         opener = ["open", url]
     elif sys.platform.startswith("linux"):
         opener = ["xdg-open", url]
     elif sys.platform == "win32":
         opener = ["cmd.exe", "/c", "start", "", url]
     else:
-        return
+        return "skipped"
     try:
         subprocess.Popen(opener, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL)
+        return "opened-new"
     except (FileNotFoundError, OSError):
-        pass
+        return "skipped"
 
 
 # ---------------------------------------------------------------------------
