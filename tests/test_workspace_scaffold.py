@@ -213,8 +213,12 @@ def test_inplace_merges_gitignore_without_duplicates(tmp_path, plugin_root):
     # Existing entries preserved.
     assert "__pycache__/" in text
     assert ".venv/" in text
-    # Template entries appended.
-    assert ".pbg/server/" in text
+    # Template entries appended. v2ecoli friction #15 (PR #20) replaced the
+    # per-subdir `.pbg/server/`, `.pbg/runs/`, … with a blanket `.pbg/`
+    # (later refined to `.pbg/*` + `!.pbg/schemas/` in PR #21 to rescue
+    # scaffold-tracked schema files). Either form indicates the .pbg/
+    # runtime state is being ignored.
+    assert ".pbg/" in text  # matches both `.pbg/` and `.pbg/*` forms
     assert "investigations/*/runs.db" in text
     # No duplicates (one of the easy ones to check).
     assert text.count(".venv/") == 1
