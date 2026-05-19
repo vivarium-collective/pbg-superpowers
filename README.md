@@ -78,6 +78,17 @@ Full skill catalog: [`docs/skills.md`](docs/skills.md).
 - **Composite.** A typed graph of Processes wired to shared stores; itself a Process, so models compose recursively. JSON-serializable, so composites can be stored, exchanged, and executed across environments. See [`docs/conventions/composites.md`](docs/conventions/composites.md).
 - **Visualization.** A `Step` subclass auto-discovered alongside Processes; wireable into Composites and attachable to Studies. Generated from a natural-language description via `/pbg-viz`. See [`docs/conventions/visualizations.md`](docs/conventions/visualizations.md).
 
+### Workspace vs composite-only repo
+
+Two surfaces commonly get confused when a new user says "make this a pbg-superpowers repo":
+
+| Shape | Has `workspace.yaml`? | What lives in it | Driven by |
+|---|---|---|---|
+| **Workspace** | yes | `studies/`, `investigations/`, `notes/`, `references/`, `scripts/serve.sh`, plus the model's Python package | the vivarium-dashboard + the `/pbg-*` skills |
+| **Composite-only repo** | no | a single Process or Composite package (e.g. `pbg-mem3dg`, `pbg-readdy`) — `pyproject.toml`, `pbg_<slug>/`, `tests/`, `demo/` | imported by one or more workspaces via `workspace.yaml.imports` |
+
+A workspace can wrap or live beside one or more composite-only repos. Use `/pbg-workspace --in-place` to promote an existing composite-only repo into a workspace branch (adds the workspace artifacts on top without clobbering the composite's existing files).
+
 ## Skills
 
 11 skills, grouped by purpose (wrap & compose · workspace lifecycle · catalog · run & study). See [`docs/skills.md`](docs/skills.md) for the full catalog.
