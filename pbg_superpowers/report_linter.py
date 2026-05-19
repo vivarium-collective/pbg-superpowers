@@ -846,7 +846,28 @@ def _check_visualization_addresses(ctx: _LintContext) -> None:
         if not isinstance(v, dict):
             continue
         addr = v.get("address")
+        # mem3dg-readdy friction #26: study.yaml.visualizations entries
+        # missing `address:` would 500 at render time with KeyError:
+        # 'address'. The error surfaces inside the rendered viz iframe and
+        # is invisible to anyone not opening the dashboard. Catch it at
+        # lint time instead, naming the workspace.yaml.visualizations[].class
+        # cross-reference as the natural fix.
         if not isinstance(addr, str) or not addr:
+            viz_name = v.get("name", f"<index-{idx}>")
+            ctx.add(
+                level="error",
+                field_path=f"visualizations[{idx}].address",
+                message=(
+                    f"Visualization {viz_name!r} has no `address:` field. "
+                    "The dashboard's renderer raises KeyError('address') and "
+                    "produces an error-stub HTML iframe (invisible to lint, "
+                    "visible in the dashboard). Add `address: local:<ClassName>` "
+                    "pointing at a class in <package>/visualizations/, or set "
+                    "`workspace.yaml.visualizations[].class` and reference it "
+                    "from the study by name."
+                ),
+                check="visualization_address_missing",
+            )
             continue
         if not addr.startswith("local:"):
             continue  # dotted paths out of scope

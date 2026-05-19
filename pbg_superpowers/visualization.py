@@ -107,6 +107,31 @@ class Visualization(Step):
             return {'html': self.render()}
         return {'html': ''}
 
+    def stable_div_id(self, *parts: str) -> str:
+        """Stable, collision-resistant DOM id for the rendered HTML container.
+
+        Use this instead of ``id(self)`` when building Plotly / Vega div ids
+        (mem3dg-readdy friction #28 — ``id(self)`` happens to be the
+        CPython object address and can collide when two viz instances on the
+        same page get the same address after GC reuses an id slot).
+
+        Hashes the class name plus the config title plus any extra ``parts``
+        the caller passes in (e.g. a per-instance discriminator). Returns
+        an 8-char hex suffix prefixed with the lowercased class name so the
+        id is human-debuggable in devtools::
+
+            <div id="couplingtrace-3f9c1ab8">
+
+        Pure stdlib; safe to call from ``__init__`` or ``render``.
+        """
+        import hashlib
+        cls_name = type(self).__name__.lower()
+        cfg = getattr(self, 'config', None) or {}
+        title = str(cfg.get('title') or '')
+        payload = "|".join([type(self).__name__, title, *parts]).encode("utf-8")
+        digest = hashlib.sha1(payload).hexdigest()[:8]
+        return f"{cls_name}-{digest}"
+
     @classmethod
     def is_visualization(cls) -> bool:
         """Marker for dashboard filtering: distinguishes viz Steps from Emitters."""
