@@ -477,6 +477,33 @@ Rules:
   equivalent). The pip-installed wheel often won't see the repo checkout.
 - **Use `local:RAMEmitter`** (the PascalCase alias auto-registered by
   `process-bigraph`); the `local:ram-emitter` form is not registered.
+- **Declare `core_extensions=` if your document uses types/processes a bare
+  `build_core()` wouldn't register.** The dashboard runs each composite in a
+  subprocess that calls the *workspace's* `build_core()`. If your generator's
+  document references a type registered by a different package (e.g.
+  `map[pymunk_agent]` from `viva_munk`), that subprocess core won't know it
+  and the Composite build dies with "cannot resolve types … pymunk_agent"
+  (v2ecoli friction #16). Pass the package's `register_*` callables so the
+  runner applies them to the right core:
+
+  ```python
+  from viva_munk import register_pymunk_types, register_processes
+
+  @composite_generator(
+      name="attachment",
+      description="…",
+      parameters={...},
+      core_extensions=[register_pymunk_types, register_processes],
+  )
+  def attachment(core=None, **kwargs):
+      ...
+  ```
+
+  Each extension is `(core) -> core | None` (return the core, or `None` to
+  mutate in place). They run after `build_core()` and before the document is
+  built. A wrapper whose own package *is* the workspace package usually
+  doesn't need this — its types are already in `build_core()`; it's for
+  composites that pull in a *sibling* package's types.
 
 A free `build_document(...)` function in `composites.py` is **not enough** —
 it isn't discoverable. Convert it to a `@composite_generator` and put it

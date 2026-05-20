@@ -8,6 +8,7 @@ import pytest
 
 from pbg_superpowers.composite_generator import (
     build_generator, composite_generator, GeneratorEntry, _REGISTRY,
+    apply_core_extensions,
 )
 
 
@@ -61,6 +62,124 @@ def test_decorator_default_n_steps_optional():
 
     entry = _REGISTRY[f"{builder.__module__}.dn-opt"]
     assert entry.default_n_steps is None
+
+
+def test_decorator_core_extensions_default_empty():
+    @composite_generator(name="ce-default", description="", parameters={})
+    def builder(core=None):
+        return {}
+
+    entry = _REGISTRY[f"{builder.__module__}.ce-default"]
+    assert entry.core_extensions == []
+
+
+def test_decorator_stores_core_extensions():
+    """v2ecoli friction #16: a generator can declare register_* callables so
+    the subprocess runner can register the package's types on the core it
+    actually builds against."""
+    def register_pymunk_types(core):
+        core.setdefault("types", []).append("pymunk_agent")
+        return core
+
+    def register_processes(core):
+        core.setdefault("procs", []).append("Attachment")
+        return core
+
+    @composite_generator(
+        name="ce-stored", description="", parameters={},
+        core_extensions=[register_pymunk_types, register_processes],
+    )
+    def builder(core=None):
+        return {}
+
+    entry = _REGISTRY[f"{builder.__module__}.ce-stored"]
+    assert entry.core_extensions == [register_pymunk_types, register_processes]
+
+
+def test_apply_core_extensions_runs_each_in_order():
+    calls = []
+
+    def ext_a(core):
+        calls.append("a")
+        core["a"] = True
+        return core
+
+    def ext_b(core):
+        calls.append("b")
+        core["b"] = True
+        return core
+
+    entry = GeneratorEntry(
+        id="x.y", name="y", description="", parameters={},
+        func=lambda core=None: {}, module="x",
+        core_extensions=[ext_a, ext_b],
+    )
+    core = {}
+    out = apply_core_extensions(entry, core)
+    assert calls == ["a", "b"]
+    assert out == {"a": True, "b": True}
+
+
+def test_apply_core_extensions_threads_replacement_core():
+    """An extension that returns a NEW core (not the one passed in) should
+    have that replacement threaded to the next extension and returned."""
+    sentinel_a = {"id": "a"}
+    sentinel_b = {"id": "b"}
+
+    def ext_replaces(core):
+        return sentinel_b
+
+    def ext_observes(core):
+        assert core is sentinel_b  # got the replacement, not the original
+        return None  # returning None keeps the current core
+
+    entry = GeneratorEntry(
+        id="x.y", name="y", description="", parameters={},
+        func=lambda core=None: {}, module="x",
+        core_extensions=[ext_replaces, ext_observes],
+    )
+    out = apply_core_extensions(entry, sentinel_a)
+    assert out is sentinel_b
+
+
+def test_apply_core_extensions_none_return_keeps_core():
+    def ext_inplace(core):
+        core["touched"] = True
+        return None  # mutate-in-place convention
+
+    entry = GeneratorEntry(
+        id="x.y", name="y", description="", parameters={},
+        func=lambda core=None: {}, module="x",
+        core_extensions=[ext_inplace],
+    )
+    core = {}
+    out = apply_core_extensions(entry, core)
+    assert out is core
+    assert core == {"touched": True}
+
+
+def test_apply_core_extensions_does_not_swallow_failures():
+    """A missing/broken registration must surface, not be silently skipped —
+    otherwise the Composite build fails later with a cryptic type error."""
+    def ext_boom(core):
+        raise RuntimeError("register_pymunk_types blew up")
+
+    entry = GeneratorEntry(
+        id="x.y", name="y", description="", parameters={},
+        func=lambda core=None: {}, module="x",
+        core_extensions=[ext_boom],
+    )
+    with pytest.raises(RuntimeError, match="register_pymunk_types blew up"):
+        apply_core_extensions(entry, {})
+
+
+def test_apply_core_extensions_empty_is_noop():
+    entry = GeneratorEntry(
+        id="x.y", name="y", description="", parameters={},
+        func=lambda core=None: {}, module="x",
+    )
+    core = {"unchanged": True}
+    assert apply_core_extensions(entry, core) is core
 
 
 def test_decorator_accepts_visualizations():
