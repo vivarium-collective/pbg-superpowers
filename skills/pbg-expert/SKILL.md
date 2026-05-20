@@ -2,27 +2,85 @@
 name: pbg-expert
 description: >
   Process-bigraph API expert for wrapping simulation tools as process-bigraph Steps or Processes,
-  OR composing multiple wrapped simulators. Heavy mode (default) creates a sibling pbg-<name>/ repo
-  with tests, README, HTML report, and a local commit. Lightweight mode (--lightweight, alias
-  --in-workspace) writes a single file inside the current workspace's pbg_<slug>/ package and a
-  stub test, with no sibling repo, no report, no commit.
+  OR composing multiple wrapped simulators. By DEFAULT it wraps the ACTUAL upstream simulator —
+  clone it, build/install it, and bridge to the real binary/library — and keeps trying even when
+  that is difficult. It does NOT fall back to a mock/stub on its own; producing fake behavior is
+  always an explicit opt-in. Only reimplement the science yourself when explicitly told to
+  (--reproduce), and only emit a non-functional placeholder when explicitly told to (--mock).
+  Heavy mode (default) creates a sibling pbg-<name>/ repo with tests, README, HTML report, and a
+  local commit. Lightweight mode (--lightweight, alias --in-workspace) writes a single file inside
+  the current workspace's pbg_<slug>/ package and a test, with no sibling repo, no report, no
+  commit — and still bridges the real tool by default. Reproduce mode (--reproduce, alias
+  --reimplement) builds a clearly-labeled clean-room <Tool>ReproductionProcess instead of bridging
+  the real tool. Mock mode (--mock, alias --stub) builds an explicitly-labeled non-functional
+  <Tool>MockProcess placeholder for scaffolding/wiring only — never the default.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob Grep Agent WebFetch WebSearch
 effort: high
-argument-hint: "[--lightweight] <tool-name> | [--lightweight] <composite-name> <tool1> <tool2> [tool3 ...]"
+argument-hint: "[--lightweight] [--reproduce|--mock] <tool-name> | [--lightweight] <composite-name> <tool1> <tool2> [tool3 ...]"
 ---
 
 # pbg-expert
 
 You are a process-bigraph API expert. You know the `process-bigraph` framework, the `bigraph-schema` type system, `bigraph-viz`, and the wrapping patterns used in `v2ecoli`.
 
+## The Default: wrap the REAL tool
+
+Unless told otherwise, "wrap `<tool>`" means **wrap the actual upstream
+simulator** — locate it (PyPI, GitHub, binary), install/build it into the
+wrapper's venv, run a minimal example to confirm it works, then bridge the
+Process to that real code. The Process's `update()` must drive the genuine
+simulator, not a paraphrase of its math. **Keep trying even when it is hard.**
+A flaky build, an awkward C extension, a fiddly dependency pin, an
+undocumented entry point — these are obstacles to work through, not reasons to
+downgrade the deliverable. Exhaust the real-bridge path (try PyPI, then a
+GitHub source build, then a pinned older release, then the tool's own Docker/
+conda recipe for hints) before concluding it can't be done.
+
+**Never silently downgrade to a mock or a reproduction.** Producing fake
+behavior is never something this skill decides on its own — it is always an
+explicit opt-in by the user. If you find yourself reimplementing the tool's
+equations in NumPy, or writing an `update()` that echoes state / returns
+canned numbers because wrapping the real thing was hard, **stop** — those are
+different deliverables that require the user's say-so (`--reproduce` and
+`--mock` respectively).
+
+The three fidelity levels, highest first:
+
+| Level | Flag | `update()` drives… | When |
+|---|---|---|---|
+| **Real bridge** | *(default)* | the genuine installed tool | always, unless the user opts out |
+| **Reproduction** | `--reproduce` / `--reimplement` | a clean-room reimpl of the tool's published algorithm, honestly labeled | user explicitly asks, or the real tool truly can't run here |
+| **Mock** | `--mock` / `--stub` | nothing real — a labeled placeholder for scaffolding/wiring | user explicitly asks; never a fallback |
+
+Only reimplement the science yourself (`--reproduce`) when **either**:
+
+- the user explicitly asks, or
+- the real tool genuinely cannot be installed or run in the target
+  environment — e.g. GPU-only/CUDA on a CPU host, proprietary/unreleased,
+  or abandoned and unbuildable.
+
+In the second case, do not silently substitute a reproduction. Say so loudly,
+name the blocker, and prefer to still author the real bridge (guarded to raise
+a clear "requires X" error where it can't run) **plus** an explicitly-labeled
+`<Tool>ReproductionProcess` as the runs-anywhere fallback. The reproduction is
+always the secondary class, never the headline `<Tool>Process`.
+
+A mock (`--mock`) is a deliberate scaffolding choice, never an escape hatch
+for a difficult build. If the real bridge is hard, the right move is to keep
+working the bridge (or surface the blocker to the user and ask whether they
+want `--reproduce` or `--mock`) — not to quietly ship a placeholder.
+
 ## Mode Detection
 
-Inspect `$ARGUMENTS`:
+Inspect `$ARGUMENTS`. Flags may appear in any order before the positionals;
+strip every recognized flag first, then dispatch on the remaining positional count.
 
-1. If the first token is `--lightweight` or `--in-workspace`, strip the flag and run **Lightweight Mode** (see bottom of this file) with the remaining args. Lightweight mode produces ONE Python file inside the current workspace's `pbg_<slug>/` package plus a stub test, with no sibling repo / README / HTML report / commit.
-2. Otherwise count the remaining positional args:
-   - **Heavy single-tool mode** (one arg): wrap a single simulator as a sibling `pbg-<tool>/` repo.
+1. If `--lightweight` or `--in-workspace` is present, run **Lightweight Mode** (see bottom of this file) with the remaining args. Lightweight mode produces ONE Python file inside the current workspace's `pbg_<slug>/` package plus a test, with no sibling repo / README / HTML report / commit. It still **bridges the real tool by default** — combine with `--mock` for a placeholder instead.
+2. If `--reproduce` or `--reimplement` is present, run **Reproduction Mode** (see the section after Single-Tool Mode): build a clean-room `<Tool>ReproductionProcess` instead of bridging the real tool. Combine with `--lightweight` to drop the reproduction into the current workspace.
+3. If `--mock` or `--stub` is present, run **Mock Mode** (see the section after Reproduction Mode): build an explicitly-labeled non-functional `<Tool>MockProcess` placeholder. This is the ONLY path that emits fake behavior, and it is opt-in only — never a fallback for a hard real-bridge build. Combine with `--lightweight` to drop the mock into the current workspace. `--mock` and `--reproduce` are mutually exclusive; if both appear, stop and ask the user which they want.
+4. Otherwise count the remaining positional args:
+   - **Heavy single-tool mode** (one arg): wrap a single simulator as a sibling `pbg-<tool>/` repo — **bridging the real tool** (see the default above).
    - **Heavy composite mode** (two or more args): the first arg is the composite name; the rest are simulator/wrapper names. Compose into a sibling `pbg-<name>-composite/` repo.
 
 For heavy single-tool mode, proceed to **Initial Repo Setup** below.
@@ -30,6 +88,10 @@ For heavy single-tool mode, proceed to **Initial Repo Setup** below.
 For heavy composite mode, jump to **Composite Mode** section below.
 
 For lightweight mode (either form), jump to **Lightweight Mode** at the bottom.
+
+For reproduce mode, jump to **Reproduction Mode**.
+
+For mock mode, jump to **Mock Mode**.
 
 ---
 
@@ -1145,6 +1207,104 @@ If you have local clones of any of the above, prefer reading them directly. Othe
 
 ---
 
+## Reproduction Mode
+
+Invoked when `$ARGUMENTS` contains `--reproduce` (alias `--reimplement`).
+This is the **opt-in exception** to the default of bridging the real tool.
+Use it only when the user explicitly asks, or when you've determined the real
+tool can't be installed/run in the target environment and the user accepts a
+clean-room reimplementation.
+
+The contract: produce a `<Tool>ReproductionProcess` that re-implements the
+tool's published algorithm (from its paper, docs, and source) in portable
+Python/NumPy — **honestly labeled as a reproduction**, never passed off as the
+tool itself.
+
+Follow the same heavy- or lightweight-mode mechanics as normal (sibling repo
+vs. in-workspace file), with these differences:
+
+1. **Class name is `<Tool>ReproductionProcess`**, not `<Tool>Process`. Reserve
+   the bare `<Tool>Process` name for a real bridge — if you also author a
+   guarded real bridge (recommended when the blocker is environmental, not
+   fundamental), it keeps the headline name and the reproduction stays
+   secondary.
+2. **Module docstring states plainly** that this re-implements `<Tool>`'s design
+   in Python and is not the upstream binary; cite the upstream repo/paper and
+   the version/commit you reproduced from.
+3. **README/REPRODUCTION notes** must list known divergences from upstream
+   (numerical scheme, precision, features omitted) and how to validate against
+   the real tool when a capable environment is available.
+4. **When the real tool is merely environment-blocked** (GPU-only, remote-only),
+   still scaffold the real `<Tool>Process` bridge alongside — lazily importing
+   and raising a clear `RuntimeError("<Tool> requires <X>; set <ENV>…")` where
+   it can't run — so the package is correct everywhere and runnable where the
+   environment allows. Tests for the bridge skip (not fail) when the dependency
+   is absent (`shutil.which(...)` / `importorskip`).
+5. **Composites and demos** default to the reproduction (so they run anywhere),
+   clearly tagged "(reproduction)"; add a parallel real-tool composite tagged
+   with its requirement (e.g. "(requires CUDA)").
+
+Everything else — ports, composite-spec/generator discovery, workspace
+promotion, tests, report — is identical to the matching default mode.
+
+---
+
+## Mock Mode
+
+Invoked when `$ARGUMENTS` contains `--mock` (alias `--stub`). This is the
+**explicit, opt-in** way to produce a non-functional placeholder. It is never
+chosen automatically and never a fallback when the real bridge is hard — if
+the real bridge is difficult, keep working it or ask the user, do not silently
+land here.
+
+Use mock mode only when the user explicitly wants a scaffold to:
+
+- prototype/validate the **wiring** of a composite before the real tool is
+  ready or installed,
+- stand up the ports + schema surface so sibling processes can be developed in
+  parallel, or
+- produce a runnable smoke target in CI where installing the real tool is out
+  of scope for now.
+
+The contract: produce a `<Tool>MockProcess` that has the **same port and
+config surface** the real wrapper would have, but whose `update()` returns
+cheap, clearly-fake values (zeros, echoes of input, a tiny deterministic
+function) — **honestly labeled as a mock**, never passed off as the tool or as
+a reproduction of its science.
+
+Follow the same heavy- or lightweight-mode mechanics as normal (sibling repo
+vs. in-workspace file), with these differences:
+
+1. **Class name is `<Tool>MockProcess`**, not `<Tool>Process` and not
+   `<Tool>ReproductionProcess`. Reserve the bare `<Tool>Process` name for a
+   real bridge so a later real implementation can take the headline name
+   without a rename cascade.
+2. **Module + class docstring state plainly** that this is a non-functional
+   placeholder that does NOT run `<Tool>` and does NOT reproduce its
+   algorithm; it exists only for wiring/scaffolding. Include a `# TODO:`
+   pointing at the real-bridge work that should replace it.
+3. **Ports are designed for real, not faked.** Spend the effort to get
+   `inputs()`, `outputs()`, and `config_schema` right (bare `float` deltas,
+   structural `map`/`list`, etc. per **Port Design**) so the mock is a
+   drop-in shape for the eventual real bridge. The fakeness lives only inside
+   `update()`.
+4. **`update()` is obviously inert** — return zeros / echo inputs / a trivial
+   deterministic transform. Do not approximate the tool's math (that would be
+   a reproduction, not a mock). A one-line comment must say so.
+5. **Tests assert shape, not science** — instantiation, that `inputs()` /
+   `outputs()` return dicts, and that one `update()` call returns the declared
+   output ports. Do not assert numerical fidelity.
+6. **Composites and demos** built on a mock must be tagged "(mock)" wherever a
+   human or the dashboard surfaces them, so nobody mistakes placeholder output
+   for real results.
+
+Everything else — composite-spec/generator discovery, workspace promotion,
+report scaffolding — is identical to the matching default mode. When the user
+later asks for the real wrapper, the mock's ports carry over and only
+`update()` (and the deps) change.
+
+---
+
 ## Composite Mode
 
 When `$ARGUMENTS` contains two or more tokens, the first token is `<name>` (the composite name) and the remaining tokens are the simulator/wrapper names to compose.
@@ -1347,10 +1507,17 @@ Do not push.
 
 ## Start
 
-Given `$ARGUMENTS`:
+Given `$ARGUMENTS` (strip recognized flags first; they may appear in any order):
 
-- If the first token is `--lightweight` (alias `--in-workspace`): run **Lightweight Mode** with the remaining args.
-- Else if one positional arg: study the tool, create `pbg-<tool>/`,
+- **Default intent is the REAL tool.** "Wrap `<tool>`" means install/build the
+  actual upstream simulator and bridge to it — not reimplement its math, not
+  stub it out. Keep trying even when the build is difficult; never downgrade to
+  a reproduction or a mock on your own. See **The Default: wrap the REAL tool**
+  at the top.
+- If `--reproduce` (alias `--reimplement`) is present: run **Reproduction Mode** — build a labeled `<Tool>ReproductionProcess`, keeping the bare `<Tool>Process` name for a (possibly guarded) real bridge.
+- If `--mock` (alias `--stub`) is present: run **Mock Mode** — build a labeled, non-functional `<Tool>MockProcess` placeholder for wiring/scaffolding only. Opt-in only; never a fallback for a hard real-bridge build. (`--mock` and `--reproduce` are mutually exclusive.)
+- If `--lightweight` (alias `--in-workspace`) is present: run **Lightweight Mode** with the remaining args.
+- Else if one positional arg: study the tool, install the real upstream simulator, create `pbg-<tool>/`,
   implement the package with **`@composite_generator`-decorated
   composites under `pbg_<tool>/composites/`**, test it, **promote it to a
   pbg-workspace via `scaffold workspace --in-place` and register it in
@@ -1368,7 +1535,13 @@ Given `$ARGUMENTS`:
 
 Invoked when `$ARGUMENTS` starts with `--lightweight` or `--in-workspace`. Strip that flag and dispatch on the remaining positional count.
 
-This mode produces a single file inside the **current workspace's** `pbg_<slug>/` package plus a stub test. No sibling repo, no README, no HTML report, no commit. The dashboard's active-branch workstream is the canonical commit surface — this mode leaves the working tree dirty so the user (or the dashboard's Push button) commits when ready.
+This mode produces a single file inside the **current workspace's** `pbg_<slug>/` package plus a test. No sibling repo, no README, no HTML report, no commit. The dashboard's active-branch workstream is the canonical commit surface — this mode leaves the working tree dirty so the user (or the dashboard's Push button) commits when ready.
+
+**Lightweight does not mean mock.** The default is still a **real bridge** —
+an `update()` that lazily imports and drives the genuine tool. The only thing
+"lightweight" drops is the surrounding repo scaffolding (README, HTML report,
+sibling repo, commit), not the fidelity of the wrapper. Emit a placeholder
+only under `--mock` (see below).
 
 (Replaces the v0.8.x skills `/pbg-wrapper` and `/pbg-composer`.)
 
@@ -1376,7 +1549,7 @@ This mode produces a single file inside the **current workspace's** `pbg_<slug>/
 
 1. Walk up from cwd to find `workspace.yaml`. Fail with a clear message if absent.
 2. Read `package_path` from `workspace.yaml`; default to `pbg_<workspace_name_underscored>` if missing.
-3. NEVER install simulator dependencies — that's a separate step (`/pbg-catalog install <pkg>` or manual `uv pip install`).
+3. NEVER install simulator dependencies — that's a separate step (`/pbg-catalog install <pkg>` or manual `uv pip install`). The real bridge therefore **lazily imports** the tool inside `update()` / a `_build_model()` helper, so the file is valid even before the dependency is installed; the import only fires at run time.
 4. NEVER modify `workspace.yaml`. The Process/Composite lives in code, not metadata.
 5. NEVER auto-commit.
 
@@ -1384,31 +1557,63 @@ This mode produces a single file inside the **current workspace's** `pbg_<slug>/
 
 `/pbg-expert --lightweight <tool>` (replaces `/pbg-wrapper <tool>`)
 
-Steps:
+Default (real bridge) steps:
 
 1. Create `pbg_<slug>/processes/` if missing (touch `__init__.py`).
-2. Write `pbg_<slug>/processes/<tool>.py` containing:
-   - Module docstring naming the simulator + a `TODO` for the real implementation.
+2. **Study the tool's API first** (its docs/source/examples — read enough to
+   know the real call surface). If it's already importable in the workspace
+   venv, run a one-liner to confirm the entry points; if it isn't installed,
+   work from its published API and lazily import inside the bridge.
+3. Write `pbg_<slug>/processes/<tool>.py` containing:
+   - Module docstring naming the simulator and stating this is a real bridge.
    - `from process_bigraph import Process`.
    - Class `<Tool>Process(Process)` with:
-     - `config_schema = {}`
-     - `def inputs(self)` — sketch of expected input ports.
-     - `def outputs(self)` — sketch of expected output ports.
-     - `def update(self, state, interval)` — placeholder (e.g. echo state).
-     - Real implementation marked `# TODO:`.
-3. Write `tests/test_<tool>.py` — minimal smoke test:
-   - Import the class.
-   - Instantiate with default config.
-   - Assert `inputs()` and `outputs()` return dicts.
-4. Print a short summary listing the two files and the "working tree is now dirty" hint.
+     - `config_schema` — real config knobs the tool needs at construction.
+     - `def inputs(self)` — the actual input ports a sibling could write
+       (substrates, environment, control signals) per **Port Design**.
+     - `def outputs(self)` — the tool's real outputs as composable types
+       (bare `float` deltas, structural `map`/`list`).
+     - `def update(self, state, interval)` — **drives the genuine tool**:
+       lazily import it, push `state` in, run for `interval`, read results
+       back as schema-compatible values (delta against previous reading where
+       the tool reports absolute state). See the **Bridge Pattern** section.
+4. Write `tests/test_<tool>.py`:
+   - Import the class; assert `inputs()` / `outputs()` return dicts.
+   - A bridge-run test that actually calls `update()`, guarded to **skip**
+     (not fail) when the dependency is absent (`pytest.importorskip("<pkg>")`
+     or `shutil.which(...)`), so CI without the tool installed stays green
+     while a dev machine with it exercises the real path.
+5. Print a short summary listing the two files, whether the tool import
+   succeeded locally, and the "working tree is now dirty" hint.
+
+If you cannot determine the tool's real API at all (no docs, no source, name
+unrecognized), **stop and ask the user** — do not silently emit a stub. Offer
+`--mock` as the explicit scaffolding path if that's what they want.
 
 Example:
 
 ```text
 /pbg-expert --lightweight tellurium     # in a workspace called chromosome-rep1
 
-  pbg_chromosome_rep1/processes/tellurium.py    # TelluriumProcess
-  tests/test_tellurium.py                        # smoke test
+  pbg_chromosome_rep1/processes/tellurium.py    # TelluriumProcess — real bridge
+  tests/test_tellurium.py                        # shape + importorskip run test
+```
+
+### Lightweight mock form
+
+`/pbg-expert --lightweight --mock <tool>`
+
+Same file layout as the real form, but the class is `<Tool>MockProcess` and
+`update()` is a labeled, inert placeholder (zeros / echo / trivial transform).
+Follow **Mock Mode** above for the contract (honest docstring, real port
+surface, shape-only tests, "(mock)" tagging). Use this only when the user
+explicitly asks for a scaffold.
+
+```text
+/pbg-expert --lightweight --mock tellurium   # explicit placeholder
+
+  pbg_chromosome_rep1/processes/tellurium.py    # TelluriumMockProcess (labeled)
+  tests/test_tellurium.py                        # shape-only smoke test
 ```
 
 ### Lightweight composite form
@@ -1450,7 +1655,14 @@ Example:
 
 | You want… | Use |
 |---|---|
-| To prototype a Process inside an existing workspace without a sibling repo | `--lightweight <tool>` |
+| A real bridge to a tool inside an existing workspace without a sibling repo | `--lightweight <tool>` |
 | To compose two installed wrappers inside the workspace before deciding to publish | `--lightweight <name> <t1> <t2>` |
 | A publication-ready sibling `pbg-<tool>/` repo with README, tests, HTML report, PR | (heavy) `/pbg-expert <tool>` |
 | A composite repo `pbg-<name>-composite/` with wiring table, validation, report | (heavy) `/pbg-expert <name> <t1> <t2>` |
+| A clean-room reimplementation of the tool's published algorithm (honest, labeled) | add `--reproduce` |
+| A non-functional placeholder to scaffold wiring before the real tool is ready | add `--mock` |
+
+Fidelity (`--reproduce` / `--mock`) and packaging (`--lightweight` vs heavy)
+are independent axes — combine freely, e.g. `--lightweight --mock <tool>` for
+an in-workspace placeholder, or `--reproduce <tool>` for a heavy clean-room
+repo. With no fidelity flag, you always get the **real bridge**.
