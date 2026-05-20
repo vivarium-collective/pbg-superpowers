@@ -28,6 +28,17 @@ class GeneratorEntry:
     # a Study is built on top of this composite the dashboard merges these
     # defaults into its visualizations list; Studies can still declare extras.
     visualizations: list[dict] = field(default_factory=list)
+    # Callables ``(core) -> core | None`` that register the custom types /
+    # processes this generator's document references but that a bare
+    # ``build_core()`` doesn't know about. v2ecoli friction #16 (2026-05-19):
+    # the dashboard runs each composite in a subprocess that calls the
+    # workspace's ``build_core()``; when a composite uses types registered by
+    # a *different* package (e.g. ``map[pymunk_agent]`` from ``viva_munk``),
+    # the subprocess core never gets those registrations and the Composite
+    # build dies with "cannot resolve types … pymunk_agent". Declaring the
+    # package's ``register_*`` functions here lets the runner apply them to
+    # the right core. See ``apply_core_extensions``.
+    core_extensions: list[Callable[[Any], Any]] = field(default_factory=list)
 
 
 # Process-level registry. Populated by @composite_generator on import.
@@ -41,6 +52,7 @@ def composite_generator(
     parameters: dict[str, dict] | None = None,
     visualizations: list[dict] | None = None,
     default_n_steps: int | None = None,
+    core_extensions: list[Callable[[Any], Any]] | None = None,
 ) -> Callable[[Callable[..., dict]], Callable[..., dict]]:
     """Decorator: register a doc-building function.
 
@@ -62,6 +74,21 @@ def composite_generator(
     `default_n_steps` (optional) is a UI hint for the Composite Explorer's
     ``steps`` pre-fill. It is NOT a composite-builder kwarg — runtime knobs
     are framework-owned and live next to the generator entry.
+
+    `core_extensions` (optional) is a list of callables ``(core) -> core | None``
+    that register the custom types/processes this generator's document
+    references but that a bare ``build_core()`` doesn't provide. Declare a
+    package's ``register_*`` functions here so the dashboard's subprocess
+    runner can apply them to the core it actually runs against — see
+    ``apply_core_extensions`` and v2ecoli friction #16. Example::
+
+        from viva_munk import register_pymunk_types, register_processes
+
+        @composite_generator(
+            name="attachment",
+            core_extensions=[register_pymunk_types, register_processes],
+        )
+        def attachment(core=None): ...
     """
     def decorate(fn: Callable[..., dict]) -> Callable[..., dict]:
         entry = GeneratorEntry(
@@ -73,11 +100,33 @@ def composite_generator(
             func=fn,
             module=fn.__module__,
             default_n_steps=default_n_steps,
+            core_extensions=list(core_extensions or []),
         )
         _REGISTRY[entry.id] = entry
         fn._composite_generator_entry = entry  # introspection sidecar
         return fn
     return decorate
+
+
+def apply_core_extensions(entry: GeneratorEntry, core: Any) -> Any:
+    """Run ``entry.core_extensions`` against ``core``; return the final core.
+
+    Each extension is a callable ``(core) -> core | None`` that registers
+    custom types/processes (e.g. ``viva_munk.register_pymunk_types``). By the
+    ``register_types`` convention an extension may return a (possibly new)
+    core; when it returns ``None`` we keep the one we passed in.
+
+    Failures are **not** swallowed. A missing registration is exactly the
+    kind of silent gap v2ecoli friction #16 is about — letting the exception
+    propagate surfaces it (with the offending function name) instead of
+    deferring to a cryptic "cannot resolve types" error at Composite-build
+    time.
+    """
+    for ext in entry.core_extensions or []:
+        result = ext(core)
+        if result is not None:
+            core = result
+    return core
 
 
 def build_generator(
