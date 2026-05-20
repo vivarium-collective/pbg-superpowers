@@ -634,6 +634,18 @@ Principles:
 - Read outputs back into PBG-compatible values.
 - Emit deltas against the previous reading where the tool reports absolute state, so downstream `float`/`map[float]` ports compose. Reserve `overwrite[T]` for genuine setpoints/sensors (see **Port Design**).
 - Convert arrays, DataFrames, sparse matrices, and custom objects into schema-compatible values.
+- **Normalize range-ish config values** instead of indexing them raw. A
+  `[low, high]`-style value declared in yaml can arrive as a list, an
+  int-keyed dict (`{0: low, 1: high}`), a string-keyed dict (JSON round-trip),
+  or an explicit `{"low":…, "high":…}` — so `band[0]` may raise `KeyError: 0`
+  (v2ecoli friction #3). Use the shared helper rather than re-deriving the
+  tolerance per process:
+
+  ```python
+  from pbg_superpowers.config_helpers import normalize_config_list
+
+  low, high = normalize_config_list(self.config["band"], length=2)
+  ```
 
 ## Emitters
 

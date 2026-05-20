@@ -180,6 +180,141 @@ def _clear_state(workspace: Path) -> None:
             pass
 
 
+# ---------------------------------------------------------------------------
+# Adopt an externally-launched server (v2ecoli friction #11)
+# ---------------------------------------------------------------------------
+# When someone starts the dashboard directly —
+#   python -m vivarium_dashboard.server --workspace . --port 8765
+# — the .pbg/dashboard/ state files are never written, so `status` used to
+# report `not-running` even though the UI was live and curl-able. Probe the
+# known port(s), confirm the listener really is THIS workspace's dashboard
+# (so we never adopt a peer workspace's server on 8765), and write the state
+# files so subsequent status/stop/restart behave.
+
+def _listening_pid_on_port(port: int) -> int | None:
+    """Return the PID listening on 127.0.0.1:<port>, via lsof. None if none."""
+    try:
+        r = subprocess.run(
+            ["lsof", "-ti", f"tcp:{port}", "-sTCP:LISTEN"],
+            capture_output=True, text=True, timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in (r.stdout or "").split():
+        try:
+            return int(line)
+        except ValueError:
+            continue
+    return None
+
+
+def _proc_cmdline(pid: int) -> str:
+    """Best-effort command line for `pid` (empty string if unavailable)."""
+    try:
+        r = subprocess.run(
+            ["ps", "-o", "command=", "-p", str(pid)],
+            capture_output=True, text=True, timeout=3,
+        )
+        return (r.stdout or "").strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _proc_cwd(pid: int) -> Path | None:
+    """Best-effort working directory for `pid` via lsof (None if unavailable)."""
+    try:
+        r = subprocess.run(
+            ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
+            capture_output=True, text=True, timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in (r.stdout or "").splitlines():
+        if line.startswith("n"):  # lsof field-output: n<path>
+            try:
+                return Path(line[1:]).resolve()
+            except (OSError, ValueError):
+                return None
+    return None
+
+
+def _proc_is_workspace_dashboard(pid: int, workspace: Path) -> bool:
+    """True iff `pid` is a vivarium-dashboard server bound to `workspace`.
+
+    Identity check (so we never adopt a different workspace's server that
+    happens to hold the default port):
+      - the command line must look like the dashboard server, AND
+      - either the resolved `--workspace <path>` arg, or the process cwd,
+        must equal `workspace`.
+    """
+    cmd = _proc_cmdline(pid)
+    if "vivarium_dashboard" not in cmd and "vivarium-dashboard" not in cmd:
+        return False
+    ws = workspace.resolve()
+    # Explicit `--workspace <path>` form.
+    toks = cmd.split()
+    for i, tok in enumerate(toks):
+        if tok == "--workspace" and i + 1 < len(toks):
+            try:
+                if Path(toks[i + 1]).resolve() == ws:
+                    return True
+            except (OSError, ValueError):
+                pass
+        elif tok.startswith("--workspace="):
+            try:
+                if Path(tok.split("=", 1)[1]).resolve() == ws:
+                    return True
+            except (OSError, ValueError):
+                pass
+    # Fallback: launched from the workspace dir (e.g. `--workspace .`).
+    cwd = _proc_cwd(pid)
+    return cwd is not None and cwd == ws
+
+
+def _candidate_ports(workspace: Path) -> list[int]:
+    """Ports worth probing: the saved preferred-port, then the 8765 default."""
+    ports: list[int] = []
+    saved = _read_preferred_port(workspace)
+    if saved is not None:
+        ports.append(saved)
+    if 8765 not in ports:
+        ports.append(8765)
+    return ports
+
+
+def _adopt_running_server(workspace: Path) -> dict | None:
+    """Probe known ports for a live dashboard bound to `workspace`; adopt it.
+
+    On a confirmed match, write `.pbg/dashboard/{dashboard-info,dashboard.pid}`
+    so future status/stop/restart see it, and return the info dict. Returns
+    None when nothing adoptable is found.
+    """
+    for port in _candidate_ports(workspace):
+        url = f"http://localhost:{port}"
+        if not _http_ok(url):
+            continue
+        pid = _listening_pid_on_port(port)
+        if pid is None or not _proc_is_workspace_dashboard(pid, workspace):
+            continue
+        info = {
+            "host": "127.0.0.1",
+            "port": port,
+            "url": url,
+            "pid": pid,
+            "workspace": str(workspace.resolve()),
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "adopted": True,  # marks a server we discovered, didn't launch
+        }
+        try:
+            _info_file(workspace).write_text(json.dumps(info, indent=2))
+            _pid_file(workspace).write_text(str(pid))
+        except OSError:
+            # Couldn't persist (read-only fs?) — still report it as alive.
+            pass
+        return info
+    return None
+
+
 def _resolve_dashboard_cmd(workspace: Path) -> list[str] | None:
     """Pick the vivarium-dashboard launcher to use.
 
@@ -246,10 +381,21 @@ def _try_render_dashboard(workspace: Path) -> tuple[bool, str | None]:
 # ---------------------------------------------------------------------------
 
 def status(workspace: Path) -> dict:
-    """Return a status dict: alive | stale | not-running."""
+    """Return a status dict: alive | stale | not-running.
+
+    v2ecoli friction #11: when our own state files are absent we don't
+    immediately conclude not-running — a dashboard may have been launched
+    directly (``python -m vivarium_dashboard.server …``) without writing
+    them. Probe the known port(s) and adopt a live server that's confirmed
+    to be THIS workspace's, writing the state files so later commands work.
+    """
     info = _read_info(workspace)
     pid = _read_pid(workspace)
     if info is None and pid is None:
+        adopted = _adopt_running_server(workspace)
+        if adopted is not None:
+            return {"state": "alive", "info": adopted, "pid": adopted["pid"],
+                    "note": "adopted externally-launched server"}
         return {"state": "not-running"}
     if pid is None or not _pid_alive(pid):
         return {"state": "stale", "info": info, "pid": pid}
