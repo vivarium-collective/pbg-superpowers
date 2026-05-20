@@ -258,3 +258,94 @@ def test_stop_is_venv_agnostic_when_no_pid(tmp_path):
     # No .venv at all in the workspace.
     out = dash_mod.stop(ws)
     assert out["action"] == "not-running"
+
+
+# ---------------------------------------------------------------------------
+# Adopt an externally-launched server (v2ecoli friction #11)
+# ---------------------------------------------------------------------------
+
+def test_status_not_running_when_no_state_and_no_live_server(tmp_path, monkeypatch):
+    """No state files AND no adoptable server → honest not-running."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(dash_mod, "_http_ok", lambda url, timeout=1.0: False)
+    assert dash_mod.status(ws) == {"state": "not-running"}
+
+
+def test_status_adopts_externally_launched_server(tmp_path, monkeypatch):
+    """A live dashboard on the known port, launched directly (no state files),
+    is discovered, confirmed as THIS workspace's, and adopted — status reports
+    alive and the state files get written so stop/restart work afterward."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    dash_mod._write_preferred_port(ws, 8765)
+
+    monkeypatch.setattr(dash_mod, "_http_ok", lambda url, timeout=1.0: True)
+    monkeypatch.setattr(dash_mod, "_listening_pid_on_port", lambda port: 4242)
+    monkeypatch.setattr(dash_mod, "_proc_is_workspace_dashboard",
+                        lambda pid, workspace: True)
+
+    out = dash_mod.status(ws)
+    assert out["state"] == "alive"
+    assert out["pid"] == 4242
+    assert out["note"] == "adopted externally-launched server"
+    assert out["info"]["adopted"] is True
+    assert out["info"]["port"] == 8765
+    # State files were written so subsequent status() reads them directly.
+    assert dash_mod._read_pid(ws) == 4242
+    assert dash_mod._read_info(ws)["adopted"] is True
+
+
+def test_status_does_not_adopt_other_workspaces_server(tmp_path, monkeypatch):
+    """A live server on 8765 that belongs to a DIFFERENT workspace must NOT
+    be adopted — the identity check fails, status stays not-running."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(dash_mod, "_http_ok", lambda url, timeout=1.0: True)
+    monkeypatch.setattr(dash_mod, "_listening_pid_on_port", lambda port: 4242)
+    # The listener is a dashboard, but for some OTHER workspace.
+    monkeypatch.setattr(dash_mod, "_proc_is_workspace_dashboard",
+                        lambda pid, workspace: False)
+    assert dash_mod.status(ws) == {"state": "not-running"}
+    # Nothing was written.
+    assert dash_mod._read_pid(ws) is None
+
+
+def test_proc_is_workspace_dashboard_matches_workspace_arg(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    cmd = f"python -m vivarium_dashboard.server --workspace {ws} --port 8765"
+    monkeypatch.setattr(dash_mod, "_proc_cmdline", lambda pid: cmd)
+    monkeypatch.setattr(dash_mod, "_proc_cwd", lambda pid: None)
+    assert dash_mod._proc_is_workspace_dashboard(4242, ws) is True
+
+
+def test_proc_is_workspace_dashboard_matches_cwd_fallback(tmp_path, monkeypatch):
+    """`--workspace .` form: the arg isn't an absolute path, so fall back to
+    matching the process cwd."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    cmd = "python -m vivarium_dashboard.server --workspace . --port 8765"
+    monkeypatch.setattr(dash_mod, "_proc_cmdline", lambda pid: cmd)
+    monkeypatch.setattr(dash_mod, "_proc_cwd", lambda pid: ws.resolve())
+    assert dash_mod._proc_is_workspace_dashboard(4242, ws) is True
+
+
+def test_proc_is_workspace_dashboard_rejects_non_dashboard(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(dash_mod, "_proc_cmdline",
+                        lambda pid: "python -m http.server 8765")
+    monkeypatch.setattr(dash_mod, "_proc_cwd", lambda pid: ws.resolve())
+    assert dash_mod._proc_is_workspace_dashboard(4242, ws) is False
+
+
+def test_proc_is_workspace_dashboard_rejects_other_workspace(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    other = tmp_path / "other"
+    other.mkdir()
+    cmd = f"python -m vivarium_dashboard.server --workspace {other} --port 8765"
+    monkeypatch.setattr(dash_mod, "_proc_cmdline", lambda pid: cmd)
+    monkeypatch.setattr(dash_mod, "_proc_cwd", lambda pid: other.resolve())
+    assert dash_mod._proc_is_workspace_dashboard(4242, ws) is False
