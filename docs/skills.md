@@ -6,10 +6,12 @@
 
 | Skill | What it does |
 |---|---|
-| [`/pbg-expert <tool>`](../skills/pbg-expert/SKILL.md) | Wrap a simulator as a Process — full sibling `pbg-<tool>/` repo with Process class, tests, README, HTML report, and a local commit. The canonical wrap. |
+| [`/pbg-expert <tool>`](../skills/pbg-expert/SKILL.md) | Wrap a simulator as a Process — full sibling `pbg-<tool>/` repo with Process class, tests, README, HTML report, and a local commit. **Bridges the REAL tool by default** (keeps trying even when the build is hard); never silently downgrades. The canonical wrap. |
 | [`/pbg-expert <name> <tools…>`](../skills/pbg-expert/SKILL.md) | Compose two or more wrapped simulators into a sibling `pbg-<name>-composite/` repo with HTML report and a local commit. |
-| [`/pbg-expert --lightweight <tool>`](../skills/pbg-expert/SKILL.md#lightweight-mode) | Lightweight in-workspace wrap: writes `pbg_<slug>/processes/<tool>.py` + a test stub. No sibling repo, no report. (Alias: `--in-workspace`. Replaces v0.8 `/pbg-wrapper`.) |
-| [`/pbg-expert --lightweight <name> <tools…>`](../skills/pbg-expert/SKILL.md#lightweight-mode) | Lightweight in-workspace composite: writes `pbg_<slug>/composites/<name>.py` + a test stub. (Replaces v0.8 `/pbg-composer`.) |
+| [`/pbg-expert --lightweight <tool>`](../skills/pbg-expert/SKILL.md#lightweight-mode) | Lightweight in-workspace wrap: writes `pbg_<slug>/processes/<tool>.py` + a test. Still a **real bridge** (lazy-imports + drives the genuine tool); only the repo scaffolding is dropped. No sibling repo, no report. (Alias: `--in-workspace`. Replaces v0.8 `/pbg-wrapper`.) |
+| [`/pbg-expert --lightweight <name> <tools…>`](../skills/pbg-expert/SKILL.md#lightweight-mode) | Lightweight in-workspace composite: writes `pbg_<slug>/composites/<name>.py` + a test. (Replaces v0.8 `/pbg-composer`.) |
+| [`/pbg-expert --reproduce <tool>`](../skills/pbg-expert/SKILL.md#reproduction-mode) | Opt-in: clean-room reimplement the tool's published algorithm as a labeled `<Tool>ReproductionProcess` (for when the real tool genuinely can't run here). Not the default. |
+| [`/pbg-expert --mock <tool>`](../skills/pbg-expert/SKILL.md#mock-mode) | Opt-in: emit a non-functional `<Tool>MockProcess` placeholder (real ports, inert `update()`) for scaffolding/wiring only. Never a fallback for a hard build. Alias `--stub`. |
 
 ## Workspace lifecycle & dashboard
 
