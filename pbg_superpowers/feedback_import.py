@@ -50,6 +50,91 @@ def _read_feedback_yaml(path: Path) -> dict:
     return {"meta": meta, "annotations": annotations}
 
 
+def _feedback_files(inv_dir: Path) -> list[Path]:
+    """All feedback yaml files for an investigation, oldest-first.
+
+    Covers both layouts that exist in the wild:
+      - ``feedback/<ts>.yaml``        — written by ``pbg-feedback-import``
+      - ``feedback-<date>/feedback.yaml`` — a dated round folder (the dnaa
+        investigation keeps its rounds this way, alongside a PLAN.md)
+    """
+    out: list[Path] = []
+    fb_dir = inv_dir / "feedback"
+    if fb_dir.is_dir():
+        out.extend(sorted(fb_dir.glob("*.yaml")))
+    for round_dir in sorted(inv_dir.glob("feedback-*")):
+        if round_dir.is_dir():
+            f = round_dir / "feedback.yaml"
+            if f.is_file():
+                out.append(f)
+    return out
+
+
+def load_investigation_feedback(workspace: Path | str, investigation: str) -> dict:
+    """Aggregate every imported feedback annotation for an investigation.
+
+    Returns ``{section_id: [annotation, ...]}`` where each annotation is
+    ``{author, text, ts, report_id}`` and the lists are newest-first. Section
+    ids match the widget's element ids (e.g.
+    ``study-dnaa-00-parameter-foundation-embeds``), so a caller can attach a
+    study's feedback by matching the ``study-<slug>`` prefix.
+
+    v2ecoli expert-feedback round 1 (2026-05-21): feedback was imported and
+    stored but never surfaced back into the report — so the reviewer's points
+    lived in a yaml nobody saw. This reader is the shared core that the
+    dashboard uses to render imported feedback per study (Thread B.1), closing
+    the loop so the next generation visibly answers it.
+    """
+    inv_dir = Path(workspace) / "investigations" / investigation
+    by_section: dict[str, list[dict]] = {}
+    for path in _feedback_files(inv_dir):
+        try:
+            data = yaml.safe_load(path.read_text())
+        except (yaml.YAMLError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        meta = data.get("meta") or {}
+        report_id = meta.get("report_id") if isinstance(meta, dict) else None
+        annotations = data.get("annotations") or {}
+        if not isinstance(annotations, dict):
+            continue
+        for section_id, entries in annotations.items():
+            if not isinstance(entries, list):
+                continue
+            bucket = by_section.setdefault(section_id, [])
+            for e in entries:
+                if not isinstance(e, dict):
+                    continue
+                bucket.append({
+                    "author": e.get("author") or "",
+                    "text": e.get("text") or "",
+                    "ts": e.get("ts") or "",
+                    "report_id": report_id,
+                })
+    # Newest-first within each section (ts is ISO-8601, lexically sortable).
+    for entries in by_section.values():
+        entries.sort(key=lambda a: a.get("ts") or "", reverse=True)
+    return by_section
+
+
+def feedback_for_study(feedback_by_section: dict, study_slug: str) -> list[dict]:
+    """Flatten the annotations targeting one study's sections, newest-first.
+
+    Matches section ids of the form ``study-<slug>`` (optionally with a
+    ``-embeds`` / ``-charts`` / … suffix). Each returned annotation gains a
+    ``section`` field naming the originating section id.
+    """
+    prefix = "study-" + study_slug
+    out: list[dict] = []
+    for section_id, entries in (feedback_by_section or {}).items():
+        if section_id == prefix or section_id.startswith(prefix + "-"):
+            for e in entries:
+                out.append({**e, "section": section_id})
+    out.sort(key=lambda a: a.get("ts") or "", reverse=True)
+    return out
+
+
 def _timestamp_slug(iso_ts: str | None) -> str:
     """Derive a filesystem-safe slug from the widget's generated_at timestamp.
 
