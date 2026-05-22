@@ -110,30 +110,47 @@ def derive_status(spec: dict, runs: list[dict] | None,
     }
 
 
+# Axis value ordering, least→most advanced. Disagreements are only flagged
+# when the DERIVED value outranks the stored one — i.e. execution has moved
+# past what the stored status claims (the round-2 #2 case: a "planning" /
+# "not_run" status on a study that has actually run). The reverse (stored
+# claims more than the evidence shows) is NOT flagged: runs.db can simply be
+# absent from a given checkout, so a stored ``ran`` with no local db is
+# ambiguous, not proof of drift.
+_AXIS_RANK = {
+    "simulation_status": {"not_run": 0, "running": 1, "ran": 2},
+    "evaluation_status": {"not_evaluated": 0, "evaluated": 1},
+}
+
+
 def status_disagreements(spec: dict, runs: list[dict] | None,
                          *, has_verdicts: bool | None = None) -> list[dict]:
-    """Where a stored axis (or legacy ``status``) contradicts the derived value.
+    """Where a stored axis (or legacy ``status``) lags BEHIND execution state.
 
     Returns ``[{axis, stored, derived, message}]`` — empty when everything
-    agrees (or the stored value is absent). The legacy free-form ``status``
-    field is checked against ``simulation_status`` only when it clearly
-    encodes a phase ("planning" / "planned"): a "planning" headline on a
-    study that has runs is the round-2 friction #2 case.
+    agrees, the stored value is absent, or the stored value merely claims
+    *more* than the local runs.db shows (ambiguous: the db may not be in this
+    checkout). Only flags when the derived value outranks the stored one — the
+    "planning status after the study already ran" drift (round-2 #2).
     """
     derived = derive_status(spec, runs, has_verdicts=has_verdicts)
     out: list[dict] = []
     for axis, info in derived.items():
         stored = spec.get(axis)
-        if stored and stored != info["value"]:
-            out.append({
-                "axis": axis,
-                "stored": stored,
-                "derived": info["value"],
-                "message": (
-                    f"{axis}: stored {stored!r} but execution state implies "
-                    f"{info['value']!r} ({info['source']})"
-                ),
-            })
+        if not stored or stored == info["value"]:
+            continue
+        ranks = _AXIS_RANK.get(axis, {})
+        if ranks.get(info["value"], -1) <= ranks.get(stored, 99):
+            continue  # derived not more advanced than stored → not flagged
+        out.append({
+            "axis": axis,
+            "stored": stored,
+            "derived": info["value"],
+            "message": (
+                f"{axis}: stored {stored!r} but execution state implies "
+                f"{info['value']!r} ({info['source']})"
+            ),
+        })
     # Legacy free-form `status`: only flag the unambiguous planning-vs-ran case.
     legacy = str(spec.get("status") or "").strip().lower()
     sim = derived["simulation_status"]["value"]
