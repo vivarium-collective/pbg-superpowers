@@ -91,3 +91,13 @@ def test_legacy_planning_not_flagged_when_not_run():
 def test_no_disagreement_when_stored_absent():
     # Absent stored axes are derived-on-read, not contradictions.
     assert status_disagreements({}, _runs("complete")) == []
+
+
+def test_no_flag_when_stored_more_advanced_than_evidence():
+    """Ambiguous direction: stored 'ran' but runs.db absent/empty in this
+    checkout → derived 'not_run' is LESS advanced, so we do NOT flag it
+    (the db may simply not be present here)."""
+    spec = {"simulation_status": "ran"}
+    assert status_disagreements(spec, []) == []
+    spec2 = {"evaluation_status": "evaluated"}
+    assert status_disagreements(spec2, []) == []

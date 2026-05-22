@@ -298,6 +298,8 @@ CHECKS = (
     "finding_without_evidence",
     "finding_cites_unknown_bib_key",
     "finding_references_unknown_expert_doc",
+    # Derive-on-read status drift (v2ecoli round-2 #2)
+    "status_out_of_date_vs_runs",
 )
 
 
@@ -1066,6 +1068,51 @@ def _runs_db_run_ids(ws_root: Path, slug: str) -> set[str]:
     return out
 
 
+def _runs_db_rows(ws_root: Path, slug: str) -> list[dict]:
+    """Return [{run_id, status}] from studies/<slug>/runs.db runs_meta.
+
+    Empty list if the DB is missing/broken. Used to derive simulation
+    status from execution state (status-drift check).
+    """
+    db = _runs_db_path(ws_root, slug)
+    if not db.is_file():
+        return []
+    import sqlite3 as _sql
+    out: list[dict] = []
+    try:
+        conn = _sql.connect(str(db))
+        tables = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        if "runs_meta" in tables:
+            for r in conn.execute("SELECT run_id, status FROM runs_meta"):
+                out.append({"run_id": r[0], "status": r[1]})
+        conn.close()
+    except _sql.Error:
+        return []
+    return out
+
+
+def _check_status_out_of_date_vs_runs(ctx: _LintContext) -> None:
+    """v2ecoli round-2 friction #2: a report shipped a "planning" status after
+    all studies had executed. Derive the observable status from runs.db and
+    flag any stored axis (or a legacy planning headline) that contradicts it,
+    so the drift is caught pre-publication instead of by the expert.
+    """
+    try:
+        from pbg_superpowers import study_status as _ss
+    except ImportError:
+        return
+    rows = _runs_db_rows(ctx.ws_root, ctx.slug)
+    for dis in _ss.status_disagreements(ctx.spec, rows):
+        ctx.add(
+            level="error",
+            field_path=dis.get("axis", "status"),
+            message=dis.get("message", "status is out of date relative to runs"),
+            check="status_out_of_date_vs_runs",
+        )
+
+
 def _check_runs_yaml_vs_db_drift(ctx: _LintContext) -> None:
     """Per F2, runs.db is the canonical record of which runs exist. The
     `study.yaml.runs[]` field stays in the schema as a soft-deprecated
@@ -1156,6 +1203,7 @@ _CHECK_FUNCTIONS = (
     _check_dag_edges_legacy_and_canonical_both_set,
     _check_status_legacy_only,
     _check_runs_yaml_vs_db_drift,
+    _check_status_out_of_date_vs_runs,
 )
 
 
