@@ -335,6 +335,43 @@ def _resolve_dashboard_cmd(workspace: Path) -> list[str] | None:
     return None
 
 
+def prepare_investigation(workspace: Path | str, *,
+                          investigation: str | None = None,
+                          study: str | None = None,
+                          steps: int | None = None,
+                          render_only: bool = False,
+                          param_set: str | None = None,
+                          dashboard_url: str | None = None) -> int:
+    """Prepare an investigation's coordinated generation.
+
+    Thin wrapper over ``vivarium-dashboard prepare-investigation`` — that
+    command lives in the vivarium-dashboard package (co-located with the run
+    API + comparative_viz it drives), and this is how the framework invokes it.
+    Requires a running dashboard for the workspace. Runs in the foreground
+    (streams progress); returns the subprocess exit code.
+    """
+    workspace = Path(workspace)
+    venv_bin = workspace / ".venv" / "bin" / "vivarium-dashboard"
+    if not (venv_bin.is_file() and os.access(venv_bin, os.X_OK)):
+        raise FileNotFoundError(
+            f"vivarium-dashboard not found in {workspace}/.venv/bin — install "
+            "it into the workspace venv first.")
+    cmd = [str(venv_bin), "prepare-investigation", "--workspace", str(workspace)]
+    if investigation:
+        cmd += ["--investigation", investigation]
+    if study:
+        cmd += ["--study", study]
+    if steps is not None:
+        cmd += ["--steps", str(steps)]
+    if render_only:
+        cmd += ["--render-only"]
+    if param_set:
+        cmd += ["--param-set", str(param_set)]
+    if dashboard_url:
+        cmd += ["--dashboard-url", dashboard_url]
+    return subprocess.run(cmd, cwd=str(workspace)).returncode
+
+
 # Placeholder body shipped by pbg-template's reports/index.html.j2 before
 # /pbg-report (or render_dashboard()) populates the SPA. Detecting this
 # string lets `start()` decide whether to auto-render or refuse-with-hint
