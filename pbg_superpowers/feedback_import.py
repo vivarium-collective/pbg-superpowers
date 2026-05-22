@@ -150,6 +150,71 @@ def _timestamp_slug(iso_ts: str | None) -> str:
     return t.strftime("%Y-%m-%dT%H-%M-%SZ")
 
 
+class FeedbackImportError(ValueError):
+    """Raised by write_feedback_payload on a bad payload / missing inv dir."""
+
+
+def _validate_payload(payload: dict) -> dict:
+    """Normalize + validate a ``{meta, annotations}`` feedback payload.
+
+    Shared by the CLI (file source) and the dashboard's direct-submit
+    endpoint (JSON body). Raises FeedbackImportError on a malformed payload.
+    """
+    if not isinstance(payload, dict):
+        raise FeedbackImportError("expected a mapping at the top level")
+    meta = payload.get("meta") or {}
+    if not isinstance(meta, dict) or not meta.get("investigation"):
+        raise FeedbackImportError(
+            "missing meta.investigation — was this produced by the "
+            "inline-feedback widget?")
+    annotations = payload.get("annotations")
+    if annotations is None:
+        annotations = {}
+    if not isinstance(annotations, dict):
+        raise FeedbackImportError(
+            "annotations must be a mapping (section_id → list[entry])")
+    return {"meta": meta, "annotations": annotations}
+
+
+def write_feedback_payload(workspace: Path | str, payload: dict,
+                           *, create: bool = True) -> Path:
+    """Write a feedback payload to ``investigations/<inv>/feedback/<ts>.yaml``.
+
+    The shared writer behind both ``pbg-feedback-import`` (file source) and
+    the dashboard's direct-submit endpoint (B.2). ``payload`` is
+    ``{meta:{investigation, generated_at?, ...}, annotations:{...}}``. Returns
+    the written path. Never overwrites earlier feedback — same-second
+    collisions get a numeric suffix.
+
+    Raises :class:`FeedbackImportError` for a malformed payload or when the
+    investigation directory doesn't exist (and, if ``create`` is False, when
+    the feedback/ subdir doesn't exist).
+    """
+    workspace = Path(workspace)
+    payload = _validate_payload(payload)
+    inv = payload["meta"]["investigation"]
+    inv_dir = workspace / "investigations" / inv
+    if not inv_dir.is_dir():
+        raise FeedbackImportError(
+            f"investigations/{inv}/ does not exist under {workspace}.")
+    fb_dir = inv_dir / "feedback"
+    if not fb_dir.is_dir():
+        if not create:
+            raise FeedbackImportError(f"{fb_dir} does not exist.")
+        fb_dir.mkdir(parents=True, exist_ok=True)
+
+    slug = _timestamp_slug(payload["meta"].get("generated_at"))
+    target = fb_dir / f"{slug}.yaml"
+    if target.exists():
+        for i in range(1, 100):
+            cand = fb_dir / f"{slug}-{i:02d}.yaml"
+            if not cand.exists():
+                target = cand
+                break
+    target.write_text(yaml.safe_dump(payload, sort_keys=False))
+    return target
+
+
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("source", type=click.Path(path_type=Path, exists=True, dir_okay=False))
 @click.option("--workspace", type=click.Path(path_type=Path, file_okay=False),
@@ -166,33 +231,10 @@ def cli(source: Path, workspace: Path, no_create: bool) -> None:
     inv = payload["meta"]["investigation"]
     n_sections = len(payload["annotations"])
     n_entries = sum(len(v or []) for v in payload["annotations"].values())
-
-    inv_dir = workspace / "investigations" / inv
-    if not inv_dir.is_dir():
-        raise click.ClickException(
-            f"investigations/{inv}/ does not exist under {workspace}. "
-            "Either run this from the correct workspace or pass --workspace."
-        )
-    fb_dir = inv_dir / "feedback"
-    if not fb_dir.is_dir():
-        if no_create:
-            raise click.ClickException(
-                f"{fb_dir} does not exist (and --no-create was set)."
-            )
-        fb_dir.mkdir(parents=True, exist_ok=False)
-
-    slug = _timestamp_slug(payload["meta"].get("generated_at"))
-    target = fb_dir / f"{slug}.yaml"
-    # If a same-second collision happens, suffix with a counter so we
-    # never overwrite earlier feedback.
-    if target.exists():
-        for i in range(1, 100):
-            cand = fb_dir / f"{slug}-{i:02d}.yaml"
-            if not cand.exists():
-                target = cand
-                break
-
-    target.write_text(yaml.safe_dump(payload, sort_keys=False))
+    try:
+        target = write_feedback_payload(workspace, payload, create=not no_create)
+    except FeedbackImportError as e:
+        raise click.ClickException(str(e)) from e
     click.echo(
         f"Imported {n_entries} annotation(s) across {n_sections} section(s) "
         f"for investigation {inv!r} → {target.relative_to(workspace)}"

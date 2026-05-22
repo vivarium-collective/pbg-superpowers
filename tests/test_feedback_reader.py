@@ -1,8 +1,10 @@
-"""Tests for the imported-feedback reader (Thread B.1)."""
+"""Tests for the imported-feedback reader (Thread B.1) + shared writer (B.2)."""
+import pytest
 import yaml
 
 from pbg_superpowers.feedback_import import (
     load_investigation_feedback, feedback_for_study,
+    write_feedback_payload, FeedbackImportError,
 )
 
 
@@ -103,3 +105,50 @@ def test_malformed_entries_skipped(tmp_path):
     fb = load_investigation_feedback(tmp_path, "dnaa")
     assert [e["text"] for e in fb["study-dnaa-00-x"]] == ["ok"]
     assert "study-dnaa-00-y" not in fb
+
+
+# ── Shared writer (B.2): write_feedback_payload ──────────────────────────
+
+def _payload(inv="dnaa", **meta):
+    return {
+        "meta": {"investigation": inv, "generated_at": "2026-05-21T02:32:39Z", **meta},
+        "annotations": {
+            "study-dnaa-00-x": [{"author": "H", "text": "longer", "ts": "t"}],
+        },
+    }
+
+
+def test_write_feedback_payload_writes_into_feedback_dir(tmp_path):
+    (tmp_path / "investigations" / "dnaa").mkdir(parents=True)
+    target = write_feedback_payload(tmp_path, _payload())
+    assert target.parent == tmp_path / "investigations" / "dnaa" / "feedback"
+    data = yaml.safe_load(target.read_text())
+    assert data["meta"]["investigation"] == "dnaa"
+    assert "study-dnaa-00-x" in data["annotations"]
+    # And the reader round-trips it.
+    fb = load_investigation_feedback(tmp_path, "dnaa")
+    assert fb["study-dnaa-00-x"][0]["text"] == "longer"
+
+
+def test_write_feedback_payload_never_overwrites(tmp_path):
+    (tmp_path / "investigations" / "dnaa").mkdir(parents=True)
+    a = write_feedback_payload(tmp_path, _payload())
+    b = write_feedback_payload(tmp_path, _payload())  # same generated_at
+    assert a != b  # second got a numeric suffix, didn't clobber the first
+    assert a.exists() and b.exists()
+
+
+def test_write_feedback_payload_missing_investigation_dir(tmp_path):
+    with pytest.raises(FeedbackImportError, match="does not exist"):
+        write_feedback_payload(tmp_path, _payload(inv="nope"))
+
+
+def test_write_feedback_payload_bad_payload(tmp_path):
+    with pytest.raises(FeedbackImportError, match="meta.investigation"):
+        write_feedback_payload(tmp_path, {"annotations": {}})
+
+
+def test_write_feedback_payload_no_create_refuses(tmp_path):
+    (tmp_path / "investigations" / "dnaa").mkdir(parents=True)
+    with pytest.raises(FeedbackImportError, match="does not exist"):
+        write_feedback_payload(tmp_path, _payload(), create=False)
