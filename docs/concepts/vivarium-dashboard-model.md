@@ -9,14 +9,20 @@ The canonical concepts pbg-superpowers reads, writes, and orchestrates in a viva
 ```
 Workspace
   ├── Composites (in pbg_<pkg>/composites/, discovered by the catalog)
-  ├── Studies (in studies/<name>/study.yaml — v3)
-  │     ├── Baseline      (list of composites, each {name, composite, params})
-  │     ├── Variants      (list of perturbations, each {name, base_composite, parameter_overrides})
-  │     ├── Interventions (list of text-described conditions, each {name, description})
-  │     ├── Runs          (list of completed executions; per-baseline-entry or per-variant)
+  ├── Studies (in studies/<name>/study.yaml — v4 with 14-section narrative spine)
+  │     ├── Executive      (runtime, report, study_card)
+  │     ├── Framing        (question, assumptions, conditions{baseline, variants,
+  │     │                   model_settings, expert_inputs}, enforced_params)
+  │     ├── Validation     (behavior_tests, readouts, biological_summary,
+  │     │                   literature_anchors)
+  │     ├── Implementation (model_change, implementation_requirements,
+  │     │                   design_pivot_required, conclusion_verdicts)
+  │     ├── Runs           (in runs.db — per-study SQLite; runs[] in YAML is deprecated)
   │     └── Visualizations (list of named viz configs)
-  ├── Investigations (in investigations/<slug>/investigation.yaml)
-  │     └── Studies[]     (list of study slugs; DAG from each study's parent_studies)
+  ├── Investigations (in investigations/<slug>/investigation.yaml — v2 with 9-section narrative spine)
+  │     ├── executive, scientific_argument, biological_story, lead
+  │     ├── at_a_glance, how_to_read, glossary, guidelines
+  │     └── Studies[]      (list of study slugs; DAG from each study's pipeline_gate.prerequisites)
   └── Visualization classes / registry (workspace-wide)
 ```
 
@@ -34,10 +40,11 @@ A directory containing `workspace.yaml`, a `pbg_<package>/` Python package, and 
 
 A self-contained research unit: question + baseline composite(s) + variants + interventions + runs + visualizations + conclusion.
 
-- **On disk:** `<workspace>/studies/<name>/study.yaml` (schema_version 3). Legacy v2 specs live at `<workspace>/investigations/<name>/spec.yaml` and are migrated to v3 in-memory on read.
-- **Identity:** the directory name (a slug like `study-monod_kinetics-096184`).
-- **v3 shape:** `{schema_version: 3, name, objective, status, baseline: [...], variants: [...], interventions: [...], runs: [...], visualizations: [...], conclusion}`.
-- **Created by:** `/pbg-study new`. **Managed by:** `/pbg-study`. **Listed by:** `/pbg-catalog list`.
+- **On disk:** `<workspace>/studies/<name>/study.yaml`. The schema accepts both `schema_version: 3` (legacy minimal) and `4` (current — adds the v4 narrative spine; see [v4 narrative spine](#v4-narrative-spine) below). Legacy v2 specs live at `<workspace>/investigations/<name>/spec.yaml` and are migrated to v3 in-memory on read.
+- **Identity:** the directory name (a slug like `dnaa-02-atp-hydrolysis`). Use kebab-case lowercase slugs; v2-era random-hash names (`study-monod_kinetics-096184`) are legacy.
+- **v3 shape (minimal):** `{schema_version: 3, name, objective, status, baseline: [...], variants: [...], interventions: [...], visualizations: [...], conclusion}`.
+- **v4 shape (current):** v3 + the 14-section narrative spine: `runtime, report, study_card, question, assumptions, conditions, enforced_params, behavior_tests, readouts, biological_summary, literature_anchors, model_change, implementation_requirements, design_pivot_required, conclusion_verdicts`. All v4 fields optional. New scaffolds emit v4 (see [v4 narrative spine](#v4-narrative-spine)).
+- **Created by:** `/pbg-study new <study-name> <composite-id>`. **Managed by:** `/pbg-study`. **Listed by:** `/pbg-catalog list`.
 
 > "Study" is the canonical per-experiment term. "Investigation" now refers specifically to the higher-level collection container (`investigations/<slug>/investigation.yaml`). The v2 legacy use of "investigation" as a synonym for "study" is retired in the UI; backend aliases (`investigation:` body key, `/api/investigation-*`) remain for backwards compatibility but should not be used in new code.
 
@@ -206,6 +213,9 @@ tests:
   data_source: latest_run
   pytest_args: []
   last_results: null
+# DEPRECATED: runs[] in study.yaml — runs.db is canonical since F2.
+# /pbg-study run-baseline writes to runs_meta + history in the per-study DB.
+# The list below is kept only for v3 back-compat reads; do not write to it.
 runs: []
 conclusion: null
 ```
@@ -215,6 +225,51 @@ conclusion: null
 > Purpose · Pipeline Gate · Simulations · Model Change · Assumptions · Readouts · Tests · Conclusion · Limitations · Requirements · References
 
 Report-generation code that mirrors the dashboard layout should emit headings in that order so authors can navigate report and dashboard interchangeably.
+
+### v4 narrative spine (canonical-optional extensions) {#v4-narrative-spine}
+
+The 8 sections above are the design backbone. The v4 schema (`schema_version: 4`) adds a **second layer of narrative-spine fields** that the v2ecoli dnaa-replication investigation evolved through use, now promoted from "workspace-specific extensions" to canonical-optional. All fields are optional — a v3 spec validates unchanged against the v4 schema — but every new study scaffolded via `/pbg-study new` lands with these fields commented in as TODO placeholders so the user sees the target shape without reading docs.
+
+The narrative spine is grouped into 4 layers. The 6 fields marked ★ are the ones to author first; they render at the top of the report and let a reviewer land on the study without reading the YAML.
+
+**Executive layer** — what a reviewer sees first.
+- `runtime:` — per-study execution overrides: `{subprocess_timeout_s, default_emitter: sqlite|xarray, max_generations, post_run_scripts}`. Defaults to workspace settings; populate only what differs.
+- **★ `report:`** — the exec summary panel: `{title, verdict, confidence: high|medium|low, evidence_quality: calibrated|literature-matched|aspirational|regression-only, objective, conclusion, main_insight, caveat, key_metrics: [...]}`. `verdict` is free-form (common values: `passing | passing-with-caveats | failing-bio | failing-impl | inconclusive | not-yet-run`).
+- **★ `study_card:`** — one-paragraph dashboard card: `{goal, mechanism, why_before_next, expected_result, main_expert_question}`. Distinct from `report.objective` (multi-sentence). `main_expert_question` surfaces in the expert-review panel.
+
+**Framing layer** — what the study is about + how it's configured.
+- **★ `question:`** + `assumptions:` — top-level question plus the literature facts the study assumes. Each assumption: `{text, cites: [bib_keys], verified_in_workspace: bool}`.
+- **★ `conditions:`** — v4's grouped alternative to top-level `baseline:` + `variants:`: `{baseline: {composite, params}, variants: [...], model_settings: [{name, default, current, range: [low, high], units, cites, notes}], expert_inputs: [...]}`. The `model_settings[]` catalog is the source of truth for tunable parameters — each entry pairs the current value with its default + literature range + citation. `expert_inputs[]` are one-off knobs an expert can twist via the dashboard.
+- `enforced_params:` — composite-parameter values the study REQUIRES be applied. Accepts the flat shape `{composite_param: expected_value}` or the wrapped shape `{params: {...}, source: "<bib-key>"}`. The framework's `param_enforcement.check_enforced_params()` verifies after each run that the composite applied the expected values; mismatches surface as `ParamViolation` entries.
+
+**Validation layer** — what would falsify the study.
+- **★ `behavior_tests:`** — same 8-section field; the optional `variant:` sub-field on a test scopes it to one named variant (e.g., A/B comparison infrastructure).
+- **★ `readouts:`** — same 8-section field; each readout's `store_path` ties an observable to the exact emission path in the composite output.
+- `biological_summary:` — multi-paragraph plain-English mechanism prose. The "textbook write-up" a non-modeler would read. Markdown allowed.
+- `literature_anchors:` — testable expectations from the literature, paired with their model observable: `[{expectation, model_observable, source, status_in_workspace, cites: [bib_keys]}]`. Lets a reviewer audit "did we implement this?" without reading code. `status_in_workspace` is free-form (common values: `"Not yet measurable" | "Available via X listener" | "Partial" | "Verified — observed value matches"`).
+
+**Implementation + decisions layer** — what got built + what's open.
+- `model_change:` — same 8-section field (declarative inventory of code changes).
+- `implementation_requirements:` — same 8-section field (TODO list with status + effort + unblocks).
+- `design_pivot_required:` — named open decision points: `[{id, status, question, alternatives: [...], requested_response, notes}]`. `status` is free-form (`open | accepted | rejected | superseded-by-<slug> | obsolete | resolved`). Surfaces the choices an expert can weigh in on.
+- **★ `conclusion_verdicts:`** — three-track verdict block: `{regression_compatibility: {result: PASS|FAIL|MIXED|PENDING, basis}, biological_validation: {result, basis}, explanatory_gain: {result: POSITIVE|NEUTRAL|NEGATIVE|PENDING, basis}}`. Distinct from `conclusion_logic` (the if-pass/if-fail decision tree). Lets a study be "PASS on regression but MIXED on biology" instead of being forced into one boolean.
+
+**Sibling marker.** `follow_up_of: <slug>` marks a study as a parallel/cleanup follow-up of another (e.g., `dnaa-02f` follow_up_of `dnaa-02`). Distinct from `seeded_from:` (set automatically by `/pbg-study seed-from-followup`) and from `parent_studies:` (which is a DAG dependency).
+
+### v2 narrative spine for Investigations (canonical-optional extensions) {#v2-narrative-spine-investigation}
+
+The investigation schema (`schema_version: 2`) adds a parallel narrative spine that mirrors the per-study spine at a level up. All fields are optional — a v1 spec validates unchanged — but every new investigation scaffolded via `/pbg-investigation new` (or POST `/api/iset-create`) lands with them commented in as TODOs.
+
+- `executive: {what_is_this, verdict, verdict_status, decisions_needed: [...]}` — headline panel rendered at the top of the report.
+- `scientific_argument: {main_claim, evidence_for: [...], evidence_against: [...], key_figures: [...], caveats: [...], interpretation_ref}` — the chain of reasoning, distinct from the bottom-line verdict.
+- `biological_story:` — multi-paragraph mechanism prose. The textbook chapter.
+- `lead:` — 3-4 sentence front-of-textbook intro (first thing a reader sees, above `biological_story`).
+- `at_a_glance: [{study, role}]` — one-line role per member study; lets a reviewer see what each study CONTRIBUTES without opening it.
+- `how_to_read:` — evaluator tips ("Read studies in order. Each `report.verdict` is the headline. Open viz only when a primary test fails."). Markdown allowed.
+- `glossary: [{term, definition}]` — investigation-local term definitions.
+- `guidelines: {literature_anchors, parameter_catalog, calibration_targets, naming_conventions, ...}` — investigation-wide rules every member study respects.
+
+The `studies:` list still controls dashboard grouping/visibility; the DAG topology is computed from each member study's `pipeline_gate.prerequisites:` at render time.
 
 ### Decide-phase follow-up proposals
 
@@ -293,12 +348,15 @@ A standalone, text-described experimental condition. Fully separate from variant
 An Investigation is a **named collection of studies** with an explicit cross-study dependency DAG. Used to group studies that together answer a higher-level research question.
 
 - **On disk:** `<workspace>/investigations/<slug>/investigation.yaml`. Note the filename is `investigation.yaml`, NOT `spec.yaml` — the legacy v2 `investigations/<name>/spec.yaml` files are Studies (auto-migrated to v3) and are excluded by the new iset walker.
-- **Shape:** `{schema_version, name, title, status, question, hypothesis, description, studies[], expert_docs[], acceptance_criteria[]}`. `studies` is a list of study slugs (members); `acceptance_criteria` is a list of `{study, behavior}` pairs linking criteria to specific `expected_behavior[i].name` entries on member studies.
+- **v1 shape (minimal):** `{schema_version: 1, name, title, status, question, hypothesis, description, studies[], expert_docs[], acceptance_criteria[]}`. `studies` is a list of study slugs (members); `acceptance_criteria` is a list of `{study, behavior}` pairs linking criteria to specific `behavior_tests[].name` entries on member studies.
+- **v2 shape (current):** v1 + the 9-section narrative spine: `executive, scientific_argument, biological_story, lead, at_a_glance, how_to_read, glossary, guidelines`. All v2 fields optional. New scaffolds emit v2 (see [v2 narrative spine for Investigations](#v2-narrative-spine-investigation)).
 - **API**:
   - `GET /api/iset-list` — summaries (name, title, status, n_studies).
   - `GET /api/iset/<name>` — full investigation + resolved studies (each carrying normalized `parent_studies` for DAG layout).
   - `GET /api/investigation-registry` — cross-worktree view: this server's "current" Investigation + every OTHER live server's `{slug, worktree_path, url, effective_status, pid}`. Powers the left-rail Investigation switcher across worktrees. (Pass C, 2026-05-17.)
-  - No write endpoints exist yet; skills write YAML directly (atomic tmp-file + rename).
+  - `POST /api/iset-create {name, overview?, parent_studies?}` — scaffolds a new investigation. Emits the v2 narrative-spine YAML (via `vivarium_dashboard.lib.scaffold_yaml.v2_investigation_scaffold`) with the 9 narrative sections (`executive` / `scientific_argument` / `biological_story` / `lead` / `at_a_glance` / `how_to_read` / `glossary` / `guidelines`) commented in as TODO placeholders.
+  - `POST /api/iset-clone {source, target, ...}` — shells out to the workspace's `scripts/clone_investigation.py` (workspace-owned because clone rules are workspace-specific).
+  - For update operations (acceptance criteria, narrative-spine field edits) the skills still write YAML directly with atomic tmp-file + rename — `/api/iset-update` is not yet wired.
 - **Dashboard render**: Investigations tab cards → DAG canvas on click; rail sidebar groups studies under their investigation header; "Ungrouped" bucket for studies not in any investigation; topological order within each group.
 - **Skill**: `/pbg-investigation` for CRUD + scaffold-from-plan + worktree open.
 
