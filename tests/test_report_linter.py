@@ -54,7 +54,13 @@ def _findings_by_check(findings: list[LintFinding]) -> dict[str, list[LintFindin
 def test_clean_baseline_produces_no_findings(tmp_path):
     ws = _copy_fixture("clean-baseline", tmp_path / "ws")
     findings = lint_workspace_report(ws)
-    assert findings == [], f"expected empty list, got {findings}"
+    # S3: the narrative_spine_completeness check is info-level and fires on
+    # any spec missing the v4 narrative-spine fields, which the clean
+    # baseline (a minimal v3 spec) intentionally lacks. Filter it out — the
+    # contract this test guards is "no blocking errors/warnings"; the info
+    # nudge is expected for v3 specs.
+    blocking = [f for f in findings if f.level != "info"]
+    assert blocking == [], f"expected no error/warning findings, got {blocking}"
     assert not has_blocking_errors(findings)
 
 
