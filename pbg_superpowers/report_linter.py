@@ -300,6 +300,8 @@ CHECKS = (
     "finding_references_unknown_expert_doc",
     # Derive-on-read status drift (v2ecoli round-2 #2)
     "status_out_of_date_vs_runs",
+    # S3: v4 narrative-spine nudge — info-level reminder of missing dnaa-style sections
+    "narrative_spine_completeness",
 )
 
 
@@ -1184,6 +1186,110 @@ def _check_runs_yaml_vs_db_drift(ctx: _LintContext) -> None:
 
 
 # ---------------------------------------------------------------------------
+# v4 narrative-spine completeness check
+# ---------------------------------------------------------------------------
+
+
+# The 14 v4 narrative-spine sections plus their v3 fallbacks (where one
+# exists). The 7 ★ sections are the ones a reviewer most needs at the top
+# of the rendered report; the other 7 are encouraged but optional.
+#
+# Each entry: (canonical_field, fallback_field_or_None, is_star).
+# - canonical_field is the v4 field name.
+# - fallback_field is the v3/legacy field that satisfies the section (so a
+#   v3 spec with question + behavior_tests + baseline isn't flagged for
+#   missing report/study_card/conditions — it just gets the v4-only fields
+#   reported as missing).
+# - is_star indicates whether this is a top-of-report ★ section.
+
+_NARRATIVE_SECTIONS = (
+    # Executive layer
+    ("runtime",                      None,                  False),
+    ("report",                       None,                  True),
+    ("study_card",                   None,                  True),
+    # Framing layer
+    ("question",                     "purpose.question",    True),
+    ("assumptions",                  "key_assumptions",     False),
+    ("conditions",                   "baseline",            True),
+    ("enforced_params",              None,                  False),
+    # Validation layer
+    ("behavior_tests",               "expected_behavior",   True),
+    ("readouts",                     "observables",         True),
+    ("biological_summary",           None,                  False),
+    ("literature_anchors",           None,                  False),
+    # Implementation + decisions layer
+    ("model_change",                 None,                  False),
+    ("implementation_requirements",  None,                  False),
+    ("design_pivot_required",        None,                  False),
+    ("conclusion_verdicts",          None,                  True),
+)
+
+
+def _is_present(spec: dict, dotted_path: str) -> bool:
+    """True iff dotted_path resolves to a non-empty value on spec."""
+    cur = spec
+    for part in dotted_path.split("."):
+        if not isinstance(cur, dict) or part not in cur:
+            return False
+        cur = cur[part]
+    return _is_nonempty(cur)
+
+
+def _check_narrative_spine_completeness(ctx: _LintContext) -> None:
+    """v4 narrative-spine nudge — info-level reminder of which dnaa-style
+    sections the study has not authored yet.
+
+    Emits ONE finding per study aggregating ALL missing sections, rather
+    than 14 separate findings, so the report shows
+    "narrative incomplete: 4 sections missing (report, study_card, ...)".
+    Severity is `info` — this lint is a nudge, not a publication blocker;
+    a v3 study with question + behavior_tests + baseline still validates
+    and can publish, it just won't have the dnaa-style narrative spine.
+
+    See docs/concepts/vivarium-dashboard-model.md#v4-narrative-spine for
+    the full section list and authoring guidance.
+    """
+    # Skip workspace-level pseudo-specs (the iterator may include a
+    # workspace.yaml-aggregate row that doesn't correspond to a study).
+    if ctx.slug == "<workspace>":
+        return
+
+    missing_star: list[str] = []
+    missing_other: list[str] = []
+    for canonical, fallback, is_star in _NARRATIVE_SECTIONS:
+        if _is_present(ctx.spec, canonical):
+            continue
+        if fallback and _is_present(ctx.spec, fallback):
+            continue
+        (missing_star if is_star else missing_other).append(canonical)
+
+    if not missing_star and not missing_other:
+        return
+
+    n_missing = len(missing_star) + len(missing_other)
+    star_str = (
+        f" ★ {', '.join(missing_star)}"
+        if missing_star else ""
+    )
+    other_str = (
+        f" · other: {', '.join(missing_other)}"
+        if missing_other else ""
+    )
+    ctx.add(
+        level="info",
+        field_path="(narrative spine)",
+        message=(
+            f"narrative incomplete: {n_missing} of {len(_NARRATIVE_SECTIONS)} "
+            f"v4 sections missing.{star_str}{other_str}. "
+            "See docs/concepts/vivarium-dashboard-model.md#v4-narrative-spine "
+            "for the full pattern, or /pbg-study fill-overview <slug> "
+            "--include-narrative to draft them from plan + expert PDFs."
+        ),
+        check="narrative_spine_completeness",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -1204,6 +1310,7 @@ _CHECK_FUNCTIONS = (
     _check_status_legacy_only,
     _check_runs_yaml_vs_db_drift,
     _check_status_out_of_date_vs_runs,
+    _check_narrative_spine_completeness,
 )
 
 
@@ -1250,8 +1357,15 @@ def format_findings(findings: Iterable[LintFinding]) -> str:
         for f in entries:
             lines.append(f"  {f.study_slug}: {f.field_path} — {f.message}")
             lines.append(f"    override_key: {f.override_key}")
+    n_blocking = len(by_level.get("error", [])) + len(by_level.get("warning", []))
+    n_info = len(by_level.get("info", []))
     if not lines:
         lines.append("OK — no lint findings.")
+    elif n_blocking == 0:
+        # Only info-level nudges (e.g. v4 narrative-spine completeness):
+        # explicitly state publication isn't blocked so the user can tell
+        # at a glance.
+        lines.append(f"OK — no blocking findings ({n_info} info-level nudges shown above).")
     return "\n".join(lines) + "\n"
 
 
