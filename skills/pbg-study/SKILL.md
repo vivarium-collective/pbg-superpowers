@@ -3,7 +3,7 @@ name: pbg-study
 description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|set-conclusion|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
+argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
 ---
 
 # pbg-study
@@ -104,7 +104,8 @@ Draft the `question`, `hypothesis`, `objective`, and/or `description` fields of 
 - `<slug>` (required) — study slug under `studies/<slug>/`. Abort with a clear error pointing at `/pbg-study new` if the directory or `study.yaml` is absent.
 - `--from-plan <path>` (optional) — path to a planning PDF or markdown that decomposes the study's intent. If absent, look inside `references/expert/` for a file whose name matches `<slug>` or contains the word "plan".
 - `--from-expert <path>` (optional, repeatable) — additional expert-knowledge PDFs or markdown files. If absent, consult `workspace.yaml.expert_docs` and use any entry whose `claims_supported` list overlaps with the study's `parent_studies` or `id`.
-- `--fields <comma-list>` (optional) — restrict drafting to a subset of `question,hypothesis,objective,description`. Default: all four.
+- `--fields <comma-list>` (optional) — restrict drafting to a subset. Default fields: `question,hypothesis,objective,description`. v4 narrative fields are opt-in via `--include-narrative` (see below) or by naming them explicitly: `report,study_card,biological_summary`.
+- `--include-narrative` (optional) — extend the default draft set with the v4 narrative-spine fields: `report` (verdict + confidence + evidence_quality + main_insight + caveat), `study_card` (goal + mechanism + why_before_next + expected_result + main_expert_question), `biological_summary` (multi-paragraph mechanism prose). Drafted from the same plan + expert PDFs.
 - `--dry-run` (optional) — print the proposed diff and stop without writing anything.
 
 **Behavior (steps Claude follows when running this subcommand):**
@@ -118,7 +119,7 @@ Draft the `question`, `hypothesis`, `objective`, and/or `description` fields of 
 
 3. **Read source material.** Use the Read tool on each resolved doc. If a doc is a PDF, read all pages.
 
-4. **Draft each requested field.** For each field in `--fields` (default: all four):
+4. **Draft each requested field.** For each field in `--fields`:
 
    - `question:` — One paragraph (at most four sentences), scientifically framed as a measurable prediction, ending with `?`. When the plan names a specific section or heading that motivates the question, cite it parenthetically (e.g., "per §3.2 of the plan"). Keep it concise.
 
@@ -128,7 +129,15 @@ Draft the `question`, `hypothesis`, `objective`, and/or `description` fields of 
 
    - `description:` — Two to four paragraphs providing scientific context, citing source sections by their heading names. Structure: background, mechanism of interest, why this study, expected outcome.
 
-   Each draft is a plain string suitable for direct insertion into `study.yaml`.
+   **v4 narrative-spine fields** (drafted only when `--include-narrative` or named explicitly in `--fields`; written YAML-direct via `pbg_superpowers.study_narrative` since these fields have no dedicated POST endpoints):
+
+   - `report:` — Object with sub-fields. `verdict` defaults to `not-yet-run` until simulations land; `confidence` defaults to `low`; `evidence_quality` defaults to `aspirational`. Draft `objective`, `main_insight`, and `caveat` from the plan's expected-outcome + caveats sections. Leave `conclusion` blank (it's a Decide-phase field). `key_metrics` is hand-authored; do not invent numbers.
+
+   - `study_card:` — Five one-line fields. `goal` is the one-sentence boil-down of the plan's intent. `mechanism` summarizes the biological mechanism in one paragraph. `why_before_next` explains why this study must complete before the next (read parent_studies + expert PDFs for dependencies). `expected_result` paraphrases the literature-stated success criterion. `main_expert_question` is the one question the study most wants an expert to weigh in on.
+
+   - `biological_summary:` — Multi-paragraph plain-English mechanism narrative (the "textbook write-up"). Use 3-5 paragraphs. Markdown allowed. Distinct from `report.main_insight` (one sentence) and `study_card.mechanism` (one paragraph).
+
+   Each draft is a plain string or YAML object suitable for direct insertion into `study.yaml`.
 
 5. **Print preview.** Show a unified diff for each drafted field:
    - If the field currently has a user-authored value, display: `existing:` block then `proposed:` block, with a note that the default action is replace.
@@ -245,6 +254,59 @@ POST `/api/study-intervention-delete`:
 ```json
 {"study": "<study-name>", "name": "<n>"}
 ```
+
+#### `add-literature-anchor <slug> --expectation '<text>' --model-observable '<text>' [--source '<text>'] [--status '<text>'] [--cite <bib-key> ...] [--dry-run]`
+
+Append one entry to `studies/<slug>/study.yaml.literature_anchors[]` — a literature expectation paired with the model observable that would falsify or confirm it. Lets a reviewer audit "did we implement this?" without reading code.
+
+**Arguments:**
+
+- `<slug>` (required) — study under `studies/<slug>/`.
+- `--expectation '<text>'` (required) — what the literature claims (e.g., `"DnaA-ATP / total DnaA ≈ 20-50% during steady growth"`).
+- `--model-observable '<text>'` (required) — how to measure this in simulation (e.g., `"bulk[DnaA_ATP] / (bulk[DnaA_apo] + bulk[DnaA_ATP] + bulk[DnaA_ADP])"`).
+- `--source '<text>'` (optional) — short citation (e.g., `"Boesen 2024 PNAS"`). Prefer `--cite` over `--source` for new entries.
+- `--status '<text>'` (optional) — workspace status. Common values: `"Not yet measurable"`, `"Available via X listener"`, `"Partial"`, `"Verified — observed value matches"`. Free-form.
+- `--cite <bib-key>` (optional, repeatable) — bib key from the workspace bibliography. Prefer this over `--source`.
+- `--dry-run` (optional) — print the proposed diff; do not write.
+
+YAML-direct subcommand. Shells out to `python -m pbg_superpowers.study_narrative add-literature-anchor ...` which loads the spec, appends the entry, and atomically writes.
+
+#### `add-pivot <slug> --id <id> --question '<text>' [--alternatives 'A;B;C'] [--status <status>] [--requested-response '<text>'] [--notes '<text>'] [--dry-run]`
+
+Append one entry to `studies/<slug>/study.yaml.design_pivot_required[]` — a named open decision point with its candidate paths. Lets an expert see what choices are blocking forward progress instead of guessing from prose.
+
+**Arguments:**
+
+- `<slug>` (required) — study under `studies/<slug>/`.
+- `--id <id>` (required) — stable slug matching `^[A-Za-z0-9][A-Za-z0-9_-]*$`, unique within this study's `design_pivot_required[]` (e.g., `dnaa-02-EQ-04`). 409-style error on duplicate.
+- `--question '<text>'` (required) — the decision being made.
+- `--alternatives 'A;B;C'` (optional) — semicolon-separated list of candidate paths (each typically `"A. <one-line description>"`).
+- `--status <status>` (optional, default `open`) — `open | accepted | rejected | superseded-by-<slug> | obsolete | resolved`. Free-form.
+- `--requested-response '<text>'` (optional) — what the author wants from a reviewer (e.g., `"Expert opinion on whether (A) or (B) is cleaner"`).
+- `--notes '<text>'` (optional) — free-form notes.
+- `--dry-run` (optional) — print the proposed diff; do not write.
+
+YAML-direct subcommand.
+
+#### `add-requirement <slug> --id <id> --title '<text>' [--kind <kind>] [--effort XS|S|M|L|XL] [--status <status>] [--description '<text>'] [--step '<text>' ...] [--unblocks 'a,b,c'] [--defer-until '<text>'] [--dry-run]`
+
+Append one entry to `studies/<slug>/study.yaml.implementation_requirements[]` — a TODO item with status, effort, and what it unblocks. The v4-canonical place to track Build-phase work the study depends on.
+
+**Arguments:**
+
+- `<slug>` (required) — study under `studies/<slug>/`.
+- `--id <id>` (required) — slug unique within the study's `implementation_requirements[]` (e.g., `req-2-intrinsic-hydrolysis-step`). 409-style error on duplicate.
+- `--title '<text>'` (required) — one-line description.
+- `--kind <kind>` (optional) — common values: `listener | process | parameter_hook | data | state_variables | step`. Free-form.
+- `--effort XS|S|M|L|XL` (optional) — t-shirt size. Schema enforces these values.
+- `--status <status>` (optional, default `planned`) — common values: `planned | in-progress | done | done-no-op | blocked`. Free-form.
+- `--description '<text>'` (optional) — extended description.
+- `--step '<text>'` (optional, repeatable) — one step per `--step` flag; collected into `steps[]`.
+- `--unblocks 'a,b,c'` (optional) — comma-separated list of test/study names this requirement unblocks when completed.
+- `--defer-until '<text>'` (optional) — gating condition; free-form.
+- `--dry-run` (optional) — print the proposed diff; do not write.
+
+YAML-direct subcommand. Refuses with a clear error if the study's `implementation_requirements` is currently in object shape (rare; v4 expects an array).
 
 ### Design→Build gate
 
@@ -382,6 +444,37 @@ Replace the Study's conclusion. POST `/api/study-set-conclusion`:
 ```
 
 The markdown is canonically structured under H2 headers: `## Claims`, `## Evidence`, `## Limitations`, `## Next steps`.
+
+#### `set-verdicts <slug> [--regression PASS|FAIL|MIXED|PENDING] [--basis-regression '<text>'] [--biological PASS|FAIL|MIXED|PENDING] [--basis-biological '<text>'] [--explanatory POSITIVE|NEUTRAL|NEGATIVE|PENDING] [--basis-explanatory '<text>'] [--dry-run]`
+
+Write the v4 three-track `conclusion_verdicts` block on `studies/<slug>/study.yaml`. Distinct from `set-conclusion` (which writes the markdown conclusion blob): `set-verdicts` writes structured `{result, basis}` pairs across three orthogonal axes.
+
+**The three tracks:**
+
+- `regression_compatibility` — does the code still build/run cleanly? `result` is `PASS | FAIL | MIXED | PENDING`.
+- `biological_validation` — does the model match the literature? `result` is `PASS | FAIL | MIXED | PENDING`.
+- `explanatory_gain` — did we learn something new? `result` is `POSITIVE | NEUTRAL | NEGATIVE | PENDING`.
+
+Lets a study be "PASS on regression but MIXED on biology" instead of being forced into one boolean. Each track's `result` and `basis` can be set independently; passing only `--biological` updates that track and leaves the others alone. Existing tracks merge — passing `--biological PASS` without `--basis-biological` keeps the previous basis text.
+
+**Arguments:**
+
+- `<slug>` (required) — study under `studies/<slug>/`.
+- `--regression <result>` / `--basis-regression '<text>'` — update the regression track. Either flag alone is enough to update that field.
+- `--biological <result>` / `--basis-biological '<text>'` — update the biological track.
+- `--explanatory <result>` / `--basis-explanatory '<text>'` — update the explanatory track.
+- `--dry-run` (optional) — print the proposed diff; do not write.
+
+At least one flag is required. YAML-direct subcommand.
+
+**Example.** Recording dnaa-02's verdicts after the simulation runs:
+
+```bash
+/pbg-study set-verdicts dnaa-02-atp-hydrolysis \
+  --regression PASS --basis-regression "2026-05-17 implementation builds cleanly." \
+  --biological MIXED --basis-biological "atp_fraction = 0.997, outside band [0.2, 0.5]." \
+  --explanatory POSITIVE --basis-explanatory "Three findings worth keeping."
+```
 
 #### `findings <study-slug> [--auto] [--dry-run]`
 
@@ -816,6 +909,17 @@ print(json.dumps({'route': f'/studies/{os.environ[\"NAME\"]}'}))")
     python3 -m pbg_superpowers.study_findings "$SLUG" --ws "$DIR" "${EXTRA_FLAGS[@]}"
     ;;
 
+  set-verdicts|add-literature-anchor|add-pivot|add-requirement)
+    # v4 narrative-spine subcommands. YAML-direct via pbg_superpowers.
+    # study_narrative — the helper handles workspace discovery, schema-side
+    # validation, dedup checks, and atomic write. All flags after the slug
+    # are forwarded verbatim, so this dispatcher stays trivial.
+    SLUG="${1:-}"
+    [ -n "$SLUG" ] || { echo "ERROR: $sub requires a study slug." >&2; exit 1; }
+    shift
+    python3 -m pbg_superpowers.study_narrative --ws "$DIR" "$sub" "$SLUG" "$@"
+    ;;
+
   verify)
     # Design→Build gate. Pure spec check; no API call. The Python helper
     # walks workspace.yaml + studies/<slug>/study.yaml and surfaces
@@ -901,6 +1005,11 @@ Usage:
   /pbg-study preview-viz         <study-slug> [--name <viz-name>]
 
   /pbg-study findings            <study-slug> [--auto] [--dry-run]
+
+  /pbg-study set-verdicts            <study-slug> [--regression PASS|FAIL|MIXED|PENDING] [--basis-regression '<t>'] [--biological ...] [--basis-biological '<t>'] [--explanatory POSITIVE|NEUTRAL|NEGATIVE|PENDING] [--basis-explanatory '<t>'] [--dry-run]
+  /pbg-study add-literature-anchor   <study-slug> --expectation '<t>' --model-observable '<t>' [--source '<t>'] [--status '<t>'] [--cite <bib-key> ...] [--dry-run]
+  /pbg-study add-pivot               <study-slug> --id <id> --question '<t>' [--alternatives 'A;B;C'] [--status <s>] [--requested-response '<t>'] [--notes '<t>'] [--dry-run]
+  /pbg-study add-requirement         <study-slug> --id <id> --title '<t>' [--kind <k>] [--effort XS|S|M|L|XL] [--status <s>] [--description '<t>'] [--step '<t>' ...] [--unblocks 'a,b,c'] [--defer-until '<t>'] [--dry-run]
 
   /pbg-study propose-followup    <parent-slug> --id <id> --title '<t>' --motivation '<m>' [--mechanism '<hyp>'] [--seed-from-file <path>] [--dry-run]
   /pbg-study seed-from-followup  <parent-slug> <proposal-id> [--new-slug <slug>] [--from-finding <id>] [--dry-run]
