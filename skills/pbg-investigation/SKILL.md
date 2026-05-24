@@ -1,6 +1,6 @@
 ---
 name: pbg-investigation
-description: "Manage Investigations — named collections of Studies grouped under a shared research question. Subcommands: new, open, list, add-study, remove-study, set-overview, set-status, scaffold-from-plan."
+description: "Manage Investigations — named collections of Studies grouped under a shared research question. Subcommands: new, open, list, add-study, remove-study, set-overview, set-status, scaffold-from-plan, close."
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: <subcmd> [args...]
@@ -349,6 +349,58 @@ runs: []
 - If phase numbers appear in the plan (Phase 1, Phase 2, …), reflect them as `01-`, `02-`, … in the slug.
 - For the `expert_docs` list on the investigation, scan `workspace.yaml.expert_docs[].name` values and include any that appear relevant. Do not invent names.
 - The first study in the linear chain has no `parent_studies` (or an empty list).
+
+---
+
+### `close <slug> [--dry-run] [--no-pr] [--skip-report] [--json]`
+
+Close an investigation: render the workspace report, copy it into `investigations/<slug>/report.html` (so it lands as a git-tracked artifact), stamp the investigation YAML with `status: closed`, `closed_at`, `report_url`, and a populated `contributors[]`, commit on the investigation branch, and open a PR. **Never auto-merges** — stops after `gh pr create`; the user clicks merge in the GitHub UI per the standing no-auto-merge instruction.
+
+**Arguments:**
+
+- `<slug>` (required) — investigation slug. Per the Investigation ≡ branch convention, the git branch must be named `<slug>`.
+- `--dry-run` (optional) — print the proposed actions; do not render, write, commit, push, or open a PR.
+- `--no-pr` (optional) — skip the `gh pr create` step entirely (offline / no-remote use).
+- `--skip-report` (optional) — don't re-render the workspace report; just stamp the YAML and commit. Useful when the report was rendered manually moments before.
+- `--json` (optional) — emit the result (slug, branch, contributors, actions, pr_url) as JSON instead of plain text.
+
+**What gets recorded in `contributors[]`:**
+
+1. **Humans** — derived from `git log --pretty='%an|%ae|%H' <main>..<branch>`. Each unique (name, email) pair becomes one entry with `kind: human`, `roles: [implementer]`, and `commits: <count>`.
+2. **Agents (via Co-Authored-By trailer)** — commits on the branch whose body contains `Co-Authored-By: <name> <email>` where the email is `*@noreply.anthropic.com`, contains `bot`, or has `ci` as a name-part are added with `kind: agent`, `roles: [agent_runner]`.
+3. **Agents (via .pbg/agent-sessions/)** — every JSON file under `.pbg/agent-sessions/<id>.json` with shape `{agent_name, session_id, ...}` is grouped by `agent_name` and added (or merged into an existing entry) with `sessions[]` populated.
+
+**User edits are preserved.** If you've previously curated `roles` or `notes` on a contributor entry, re-running close keeps those — only `commits` and `sessions` are refreshed.
+
+**Steps (mechanic-driven, executed by `python -m pbg_superpowers.investigation_close`):**
+
+1. Resolve workspace + investigation YAML; verify branch exists.
+2. Derive contributors (above).
+3. Render workspace report via `pbg_superpowers.report.render_workspace_report` (unless `--skip-report`).
+4. Copy `reports/index.html` → `investigations/<slug>/report.html` (currently `reports/` is git-ignored; the copied path lives under `investigations/` which is tracked).
+5. Update `investigation.yaml`: `status: closed`, `closed_at: <ISO-8601>`, `report_url: report.html`, `contributors: <merged>`.
+6. `git add investigations/<slug>/{investigation.yaml,report.html}` + `git commit -m "close(investigation): <slug>"` on the investigation branch.
+7. `gh pr view <branch>` → if PR exists, refresh body via `gh pr edit`; else `git push -u origin <branch>` + `gh pr create --base <main> --head <branch>`. **Never `--auto`.**
+
+Returns a `CloseResult` (printed plain or JSON) listing every action taken, the contributor list, and the PR URL.
+
+**Example:**
+
+```bash
+# Standard close — render report, stamp YAML, commit, open PR.
+/pbg-investigation close dnaa-replication
+
+# Dry-run to see what would happen.
+/pbg-investigation close dnaa-replication --dry-run
+
+# Close without re-rendering the report (already rendered).
+/pbg-investigation close dnaa-replication --skip-report
+
+# Close offline — no remote interaction.
+/pbg-investigation close dnaa-replication --no-pr
+```
+
+The close mechanic is YAML-direct (it does NOT call a dashboard endpoint); the dashboard "Close investigation" button is a follow-up that will call the same `pbg_superpowers.investigation_close.close_investigation` function via a new POST `/api/iset-close` handler.
 
 ---
 
