@@ -302,6 +302,19 @@ CHECKS = (
     "status_out_of_date_vs_runs",
     # S3: v4 narrative-spine nudge — info-level reminder of missing dnaa-style sections
     "narrative_spine_completeness",
+    # Expert-handoff readiness — every study card in a generated report
+    # should show baseline composites, variants planned, simulation
+    # runs planned, readouts, runs, tests, and visualizations. When a
+    # study YAML has any of those blocks empty/absent, the report ends
+    # up with empty sections that the expert can't critique.  These
+    # warnings flag the gap pre-publication.  All warning-level (non-
+    # blocking) — a study CAN publish without them, but the expert will
+    # see "TBD" rather than concrete content.
+    "missing_baseline",
+    "missing_variants",
+    "missing_planned_runs",
+    "missing_readouts",
+    "missing_visualizations",
 )
 
 
@@ -1290,6 +1303,171 @@ def _check_narrative_spine_completeness(ctx: _LintContext) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Expert-handoff readiness — every study card in a generated report should
+# show baseline composites, variants planned, simulation runs planned,
+# readouts, runs, tests, and visualizations. When any of these blocks is
+# absent or empty, the expert reviewer sees a blank section instead of
+# planned content they can critique. These five warnings flag the gap
+# pre-publication.
+#
+# All warning-level (non-blocking). The study can still publish; the
+# nudge is to add scaffolded content (variant ideas, planned runs,
+# placeholder viz with mockup data) so the report tells a complete
+# story before the runs land.
+# ---------------------------------------------------------------------------
+
+
+def _check_missing_baseline(ctx: _LintContext) -> None:
+    """Warning when a study has no baseline composite(s) declared.
+
+    The dashboard's run-runner needs at least one baseline to know what
+    to simulate; the report renderer uses baselines to populate the
+    "Conditions" panel of each study card.  An empty/absent baseline
+    means the expert sees no concrete starting point.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    baseline = ctx.spec.get("baseline")
+    has_v3_baseline = isinstance(baseline, list) and len(baseline) > 0
+    # v4 conditions.baseline alternative shape
+    conditions = ctx.spec.get("conditions") or {}
+    cond_baseline = conditions.get("baseline") if isinstance(conditions, dict) else None
+    has_v4_baseline = isinstance(cond_baseline, dict) and bool(cond_baseline.get("composite"))
+    if has_v3_baseline or has_v4_baseline:
+        return
+    ctx.add(
+        level="warning",
+        field_path="baseline",
+        message=(
+            "Study has no baseline composite declared. Every study card in "
+            "the generated report should show at least one concrete baseline "
+            "(`baseline: [{name, composite, params}]` for v3, or "
+            "`conditions.baseline: {composite, params}` for v4) so the "
+            "expert reviewer knows what's being simulated. Scaffold one even "
+            "if the composite path is a placeholder — see /pbg-study baseline-add."
+        ),
+        check="missing_baseline",
+    )
+
+
+def _check_missing_variants(ctx: _LintContext) -> None:
+    """Warning when a study has no `variants:` planned.
+
+    Variants are the planned perturbations / configurations the study
+    will run. A study with no variants reads to the expert as "design
+    incomplete — no specific experimental conditions yet."
+    """
+    if ctx.slug == "<workspace>":
+        return
+    variants = ctx.spec.get("variants") or []
+    # v4 alternate location
+    conditions = ctx.spec.get("conditions") or {}
+    v4_variants = conditions.get("variants") if isinstance(conditions, dict) else []
+    if (isinstance(variants, list) and len(variants) > 0) or \
+       (isinstance(v4_variants, list) and len(v4_variants) > 0):
+        return
+    ctx.add(
+        level="warning",
+        field_path="variants",
+        message=(
+            "Study has no variants declared. Variants are the planned "
+            "perturbations / configurations to be tested (parameter sweeps, "
+            "alternative conditions, perturbation experiments). A study "
+            "with no variants reads to a reviewer as 'design incomplete'. "
+            "Scaffold ≥1 variant via /pbg-study variant-add — even a "
+            "single 'reference' variant with the published parameters is "
+            "better than an empty list."
+        ),
+        check="missing_variants",
+    )
+
+
+def _check_missing_planned_runs(ctx: _LintContext) -> None:
+    """Warning when a study has no `planned_runs:` and no `runs:`.
+
+    `planned_runs[]` documents the experiments the study WILL execute
+    (with status: planned + n_steps + brief details). `runs[]` is for
+    completed runs. A study with neither tells the expert nothing about
+    what's been run or what's planned.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    planned = ctx.spec.get("planned_runs") or []
+    runs = ctx.spec.get("runs") or []
+    if (isinstance(planned, list) and len(planned) > 0) or \
+       (isinstance(runs, list) and len(runs) > 0):
+        return
+    ctx.add(
+        level="warning",
+        field_path="planned_runs",
+        message=(
+            "Study has no planned_runs[] and no runs[]. Document the "
+            "experiments the study will execute (status: planned, with "
+            "n_steps + 1-sentence details) so the expert sees the "
+            "planned methodology + compute scope. Use planned_runs[] for "
+            "what's coming, runs[] for what's completed."
+        ),
+        check="missing_planned_runs",
+    )
+
+
+def _check_missing_readouts(ctx: _LintContext) -> None:
+    """Warning when a study has no `readouts:` field/content.
+
+    `readouts` describes what the study actually measures — the
+    observables that the tests in `expected_behavior` evaluate against.
+    Without it, the test rows reference concepts the expert reviewer has
+    no anchor for.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    readouts = ctx.spec.get("readouts")
+    if isinstance(readouts, str) and readouts.strip():
+        return
+    if isinstance(readouts, list) and len(readouts) > 0:
+        return
+    ctx.add(
+        level="warning",
+        field_path="readouts",
+        message=(
+            "Study has no readouts declared. Describe what the study "
+            "actually measures (the observables the expected_behavior "
+            "tests evaluate against) so the expert reviewer has anchors "
+            "for the test rows. Free-form string or list of strings."
+        ),
+        check="missing_readouts",
+    )
+
+
+def _check_missing_visualizations(ctx: _LintContext) -> None:
+    """Warning when a study has no `visualizations:` entries.
+
+    Visualizations are the cards the dashboard / generated report
+    renders inline. A study with no viz entries gives the expert no
+    figure to review. For studies pre-run, scaffold ≥1 PLANNED-mockup
+    viz showing what the chart WILL look like when real data lands.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    viz = ctx.spec.get("visualizations") or []
+    if isinstance(viz, list) and len(viz) > 0:
+        return
+    ctx.add(
+        level="warning",
+        field_path="visualizations",
+        message=(
+            "Study has no visualizations[] declared. Add ≥1 entry so the "
+            "expert reviewer sees concrete figures — real charts for "
+            "completed runs, or PLANNED-mockup viz (with synthetic data + "
+            "explanatory caption) for studies still in design. The "
+            "dashboard renders viz inline in the study card, so this is "
+            "the most visible expert-facing surface."
+        ),
+        check="missing_visualizations",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -1311,6 +1489,12 @@ _CHECK_FUNCTIONS = (
     _check_runs_yaml_vs_db_drift,
     _check_status_out_of_date_vs_runs,
     _check_narrative_spine_completeness,
+    # Expert-handoff readiness (warning-level — see CHECKS comment block)
+    _check_missing_baseline,
+    _check_missing_variants,
+    _check_missing_planned_runs,
+    _check_missing_readouts,
+    _check_missing_visualizations,
 )
 
 
