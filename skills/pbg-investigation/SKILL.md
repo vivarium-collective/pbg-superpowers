@@ -24,7 +24,7 @@ An Investigation slug is also a **git branch name** and a **worktree directory n
 
 ## Write strategy
 
-The vivarium-dashboard does **not** yet expose POST/PUT endpoints for investigation YAML (only GET `/api/iset-list` and GET `/api/iset/<name>` exist). All write subcommands write YAML directly to disk using an atomic tmp-file + rename pattern.
+The vivarium-dashboard exposes POST `/api/iset-create` for the initial scaffold (it emits a v2-shape `investigation.yaml` with the narrative spine commented in as TODO placeholders — executive, scientific_argument, biological_story, at_a_glance, glossary, guidelines). Update subcommands write YAML directly to disk using an atomic tmp-file + rename pattern, because the dashboard doesn't yet expose mutation endpoints for the narrative-spine fields. Read paths use GET `/api/iset-list` and GET `/api/iset/<name>`.
 
 ## Common prelude
 
@@ -53,30 +53,55 @@ Create `investigations/<slug>/investigation.yaml` with placeholder fields, creat
 3. Check no git branch named `<slug>` exists (`git show-ref --verify --quiet refs/heads/<slug>`). Fail with: "Branch '<slug>' already exists. Pick a different slug or rename the existing branch." if it does.
 4. Create branch `<slug>` from current HEAD and switch to it: `git checkout -b <slug>`.
 5. Create the `investigations/<slug>/` directory if absent.
-6. Write `investigation.yaml` with:
+6. Write `investigation.yaml` as a v2-shape scaffold with the narrative spine commented in as TODO placeholders. Prefer the dashboard's `/api/iset-create` endpoint when a server is running (it uses the canonical scaffolder); fall back to writing the body directly when offline:
 
 ```yaml
-schema_version: 1
+# <slug>/investigation.yaml — schema v2
+schema_version: 2
 name: <slug>
 title: "<slug> (untitled)"
-created: '<YYYY-MM-DD>'  # today's date
-status: planned
+created: '<YYYY-MM-DD>'
+status: planning
 
-question: |
-  (TODO: state the overarching research question)
+# Front matter
+# question: |
+#   (the overarching research question)
+# hypothesis: |
+#   (predicted outcome across the full study sequence)
+# lead: |
+#   (3-4 sentence front-of-textbook intro)
 
-hypothesis: |
-  (TODO: state the predicted outcome)
-
-description: |
-  (TODO: describe the multi-study arc)
+# Narrative spine (uncomment + fill as the investigation matures)
+# executive:           # headline panel
+#   what_is_this: ""
+#   verdict: ""
+#   verdict_status: in-progress
+#   decisions_needed: []
+# scientific_argument: # structured claim/evidence
+#   main_claim: ""
+#   evidence_for: []
+#   evidence_against: []
+#   key_figures: []
+#   caveats: []
+# biological_story: |
+#   (multi-paragraph plain-English mechanism narrative)
+# at_a_glance:         # one-line role per member study
+#   - {study: <slug>, role: ""}
+# how_to_read: |
+#   (evaluator tips)
+# glossary:
+#   - {term: "TERM", definition: "..."}
+# guidelines:          # investigation-wide rules
+#   literature_anchors: []
+#   parameter_catalog: []
+#   calibration_targets: []
 
 studies: []
-
 expert_docs: []
-
 acceptance_criteria: []
 ```
+
+All v2 narrative-spine fields are optional per `investigation.schema.json`, so the scaffold validates on day one. The user opts in by uncommenting + filling sections. See `template/NEXT_STEPS.md` in pbg-template for the full pattern + when to fill each.
 
 7. `git add investigations/<slug>/investigation.yaml` then commit: `git commit -m "feat(investigation): scaffold <slug>"`. Do NOT push — the user pushes manually when ready.
 8. Print: `Created branch '<slug>' + investigations/<slug>/investigation.yaml (committed). Use /pbg-investigation open <slug> to create a worktree and start a dashboard, or /pbg-investigation add-study <slug> <study-slug> to add member studies.`

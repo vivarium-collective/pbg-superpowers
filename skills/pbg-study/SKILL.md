@@ -3,7 +3,7 @@ name: pbg-study
 description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|set-conclusion|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
+argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|set-conclusion|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
 ---
 
 # pbg-study
@@ -78,15 +78,22 @@ Studies that share a research arc can be grouped into an **Investigation** (a na
 
 #### `new <composite-id>`
 
-Create a new Study seeded with one baseline composite.
+Create a new Study seeded with one baseline composite. The dashboard's seed endpoint writes a **v4-shape `study.yaml`** with the 14-section narrative spine commented in as TODO placeholders (the same shape the v2ecoli dnaa-replication investigation evolved through use):
 
-POST `/api/study-new`:
+- **Executive layer** — `runtime` · ★ `report` · ★ `study_card`
+- **Framing layer** — ★ `question` + `assumptions` · ★ `conditions` (baseline + variants + model_settings) · `enforced_params`
+- **Validation layer** — ★ `behavior_tests` · ★ `readouts` · `biological_summary` · `literature_anchors`
+- **Implementation + decisions** — `model_change` · `implementation_requirements` · `design_pivot_required` · ★ `conclusion_verdicts`
+
+★ sections are the ones to author first — they render at the top of the rendered study page. All v4 fields are optional per `study.schema.json`, so the scaffold is lint-clean on day one and the user opts in by uncommenting + filling sections. See `template/NEXT_STEPS.md` in pbg-template for the full walking guide.
+
+POST `/api/investigation-create` (legacy route name; aliased to `/api/study-create`):
 
 ```json
-{"composite_name": "<composite-id>"}
+{"name": "<study-name>", "source": "<composite-id>"}
 ```
 
-Returns `{name, spec_path}`. Print the new study's name and offer to open it via `/pbg-study open <name>`.
+Returns the new study's name + URL. Print and offer to open it via `/pbg-study open <name>`. After scaffolding, the immediate next step is `/pbg-study fill-overview <slug>` to draft the question/hypothesis/objective fields, then uncomment the ★ sections in the YAML and fill them as you build.
 
 #### `fill-overview <slug> [--from-plan <path>] [--from-expert <path>...] [--fields <comma-list>] [--dry-run]`
 
@@ -539,9 +546,17 @@ sub="${1:-}"; shift || true
 
 case "$sub" in
   new)
-    CID="$1"
-    BODY=$(python3 -c "import json,sys; print(json.dumps({'composite_name': sys.argv[1]}))" "$CID")
-    post "/api/study-new" "$BODY"
+    # Args: <study-name> <composite-id> — emits the v4-shape study.yaml
+    # with the 14-section narrative spine commented in as TODO placeholders.
+    # The endpoint is /api/investigation-create (legacy route name; aliased
+    # to /api/study-create in ENDPOINT_ALIASES). The body's `name` field
+    # is the new study's slug; `source` is the composite ref.
+    SNAME="$1"; CID="$2"
+    [ -n "$SNAME" ] && [ -n "$CID" ] || { echo "Usage: /pbg-study new <study-name> <composite-id>" >&2; exit 1; }
+    BODY=$(SNAME="$SNAME" CID="$CID" python3 -c "
+import json, os
+print(json.dumps({'name': os.environ['SNAME'], 'source': os.environ['CID']}))")
+    post "/api/investigation-create" "$BODY"
     ;;
 
   set-objective)
@@ -864,7 +879,7 @@ print(json.dumps(data))
   *)
     cat <<EOF
 Usage:
-  /pbg-study new <composite-id>
+  /pbg-study new <study-name> <composite-id>
   /pbg-study fill-overview <slug> [--from-plan <path>] [--from-expert <path>...] [--fields <comma-list>] [--dry-run]
   /pbg-study set-objective <study-name> '<text>'
   /pbg-study set-conclusion <study-name> '<markdown>'
@@ -900,8 +915,9 @@ esac
 ## Examples
 
 ```text
-# Create a study from a composite
-/pbg-study new pbg_chromosome_rep1.composites.dnaa-binding
+# Create a study from a composite (emits a v4-shape study.yaml with the
+# 14-section narrative spine commented in as TODO placeholders)
+/pbg-study new dnaa-binding pbg_chromosome_rep1.composites.dnaa-binding
 
 # Draft question, hypothesis, objective, description from plan + expert PDFs
 /pbg-study fill-overview dnaa-01 --from-plan references/expert/dnaa-plan.pdf
