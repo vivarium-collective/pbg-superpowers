@@ -1544,6 +1544,148 @@ def _check_missing_visualizations(ctx: _LintContext) -> None:
     )
 
 
+def _check_machine_projected_tests(ctx: _LintContext) -> None:
+    """Warning when v4 tests[] look auto-projected from expected_behavior[].
+
+    Symptom: every `tests[i].name` matches an `expected_behavior[j].name`,
+    AND the `tests[i]` entries are missing the hand-authored markers (no
+    `classification`, no real `pass_if`, measure looks like a stringified
+    dict). The dashboard renders these as "AI slop" cards: Claim is just
+    the slug echoed, Measure shows {expr: "{kind: 'observable-comparison',
+    observable: 'process-bigraph-process'}"}, status UNCLASSIFIED.
+
+    The expected pattern: 3-5 hand-authored v4 tests per study with real
+    falsifiable claims, classification (primary/supporting/diagnostic/
+    regression), structured measure dicts, and pass_if criteria.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    tests = ctx.spec.get("tests")
+    eb = ctx.spec.get("expected_behavior")
+    if not isinstance(tests, list) or len(tests) == 0:
+        return
+    if not isinstance(eb, list) or len(eb) == 0:
+        return
+
+    eb_names = {(e or {}).get("name") for e in eb if isinstance(e, dict)}
+    matched = 0
+    slop_signals = 0
+    for t in tests:
+        if not isinstance(t, dict):
+            continue
+        if t.get("name") in eb_names:
+            matched += 1
+        # Slop signals: no classification AND measure is a single-key dict
+        # like {expr: "<stringified content>"} (the auto-projection shape).
+        if not t.get("classification"):
+            m = t.get("measure")
+            if isinstance(m, dict) and set(m.keys()) <= {"expr"}:
+                slop_signals += 1
+
+    # Trip if EITHER (a) >=80% of tests share a name with expected_behavior
+    # AND >=80% show the slop signals, OR (b) every single test is slop-signaled.
+    n = len(tests)
+    if n == 0:
+        return
+    name_overlap = matched / n
+    slop_fraction = slop_signals / n
+    if not (slop_fraction >= 0.8 or (name_overlap >= 0.8 and slop_fraction >= 0.5)):
+        return
+
+    ctx.add(
+        level="warning",
+        field_path="tests",
+        message=(
+            f"v4 tests[] look auto-projected from expected_behavior[] "
+            f"(name overlap {matched}/{n}={int(100*name_overlap)}%, "
+            f"missing classification + stringified measure on "
+            f"{slop_signals}/{n}={int(100*slop_fraction)}% of entries). "
+            "Auto-projection produces 'AI slop' cards: Claim is just the slug, "
+            "Measure is a dict-stringified-as-string, status UNCLASSIFIED. "
+            "Replace with 3-5 hand-authored v4 tests per study: real falsifiable "
+            "claims with quantitative thresholds, classification "
+            "(primary|supporting|diagnostic|regression), structured measure "
+            "dicts (source/observable/reduce/units), pass_if criteria, "
+            "requires_simulation pointers, and bib cites."
+        ),
+        check="machine_projected_tests",
+    )
+
+
+def _check_speculative_readout_paths(ctx: _LintContext) -> None:
+    """Warning when a readout claims `path:` that doesn't resolve on disk.
+
+    Symptom: readouts[i] has `path: out/trajectories/foo.csv` (looks
+    authoritative) AND the file doesn't exist (resolves to nothing). The
+    Path column in the dashboard reads as a real artifact location when
+    it's just a planning hint. Reviewers can't tell what's real.
+
+    Status: implemented + no file at path = ERROR (mislabel).
+    Status: planned + speculative path with no TBD marker = WARNING.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    readouts = ctx.spec.get("readouts")
+    if not isinstance(readouts, list):
+        return
+    for i, r in enumerate(readouts):
+        if not isinstance(r, dict):
+            continue
+        path = (r.get("path") or "").strip()
+        status = (r.get("status") or "").strip().lower()
+        if not path:
+            continue
+        # Skip readouts whose path explicitly marks itself as TBD or planned.
+        low = path.lower()
+        if low.startswith("tbd") or " — planned at " in path.lower() or "(planned)" in low:
+            continue
+        # Try to resolve against the workspace root.
+        full = ctx.ws_root / path
+        exists = full.exists()
+        if not exists and "*" in path:
+            # Glob fallback (handles e.g. out/trajectories/millard_*.csv)
+            parts = path.split("/")
+            for j, part in enumerate(parts):
+                if "*" in part:
+                    base = ctx.ws_root / "/".join(parts[:j]) if j > 0 else ctx.ws_root
+                    pattern = "/".join(parts[j:])
+                    try:
+                        exists = any(base.glob(pattern))
+                    except Exception:
+                        exists = False
+                    break
+        if exists:
+            continue
+
+        if status == "implemented":
+            ctx.add(
+                level="error",
+                field_path=f"readouts[{i}].path",
+                message=(
+                    f"Readout '{r.get('name', '<unnamed>')}' has status: implemented "
+                    f"but path {path!r} does not resolve on disk. Either the artifact "
+                    f"was never persisted (demote status to 'planned' + change path "
+                    f"to 'TBD'), or the path is wrong (fix it). 'implemented' implies "
+                    f"the data exists at the claimed location — reviewers will click."
+                ),
+                check="speculative_readout_path",
+            )
+        else:
+            ctx.add(
+                level="warning",
+                field_path=f"readouts[{i}].path",
+                message=(
+                    f"Readout '{r.get('name', '<unnamed>')}' is status: {status or '<unset>'} "
+                    f"with speculative path {path!r} (no file resolves). The Path "
+                    f"column in the dashboard reads as authoritative — reviewers "
+                    f"will click and find nothing. Prefix with 'TBD' or '(planned)' "
+                    f"so the speculative nature is visible, e.g. "
+                    f"'TBD — planned at {path}'."
+                ),
+                check="speculative_readout_path",
+            )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -1574,6 +1716,9 @@ _CHECK_FUNCTIONS = (
     _check_missing_visualizations,
     _check_missing_conditions_block,
     _check_missing_simulation_set,
+    # Anti-slop & honesty checks (added 2026-05-25 after pdmp-* feedback)
+    _check_machine_projected_tests,
+    _check_speculative_readout_paths,
 )
 
 

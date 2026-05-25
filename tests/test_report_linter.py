@@ -674,3 +674,42 @@ def test_format_findings_renders_each_level(tmp_path):
     assert "[ERROR]" in txt
     assert "[WARNING]" in txt
     assert "override_key: k1" in txt
+
+
+# ---------------------------------------------------------------------------
+# Anti-slop & honesty checks (added 2026-05-25 after pdmp-* feedback)
+# ---------------------------------------------------------------------------
+
+
+def test_machine_projected_tests_fires_on_auto_projected_v4_tests(tmp_path):
+    """tests[] entries that mirror expected_behavior[].name AND are missing
+    classification + have stringified-dict measure → AI-slop pattern."""
+    ws = _copy_fixture("machine-projected-tests", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    slop = by_check.get("machine_projected_tests", [])
+    assert len(slop) == 1
+    f = slop[0]
+    assert f.level == "warning"
+    assert f.study_slug == "study-slop"
+    assert "auto-projected" in f.message
+    assert "classification" in f.message
+
+
+def test_speculative_readout_paths_fires_per_entry(tmp_path):
+    """A readout with status=implemented but no file at path → error.
+    A readout with status=planned + speculative path → warning.
+    TBD-prefixed or no-path readouts → no finding."""
+    ws = _copy_fixture("speculative-readout-paths", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    spec = by_check.get("speculative_readout_path", [])
+    # Expect 2 findings: alpha-real (error) + beta-speculative (warning)
+    assert len(spec) == 2
+    by_level = {f.level: f for f in spec}
+    assert "error" in by_level
+    assert "warning" in by_level
+    assert by_level["error"].field_path == "readouts[0].path"
+    assert "alpha-real" in by_level["error"].message
+    assert by_level["warning"].field_path == "readouts[1].path"
+    assert "beta-speculative" in by_level["warning"].message
