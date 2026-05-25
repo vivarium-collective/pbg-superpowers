@@ -315,6 +315,14 @@ CHECKS = (
     "missing_planned_runs",
     "missing_readouts",
     "missing_visualizations",
+    # Build / Simulations tab readiness — the dashboard's study-detail
+    # template renders the Build tab from `conditions.{baseline,variants,
+    # model_settings}` (or legacy model_change / implementation_requirements)
+    # and the Simulations tab from `simulation_set:`. A study without
+    # those v4 fields renders those tabs BLANK even when v3 fields
+    # `baseline:` + `variants:` + `planned_runs:` are populated.
+    "missing_conditions_block",
+    "missing_simulation_set",
 )
 
 
@@ -1439,6 +1447,75 @@ def _check_missing_readouts(ctx: _LintContext) -> None:
     )
 
 
+def _check_missing_conditions_block(ctx: _LintContext) -> None:
+    """Warning when a study has no `conditions:` block populated.
+
+    The dashboard's study-detail template (`study-detail.html`) renders
+    the "Build" tab from `conditions.baseline` + `conditions.variants` +
+    `conditions.model_settings`. Without those, the Build tab is blank
+    even if the legacy v3 `baseline:` + `variants:` lists are populated.
+
+    The cleanest path is to use v4 `conditions:` from the start so the
+    Build tab is informative.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    cond = ctx.spec.get("conditions") or {}
+    if not isinstance(cond, dict):
+        cond = {}
+    has_baseline   = isinstance(cond.get("baseline"), dict) and bool(cond["baseline"].get("composite"))
+    has_variants   = isinstance(cond.get("variants"), list)   and len(cond["variants"]) > 0
+    has_settings   = isinstance(cond.get("model_settings"), list) and len(cond["model_settings"]) > 0
+    # Also accept legacy Build-tab fields as a partial fallback.
+    has_legacy = bool(ctx.spec.get("model_change")) or bool(ctx.spec.get("implementation_requirements"))
+    if has_baseline or has_variants or has_settings or has_legacy:
+        return
+    ctx.add(
+        level="warning",
+        field_path="conditions",
+        message=(
+            "Study has no `conditions:` block (or legacy `model_change` / "
+            "`implementation_requirements`). The dashboard's study-detail "
+            "Build tab renders from `conditions.{baseline,variants,"
+            "model_settings}`. Without it the Build tab is BLANK for "
+            "this study, even if v3 `baseline:` + `variants:` are "
+            "populated. Add at minimum a `conditions.baseline.composite` "
+            "value; see CONTRIBUTING_STUDY_FIELDS.md (when added) for the "
+            "full schema."
+        ),
+        check="missing_conditions_block",
+    )
+
+
+def _check_missing_simulation_set(ctx: _LintContext) -> None:
+    """Warning when a study has no `simulation_set:` entries.
+
+    The dashboard's study-detail template renders the "Simulations" tab
+    from `simulation_set:` (a list of detailed run specs: name, kind,
+    status, base_model, duration_steps, seeds, metrics, pass_fail_tests).
+    Without it, the Simulations tab is blank.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    ss = ctx.spec.get("simulation_set") or []
+    if isinstance(ss, list) and len(ss) > 0:
+        return
+    ctx.add(
+        level="warning",
+        field_path="simulation_set",
+        message=(
+            "Study has no `simulation_set:` entries. The dashboard's "
+            "study-detail Simulations tab renders from this list (each "
+            "entry: name, kind, status, base_model, duration_steps, "
+            "seeds, metrics, pass_fail_tests). Without it the "
+            "Simulations tab is BLANK. For studies that have v3 "
+            "`planned_runs:` instead, translate each entry into a "
+            "`simulation_set` entry (the v3 field stays as back-compat)."
+        ),
+        check="missing_simulation_set",
+    )
+
+
 def _check_missing_visualizations(ctx: _LintContext) -> None:
     """Warning when a study has no `visualizations:` entries.
 
@@ -1495,6 +1572,8 @@ _CHECK_FUNCTIONS = (
     _check_missing_planned_runs,
     _check_missing_readouts,
     _check_missing_visualizations,
+    _check_missing_conditions_block,
+    _check_missing_simulation_set,
 )
 
 
