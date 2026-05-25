@@ -6,6 +6,7 @@
 ./.pbg/schemas/investigation.schema.json
 ./.pbg/schemas/study.schema.json
 ./.pbg/schemas/workspace.schema.json
+./AGENTS.md
 ./Dockerfile
 ./NEXT_STEPS.md
 ./README.md
