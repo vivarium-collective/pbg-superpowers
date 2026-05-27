@@ -1015,27 +1015,46 @@ Spatial viewers should include:
 - Low-opacity wireframe overlay
 - Smooth lighting
 
-### Bigraph-Viz Diagram
+### Bigraph diagram — use `bigraph-viz2`
 
-Use PNG, not SVG.
+**Default for pbg-* reports.** `bigraph-viz2` is a lightweight interactive
+renderer: pan / zoom / click-to-inspect / double-click-to-collapse in the
+browser, no graphviz dependency, JS bundle inlines into the report.
+Preferred over the legacy graphviz-PNG `bigraph-viz` for HTML reports.
+
+Install from PyPI:
+
+```bash
+uv pip install bigraph-viz2
+```
+
+In `pyproject.toml`:
+
+```toml
+[project]
+dependencies = [
+    "bigraph-viz2",
+    # ...
+]
+```
+
+Render one composite per report section as an interactive fragment. The
+first call on the page inlines the ~40 KB JS bundle; later calls pass
+`dedupe=True` to drop their copies:
 
 ```python
-import base64
-import os
-from bigraph_viz import plot_bigraph
+from bigraph_viz2 import emit_html
 
 doc = {
     "process": {
         "_type": "process",
         "address": "local:MyProcess",
-        "outputs": {
-            "output": ["stores", "output"],
-        },
+        "outputs": {"output": ["stores", "output"]},
     },
     "stores": {},
     "emitter": {
         "_type": "step",
-        "address": "local:ram-emitter",
+        "address": "local:RAMEmitter",
         "inputs": {
             "output": ["stores", "output"],
             "time": ["global_time"],
@@ -1043,30 +1062,38 @@ doc = {
     },
 }
 
-node_colors = {
-    ("process",): "#6366f1",
-    ("emitter",): "#8b5cf6",
-    ("stores",): "#e0e7ff",
-}
-
-plot_bigraph(
-    state=doc,
-    out_dir=outdir,
-    filename="bigraph",
-    file_format="png",
-    remove_process_place_edges=True,
-    rankdir="LR",
-    node_fill_colors=node_colors,
-    node_label_size="16pt",
-    port_labels=False,
-    dpi="150",
-)
-
-with open(os.path.join(outdir, "bigraph.png"), "rb") as f:
-    img_uri = "data:image/png;base64," + base64.b64encode(f.read()).decode()
+snippet = emit_html(doc, height="520px", inspector=True, dedupe=False)
+# drop `snippet` directly into your report HTML (no <img>, no base64)
 ```
 
-Keep diagrams simplified: show only the key process, emitter, stores, and 5-6 key ports.
+For a report with N sections, each with its own composite:
+
+```python
+for i, doc in enumerate(docs):
+    section_html[i] = emit_html(doc, id=f"bigraph_{i}", dedupe=(i > 0))
+```
+
+Pass the WHOLE document (not a simplified projection) so port wires
+resolve correctly — bigraph-viz2 reads `inputs:` / `outputs:` blocks
+directly from the spec. A trimmed dict that omits input wires will
+draw dangling per-port stores. (This is the same trap the legacy
+`bigraph-viz` falls into; the fix is the same: pass the full doc.)
+
+### Legacy: `bigraph-viz` (graphviz PNG)
+
+Only use the legacy renderer for static documentation snapshots where
+interactivity is undesirable (e.g. inclusion in a PDF). For everything
+else, prefer `bigraph-viz2` above. The legacy API:
+
+```python
+from bigraph_viz import plot_bigraph
+
+plot_bigraph(state=doc, out_dir=outdir, filename="bigraph",
+             file_format="png", remove_process_place_edges=True,
+             rankdir="LR", port_labels=False, dpi="150")
+```
+
+Keep legacy diagrams simplified: show only the key process, emitter, stores, and 5-6 key ports.
 
 ### PBG Document Viewer
 
