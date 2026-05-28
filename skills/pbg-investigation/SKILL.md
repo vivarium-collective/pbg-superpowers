@@ -1,6 +1,6 @@
 ---
 name: pbg-investigation
-description: "Manage Investigations — named collections of Studies grouped under a shared research question. Subcommands: new, open, list, add-study, remove-study, set-overview, set-status, scaffold-from-plan, close."
+description: "Manage Investigations — named collections of Studies grouped under a shared research question. Subcommands: new, open, list, add-study, remove-study, set-overview, set-status, scaffold-from-plan, run, close."
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: <subcmd> [args...]
@@ -349,6 +349,58 @@ runs: []
 - If phase numbers appear in the plan (Phase 1, Phase 2, …), reflect them as `01-`, `02-`, … in the slug.
 - For the `expert_docs` list on the investigation, scan `workspace.yaml.expert_docs[].name` values and include any that appear relevant. Do not invent names.
 - The first study in the linear chain has no `parent_studies` (or an empty list).
+
+---
+
+### `run <inv-slug> [--studies a,b,...] [--entry <name>] [--dry-run] [--keep-going]`
+
+Run the investigation's bespoke-script studies in declaration order by calling `/pbg-study run-script` for each member. The investigation-level orchestrator the dnaa-biology session asked for in friction note 2026-05-27 #1 — replaces the manual "enumerate studies, find each `sims/run_*.py`, invent CLI args, run by hand" loop.
+
+**Arguments:**
+
+- `<inv-slug>` (required) — investigation slug.
+- `--studies a,b,c` (optional) — restrict to this comma-separated subset of member slugs (preserving declaration order). Default: every member of `investigation.yaml.studies`.
+- `--entry <name>` (optional) — pass `--entry <name>` through to each `pbg-study run-script` call (so all members run the same named entry, e.g. `--entry smoke`). Default: each study runs its own `default: true` entry.
+- `--dry-run` (optional) — print the planned commands; don't execute.
+- `--keep-going` (optional) — continue to the next study when one fails (`make -k`-style). Default: stop on first non-zero exit and propagate it.
+
+**Flow:**
+
+1. Common prelude (find `workspace.yaml`, read `.pbg/server/server-info`).
+2. Load `investigations/<inv-slug>/investigation.yaml`. Fail with a clear message if absent.
+3. Resolve the run list:
+   - Start from `investigation.yaml.studies` in declared order.
+   - If `--studies` is given, intersect (preserving the investigation's order, not the flag's order); fail if any flag-named slug is absent from the investigation.
+4. For each study slug, classify it:
+   - **`runnable`** — `studies/<slug>/study.yaml` exists AND has a non-empty `canonical_runs:` list. Will be run.
+   - **`no-recipe`** — `study.yaml` exists but `canonical_runs:` is missing/empty. Skipped (addresses friction #9 — dnaa-05 / dnaa-06 have only spec, no `sims/`).
+   - **`missing`** — `study.yaml` absent. Skipped with a warning.
+5. Print the plan: a numbered list of `[runnable|no-recipe|missing] <slug>` lines + the planned `python <script> <args...>` for each runnable one.
+6. If `--dry-run`: exit 0 after the plan.
+7. Otherwise execute each runnable in order via `/pbg-study run-script <slug> [--entry <name>]`. Stream stdout/stderr through. On non-zero exit:
+   - Without `--keep-going`: stop, print `failed at <slug> (exit N)`, exit N.
+   - With `--keep-going`: log the failure, continue to the next study, exit with the count of failures at the end.
+8. Final summary: `ran <K>/<N> studies (<S> skipped, <F> failed)` and a one-line per-study verdict table.
+
+```bash
+# Run every study with a canonical_runs block
+/pbg-investigation run dnaa-replication
+
+# Smoke-only across the full chain (fast validation)
+/pbg-investigation run dnaa-replication --entry smoke
+
+# Re-run a subset, don't bail on the first failure
+/pbg-investigation run dnaa-replication --studies dnaa-01-expression-dynamics,dnaa-02-atp-hydrolysis --keep-going
+
+# Preview without running
+/pbg-investigation run dnaa-replication --dry-run
+```
+
+The orchestrator is intentionally thin — it does not write to `runs.db`, doesn't manage parallelism, doesn't retry. Each member study's runner owns its own composite construction, emitter wiring, and (when relevant) `parquet_emitter()` lifecycle (see PR #88 — `emit.bind(composite)` for auto-flush on exit).
+
+> **Member studies without `canonical_runs:`.** Some studies live as spec-only chapters of an investigation (parameter foundation, deferred-implementation phases). The orchestrator silently skips them — see the `no-recipe` classification above. If you want to assert that every study must be runnable, lift the check at the investigation level (e.g. a `policy: all-studies-runnable` toggle on `investigation.yaml`). Not implemented; raise it if needed.
+
+> **Composite-shaped studies (no `canonical_runs:`).** A study whose runner is the dashboard's in-process `/api/study-run-baseline` executor doesn't need a `canonical_runs:` block — the orchestrator can't run it either (different execution surface). For now those studies appear as `no-recipe` and are skipped. A future extension could detect `baseline:` and call `/api/study-run-baseline` directly; out of scope for this iteration.
 
 ---
 

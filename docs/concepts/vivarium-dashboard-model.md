@@ -386,9 +386,9 @@ An Investigation is a **named collection of studies** with an explicit cross-stu
   - `POST /api/iset-clone {source, target, ...}` — shells out to the workspace's `scripts/clone_investigation.py` (workspace-owned because clone rules are workspace-specific).
   - For update operations (acceptance criteria, narrative-spine field edits) the skills still write YAML directly with atomic tmp-file + rename — `/api/iset-update` is not yet wired.
 - **Dashboard render**: Investigations tab cards → DAG canvas on click; rail sidebar groups studies under their investigation header; "Ungrouped" bucket for studies not in any investigation; topological order within each group.
-- **Skill**: `/pbg-investigation` for CRUD + scaffold-from-plan + worktree open.
+- **Skill**: `/pbg-investigation` for CRUD + scaffold-from-plan + worktree open + cross-study run orchestration (`run <inv-slug>` walks `studies:` and calls `/pbg-study run-script` on each member that has a `canonical_runs:` block; spec-only members are skipped).
 
-> Note: the DAG topology is computed from each member study's `parent_studies:` field at render time. The `studies:` list on the investigation controls visibility/grouping only, not execution order.
+> Note: the DAG topology is computed from each member study's `parent_studies:` field at render time. The `studies:` list on the investigation controls visibility/grouping (and the `run` subcommand's execution order) — but per-study `parent_studies` is the authoritative ordering for dependent execution. The orchestrator currently iterates in declared order; a topological-sort mode is a future extension.
 
 #### Investigation ≡ branch ≡ worktree (Pass C, 2026-05-17)
 
