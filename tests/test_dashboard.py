@@ -41,10 +41,38 @@ def _make_workspace_with_venv_bin(tmp_path: Path, *, has_bin: bool) -> Path:
 
 def test_resolve_returns_venv_bin_when_present(tmp_path):
     ws = _make_workspace_with_venv_bin(tmp_path, has_bin=True)
-    cmd = dash_mod._resolve_dashboard_cmd(ws)
-    assert cmd is not None
+    result = dash_mod._resolve_dashboard_cmd(ws)
+    assert result is not None
+    cmd, venv_workspace = result
     assert cmd[0] == str(ws / ".venv" / "bin" / "vivarium-dashboard")
     assert cmd[1] == "serve"
+    assert venv_workspace == ws
+
+
+def test_resolve_falls_back_to_parent_worktree_venv(tmp_path):
+    """When this workspace is a secondary git worktree of a main worktree
+    that DOES have a usable .venv/bin/vivarium-dashboard, the resolver
+    reuses it. Worktrees share source so the composites resolve from this
+    workspace via the dashboard's set_workspace_root() injection."""
+    main = tmp_path / "main"
+    (main / ".venv" / "bin").mkdir(parents=True)
+    bin_path = main / ".venv" / "bin" / "vivarium-dashboard"
+    bin_path.write_text("#!/bin/sh\necho stub\n")
+    bin_path.chmod(bin_path.stat().st_mode | stat.S_IXUSR)
+    (main / ".git").mkdir()
+    # Simulate the git internals for a worktree: <main>/.git/worktrees/<name>
+    wt = tmp_path / "worktree-dnaa"
+    wt.mkdir()
+    wt_gitdir = main / ".git" / "worktrees" / "dnaa"
+    wt_gitdir.mkdir(parents=True)
+    # The worktree's .git is a regular file pointing at its gitdir.
+    (wt / ".git").write_text(f"gitdir: {wt_gitdir}\n")
+    # No local .venv in the worktree; the resolver should reach the main's.
+    result = dash_mod._resolve_dashboard_cmd(wt)
+    assert result is not None
+    cmd, venv_workspace = result
+    assert cmd[0] == str(main / ".venv" / "bin" / "vivarium-dashboard")
+    assert venv_workspace == main
 
 
 def test_resolve_returns_none_when_venv_bin_missing(tmp_path):
@@ -115,7 +143,10 @@ def test_start_refuses_when_no_venv_bin(tmp_path, monkeypatch):
     msg = str(ei.value)
     assert "vivarium-dashboard is not installed in the workspace venv" in msg
     assert "uv pip install" in msg
-    assert "Cross-venv fallback is intentionally disabled" in msg
+    # Sibling-WORKSPACE fallback (different repo, different composites) is
+    # still off — only sibling git-worktree fallback (same source) is allowed.
+    assert "Sibling-WORKSPACE venvs are still off-limits" in msg
+    assert "friction log #13" in msg
 
 
 def _block_vivarium_dashboard_imports(monkeypatch):
@@ -349,3 +380,62 @@ def test_proc_is_workspace_dashboard_rejects_other_workspace(tmp_path, monkeypat
     monkeypatch.setattr(dash_mod, "_proc_cmdline", lambda pid: cmd)
     monkeypatch.setattr(dash_mod, "_proc_cwd", lambda pid: other.resolve())
     assert dash_mod._proc_is_workspace_dashboard(4242, ws) is False
+
+
+# ---------------------------------------------------------------------------
+# _infer_investigation_from_branch — current-branch → investigation default
+# ---------------------------------------------------------------------------
+
+
+def _make_ws_with_investigations(tmp_path: Path, slugs: list[str]) -> Path:
+    ws = tmp_path / "ws"
+    inv_root = ws / "investigations"
+    inv_root.mkdir(parents=True)
+    for slug in slugs:
+        d = inv_root / slug
+        d.mkdir()
+        (d / "investigation.yaml").write_text(f"name: {slug}\n")
+    return ws
+
+
+def test_infer_returns_exact_branch_match(tmp_path, monkeypatch):
+    ws = _make_ws_with_investigations(tmp_path, ["colonies", "dnaa-replication"])
+    monkeypatch.setattr(dash_mod, "_current_branch", lambda w: "colonies")
+    assert dash_mod._infer_investigation_from_branch(ws) == "colonies"
+
+
+def test_infer_handles_canonical_investigation_prefix(tmp_path, monkeypatch):
+    ws = _make_ws_with_investigations(tmp_path, ["colonies", "dnaa-replication"])
+    monkeypatch.setattr(dash_mod, "_current_branch", lambda w: "investigation/dnaa-replication")
+    assert dash_mod._infer_investigation_from_branch(ws) == "dnaa-replication"
+
+
+def test_infer_via_token_overlap(tmp_path, monkeypatch):
+    """`feat/dnaa-biology` shares the token 'dnaa' with `dnaa-replication`
+    (1/2 of slug tokens) but nothing with `colonies` (0/1). dnaa-replication
+    wins."""
+    ws = _make_ws_with_investigations(tmp_path, ["colonies", "dnaa-replication"])
+    monkeypatch.setattr(dash_mod, "_current_branch", lambda w: "feat/dnaa-biology")
+    assert dash_mod._infer_investigation_from_branch(ws) == "dnaa-replication"
+
+
+def test_infer_falls_back_to_single_investigation(tmp_path, monkeypatch):
+    """When the branch matches no investigation and exactly one exists,
+    that one is unambiguous."""
+    ws = _make_ws_with_investigations(tmp_path, ["colonies"])
+    monkeypatch.setattr(dash_mod, "_current_branch", lambda w: "feat/unrelated")
+    assert dash_mod._infer_investigation_from_branch(ws) == "colonies"
+
+
+def test_infer_returns_none_when_ambiguous(tmp_path, monkeypatch):
+    """No token overlap + multiple investigations → no safe default."""
+    ws = _make_ws_with_investigations(tmp_path, ["aaa", "bbb"])
+    monkeypatch.setattr(dash_mod, "_current_branch", lambda w: "feat/unrelated")
+    assert dash_mod._infer_investigation_from_branch(ws) is None
+
+
+def test_infer_returns_none_when_no_investigations(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(dash_mod, "_current_branch", lambda w: "any")
+    assert dash_mod._infer_investigation_from_branch(ws) is None

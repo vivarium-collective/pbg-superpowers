@@ -315,23 +315,76 @@ def _adopt_running_server(workspace: Path) -> dict | None:
     return None
 
 
-def _resolve_dashboard_cmd(workspace: Path) -> list[str] | None:
+def _find_main_worktree(workspace: Path) -> Path | None:
+    """For git worktrees, return the main (primary) worktree's path.
+
+    A git worktree has a ``.git`` *file* (not directory) of the form
+    ``gitdir: <main>/.git/worktrees/<name>``. The main worktree itself has
+    a ``.git`` directory. Returns the main worktree's root path when
+    ``workspace`` is a secondary worktree; returns ``workspace`` when it
+    IS the main worktree; returns ``None`` when ``.git`` is missing
+    entirely.
+
+    Used by ``_resolve_dashboard_cmd`` to fall back to a sibling
+    worktree's ``.venv`` — safe because all worktrees of the same repo
+    share the same source code (composites resolve identically via the
+    workspace_root sys.path injection the dashboard already does).
+    """
+    git_path = workspace / ".git"
+    if git_path.is_dir():
+        return workspace
+    if not git_path.is_file():
+        return None
+    try:
+        content = git_path.read_text().strip()
+    except OSError:
+        return None
+    prefix = "gitdir:"
+    if not content.startswith(prefix):
+        return None
+    gitdir = Path(content[len(prefix):].strip())
+    if not gitdir.is_absolute():
+        gitdir = (workspace / gitdir).resolve()
+    # Expected shape: <main>/.git/worktrees/<name>
+    if gitdir.parent.name == "worktrees" and gitdir.parent.parent.name == ".git":
+        return gitdir.parent.parent.parent
+    return None
+
+
+def _resolve_dashboard_cmd(workspace: Path) -> tuple[list[str], Path] | None:
     """Pick the vivarium-dashboard launcher to use.
 
-    F-friction #13 (mem3dg-readdy log) bit a user when the resolution
-    order fell through to `which vivarium-dashboard` and silently picked
-    up a SIBLING venv that had `pbg-compucell3d` installed. The dashboard
-    then discovered composites from THAT venv's site-packages and showed
-    the wrong simulators. Silent cross-venv resolution is the worst-case
-    UX, so we drop both the PATH-search and the `python -m` fallback.
+    Returns ``(cmd, venv_root)`` where ``cmd`` is the launcher prefix and
+    ``venv_root`` is the workspace the venv came from (for diagnostics).
 
-    Workspace .venv MUST contain vivarium-dashboard. If it doesn't,
-    return None and let `start()` print a clear install command. The user
-    can always set up a venv manually and re-run.
+    Resolution order:
+
+      1. **Local ``<workspace>/.venv/bin/vivarium-dashboard``** — the canonical
+         case. Composites resolve from local site-packages exactly as
+         intended.
+      2. **Parent git-worktree's ``.venv/bin/vivarium-dashboard``** — when
+         this workspace is a secondary git worktree (``.git`` is a file
+         pointing at ``<main>/.git/worktrees/<name>``) and the main
+         worktree has a usable venv. Safe because worktrees share source;
+         the dashboard's ``set_workspace_root()`` + sys.path injection
+         ensures the **local** workspace's v2ecoli/ takes precedence over
+         the venv's editable install.
+
+         This avoids forcing a per-worktree ``uv sync`` (~5 min) for what
+         is effectively the same source tree.
+
+    F-friction #13 (mem3dg-readdy log) — SIBLING workspace fallback is
+    still off. Different repos must each install their own dashboard, or
+    the discovered composites are wrong.
     """
-    venv_bin = workspace / ".venv" / "bin" / "vivarium-dashboard"
-    if venv_bin.is_file() and os.access(venv_bin, os.X_OK):
-        return [str(venv_bin), "serve"]
+    local_bin = workspace / ".venv" / "bin" / "vivarium-dashboard"
+    if local_bin.is_file() and os.access(local_bin, os.X_OK):
+        return ([str(local_bin), "serve"], workspace)
+    main = _find_main_worktree(workspace)
+    if main is not None and main.resolve() != workspace.resolve():
+        main_bin = main / ".venv" / "bin" / "vivarium-dashboard"
+        if main_bin.is_file() and os.access(main_bin, os.X_OK):
+            return ([str(main_bin), "serve"], main)
     return None
 
 
@@ -444,7 +497,8 @@ def status(workspace: Path) -> dict:
 
 
 def start(workspace: Path, port: int | None = None,
-          open_browser: bool = False) -> dict:
+          open_browser: bool = False,
+          investigation: str | None = None) -> dict:
     """Start the dashboard server in the background. Returns the info dict.
 
     Default open_browser=False (mem3dg-readdy friction #32). The agent-
@@ -452,28 +506,41 @@ def start(workspace: Path, port: int | None = None,
     auto-opening a new tab on every restart is friction-by-default. CLI
     users get the URL in stdout and can click it; pass --browser to opt
     in to auto-open.
+
+    ``investigation`` (when set, requires ``open_browser=True``): after
+    opening / focusing the dashboard URL, inject a JS call to switch the
+    SPA to the named investigation's detail view. Bypasses the SPA's
+    branch-name-based auto-pick, which only matches branches of the form
+    ``investigation/<slug>`` and otherwise falls back to the alphabetically-
+    first investigation.
     """
     workspace = workspace.resolve()
     s = status(workspace)
     if s["state"] == "alive":
         if open_browser and s.get("info", {}).get("url"):
             _open_browser(s["info"]["url"])
+            if investigation:
+                _switch_investigation_in_browser(investigation)
         return {"action": "already-running", **s["info"]}
     if s["state"] == "stale":
         _clear_state(workspace)
 
-    cmd_prefix = _resolve_dashboard_cmd(workspace)
-    if cmd_prefix is None:
+    resolved = _resolve_dashboard_cmd(workspace)
+    if resolved is None:
         raise RuntimeError(
             "vivarium-dashboard is not installed in the workspace venv at "
-            f"{workspace}/.venv/. Install it before starting the dashboard:\n"
+            f"{workspace}/.venv/, and no parent git-worktree's venv has it "
+            "either. Install it before starting the dashboard:\n"
             f"  uv pip install --python {workspace}/.venv/bin/python -e "
             "/path/to/vivarium-dashboard\n"
-            "Cross-venv fallback is intentionally disabled — a sibling "
-            "venv's vivarium-dashboard would discover composites from THAT "
-            "venv's site-packages, not this workspace's. See mem3dg-readdy "
-            "friction log #13."
+            "OR, if this is a secondary git worktree, install vivarium-dashboard "
+            "into the MAIN worktree's .venv (this skill will reuse it via "
+            "git-worktree-aware fallback — safe because worktrees share "
+            "source). Sibling-WORKSPACE venvs are still off-limits because "
+            "the discovered composites would come from the wrong site-packages "
+            "(see mem3dg-readdy friction log #13)."
         )
+    cmd_prefix, venv_workspace = resolved
 
     # F-friction #1: ensure reports/index.html is the rendered SPA, not the
     # pbg-template bootstrap placeholder. The vivarium-dashboard server happily
@@ -516,6 +583,10 @@ def start(workspace: Path, port: int | None = None,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "log_file": str(log.relative_to(workspace)),
     }
+    # Mark when we used a parent worktree's venv as a fallback so
+    # status/diagnostics can surface it.
+    if venv_workspace.resolve() != workspace.resolve():
+        info["venv_workspace"] = str(venv_workspace.resolve())
     _info_file(workspace).write_text(json.dumps(info, indent=2))
     _pid_file(workspace).write_text(str(proc.pid))
 
@@ -538,6 +609,8 @@ def start(workspace: Path, port: int | None = None,
 
     if open_browser:
         _open_browser(info["url"])
+        if investigation:
+            _switch_investigation_in_browser(investigation)
     return {"action": "started", **info}
 
 
@@ -573,22 +646,30 @@ def stop(workspace: Path, timeout_s: float = 5.0) -> dict:
     return {"action": "killed", "pid": pid}
 
 
-def open_url(workspace: Path) -> dict:
+def open_url(workspace: Path, investigation: str | None = None) -> dict:
     """Open the running dashboard's URL in the user's default browser.
 
-    Starts the server first if it isn't running.
+    Starts the server first if it isn't running. When ``investigation`` is
+    given, additionally calls ``_openInvestigationDetail(<slug>)`` in the
+    focused tab so the SPA switches to that investigation's detail view.
     """
     s = status(workspace)
     if s["state"] != "alive":
-        return start(workspace, open_browser=True)
+        return start(workspace, open_browser=True, investigation=investigation)
     url = s["info"]["url"]
     how = _open_browser(url)
     action = "focused" if how == "focused" else "opened"
-    return {"action": action, "url": url}
+    out = {"action": action, "url": url}
+    if investigation:
+        switched = _switch_investigation_in_browser(investigation)
+        out["investigation_switched"] = switched
+        out["investigation"] = investigation
+    return out
 
 
 def restart(workspace: Path, port: int | None = None,
-            open_browser: bool = False) -> dict:
+            open_browser: bool = False,
+            investigation: str | None = None) -> dict:
     """Default open_browser=False (mem3dg-readdy friction #32) — see start().
     `pbg-dashboard restart` is the most-common agent-driven path; pinning the
     workspace's saved port (friction #33) plus skipping the auto-open lets
@@ -604,9 +685,10 @@ def restart(workspace: Path, port: int | None = None,
     if _resolve_dashboard_cmd(workspace) is None:
         raise RuntimeError(
             "vivarium-dashboard is not installed in the workspace venv at "
-            f"{workspace}/.venv/. Refusing to restart — the running "
-            "dashboard would be stopped and unable to restart. Install "
-            "vivarium-dashboard in the workspace venv first:\n"
+            f"{workspace}/.venv/ and no parent git-worktree's venv has it "
+            "either. Refusing to restart — the running dashboard would be "
+            "stopped and unable to restart. Install vivarium-dashboard "
+            "into the workspace venv first:\n"
             f"  uv pip install --python {workspace}/.venv/bin/python -e "
             "/path/to/vivarium-dashboard\n"
             "If you only want to STOP the running dashboard, run "
@@ -614,7 +696,8 @@ def restart(workspace: Path, port: int | None = None,
             "only needs the PID file)."
         )
     stop(workspace)
-    return start(workspace, port=port, open_browser=open_browser)
+    return start(workspace, port=port, open_browser=open_browser,
+                 investigation=investigation)
 
 
 # NOTE on AppleScript dictionaries: when ``tell application appName`` uses a
@@ -704,6 +787,188 @@ end run
 '''
 
 
+# AppleScript to execute a JS snippet in the focused tab. Used to call
+# `_openInvestigationDetail(<slug>)` so the dashboard UI navigates to a
+# specific investigation instead of defaulting to the alphabetically-first
+# one (the SPA's auto-pick only honors a branch named `investigation/<slug>`,
+# which most workspace branches don't match).
+_EXEC_JS_IN_FRONT_TAB_APPLESCRIPT = r'''
+on chromeJS(appName, js)
+    tell application "System Events"
+        if not (exists process appName) then return "skip"
+    end tell
+    using terms from application "Google Chrome"
+        try
+            tell application appName
+                tell front window
+                    execute active tab javascript js
+                end tell
+            end tell
+            return "ok"
+        on error
+            return "err"
+        end try
+    end using terms from
+end chromeJS
+
+on safariJS(appName, js)
+    tell application "System Events"
+        if not (exists process appName) then return "skip"
+    end tell
+    using terms from application "Safari"
+        try
+            tell application appName
+                tell front window
+                    do JavaScript js in current tab
+                end tell
+            end tell
+            return "ok"
+        on error
+            return "err"
+        end try
+    end using terms from
+end safariJS
+
+on run argv
+    set js to item 1 of argv
+    set chromeApps to {"Google Chrome", "Google Chrome Canary", "Brave Browser", "Microsoft Edge", "Arc", "Vivaldi"}
+    repeat with appName in chromeApps
+        set r to chromeJS(appName as string, js)
+        if r is "ok" then return "ok"
+    end repeat
+    set safariApps to {"Safari", "Safari Technology Preview"}
+    repeat with appName in safariApps
+        set r to safariJS(appName as string, js)
+        if r is "ok" then return "ok"
+    end repeat
+    return "notfound"
+end run
+'''
+
+
+def _switch_investigation_in_browser(slug: str) -> bool:
+    """Call ``_openInvestigationDetail(slug)`` in whatever tab is in focus.
+
+    Best-effort. Requires macOS, an osascript-capable browser, and
+    AppleScript→browser permission. Returns False on every other path —
+    the caller still gets the dashboard open at the URL, just at the
+    default investigation.
+
+    The injected JS polls for ``_openInvestigationDetail`` to be defined
+    (up to 8 s) so it works whether the tab is just-opened (SPA still
+    loading) or already loaded.
+    """
+    if sys.platform != "darwin":
+        return False
+    if shutil.which("osascript") is None:
+        return False
+    # JSON-encode the slug so the JS literal is safe. Self-polling so the
+    # SPA's _loadInvestigationSets() has time to populate _isetIndex.
+    slug_json = json.dumps(slug)
+    js = (
+        "(function(){var s=" + slug_json + ";var d=Date.now()+8000;"
+        "function t(){if(typeof window._openInvestigationDetail==='function'){"
+        "window._openInvestigationDetail(s);}else if(Date.now()<d){"
+        "setTimeout(t,200);}}t();})()"
+    )
+    try:
+        result = subprocess.run(
+            ["osascript", "-", js],
+            input=_EXEC_JS_IN_FRONT_TAB_APPLESCRIPT,
+            capture_output=True, text=True, timeout=5,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+    return result.stdout.strip() == "ok"
+
+
+def _list_workspace_investigations(workspace: Path) -> list[str]:
+    """Slugs of every investigation present in ``<workspace>/investigations/``."""
+    root = workspace / "investigations"
+    if not root.is_dir():
+        return []
+    return sorted(
+        p.name for p in root.iterdir()
+        if p.is_dir() and (p / "investigation.yaml").is_file()
+    )
+
+
+def _current_branch(workspace: Path) -> str | None:
+    """Best-effort: ``git rev-parse --abbrev-ref HEAD`` from ``workspace``."""
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=str(workspace),
+            capture_output=True, text=True, timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    branch = (r.stdout or "").strip()
+    return branch or None
+
+
+def _infer_investigation_from_branch(workspace: Path) -> str | None:
+    """Infer the investigation slug from the workspace's current git branch.
+
+    The pbg-template convention is one branch per investigation; this picks
+    the matching investigation slug so callers like ``pbg-dashboard open``
+    can default to the current session's investigation instead of the
+    alphabetically-first one.
+
+    Resolution order:
+      1. Branch is exactly an investigation slug (e.g. ``colonies``).
+      2. Branch matches the SPA's canonical ``investigation/<slug>`` pattern.
+      3. Branch contains a known investigation slug as a substring (longest
+         match wins so ``dnaa-replication`` beats ``dnaa``). Common feat-
+         and mock-investigation prefixes are tolerated implicitly via
+         substring matching.
+      4. Exactly one investigation exists in the workspace — use it.
+      5. Otherwise return ``None`` and let the caller pick the default.
+    """
+    slugs = _list_workspace_investigations(workspace)
+    if not slugs:
+        return None
+    branch = _current_branch(workspace)
+    if branch is None:
+        return slugs[0] if len(slugs) == 1 else None
+    if branch in slugs:
+        return branch
+    # Canonical SPA pattern: investigation/<slug>
+    if branch.startswith("investigation/"):
+        candidate = branch.split("/", 1)[1]
+        if candidate in slugs:
+            return candidate
+    # Token-overlap scoring. Tokenize on /, -, _. Score each slug by what
+    # FRACTION of its tokens appear in the branch tokens. Highest score
+    # wins; ties broken by token-count then alphabetical. Pure substring
+    # is a subset of this (every token of the slug is a substring), but
+    # this also catches `feat/dnaa-biology` → `dnaa-replication` (shared
+    # token: 'dnaa', 1/2 = 0.5 — wins over colonies' 0/1 = 0.0).
+    import re
+    def _tokens(s: str) -> list[str]:
+        return [t for t in re.split(r"[/_-]+", s) if t]
+    branch_tokens = set(_tokens(branch))
+    scored: list[tuple[float, int, str]] = []
+    for slug in slugs:
+        slug_tokens = _tokens(slug)
+        if not slug_tokens:
+            continue
+        hits = sum(1 for t in slug_tokens if t in branch_tokens)
+        if hits == 0:
+            continue
+        score = hits / len(slug_tokens)
+        scored.append((score, len(slug_tokens), slug))
+    if scored:
+        # Sort: highest score, then most-specific (longest slug), then alphabetical
+        scored.sort(key=lambda x: (-x[0], -x[1], x[2]))
+        return scored[0][2]
+    if len(slugs) == 1:
+        return slugs[0]
+    return None
+
+
 def _focus_existing_tab(url: str) -> bool:
     """Try to focus a running browser's existing tab at ``url``.
 
@@ -776,23 +1041,46 @@ def main(argv: list[str] | None = None) -> int:
                    help="Open the dashboard URL in the user's default browser. Default: off (the URL is printed to stdout). The off-by-default matches the agentic case where the user is already on a tab; pre-2026-05-19 behavior was on-by-default and churned tabs on every restart.")
     p.add_argument("--no-browser", action="store_true",
                    help="DEPRECATED — auto-open is now off by default. Pass --browser to opt in.")
+    p.add_argument("--investigation", default=None,
+                   help="When the dashboard URL is opened/focused, switch the SPA to this investigation slug. "
+                   "Implies --browser. Without this flag the dashboard auto-picks the alphabetically-first "
+                   "investigation when the workspace branch doesn't match the pattern 'investigation/<slug>'.")
     args = p.parse_args(argv)
 
     ws = args.workspace.resolve()
     # `--browser` is the new opt-in; `--no-browser` is kept as a recognized
     # but redundant flag so existing skill invocations don't error.
-    open_b = bool(args.browser) and not args.no_browser
+    # --investigation always implies the user wants the browser to land on
+    # that investigation, so it implicitly enables --browser.
+    open_b = (bool(args.browser) and not args.no_browser) or bool(args.investigation)
+    # When --investigation isn't passed, infer it from the workspace's current
+    # git branch. Common branch-naming patterns map to an investigation slug:
+    #
+    #   investigation/<slug>            (dashboard SPA's canonical pattern)
+    #   feat/<slug>-investigation       (legacy)
+    #   feat/<slug>-mock-investigation* (legacy mock branches)
+    #   <slug>                          (plain slug branches, e.g. `colonies`)
+    #
+    # An entry in workspace.yaml.investigations[] (or
+    # investigations/<slug>/investigation.yaml) is required for the inferred
+    # slug to actually exist; we don't validate here — the dashboard will
+    # silently no-op if the slug doesn't resolve.
+    investigation = args.investigation
+    if investigation is None and open_b:
+        investigation = _infer_investigation_from_branch(ws)
     try:
         if args.subcommand == "start":
-            r = start(ws, port=args.port, open_browser=open_b)
+            r = start(ws, port=args.port, open_browser=open_b,
+                      investigation=investigation)
         elif args.subcommand == "stop":
             r = stop(ws)
         elif args.subcommand == "status":
             r = status(ws)
         elif args.subcommand == "open":
-            r = open_url(ws)
+            r = open_url(ws, investigation=investigation)
         elif args.subcommand == "restart":
-            r = restart(ws, port=args.port, open_browser=open_b)
+            r = restart(ws, port=args.port, open_browser=open_b,
+                        investigation=investigation)
         else:
             raise SystemExit(2)
     except RuntimeError as e:

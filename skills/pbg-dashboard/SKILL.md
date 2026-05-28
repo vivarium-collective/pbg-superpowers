@@ -3,7 +3,7 @@ name: pbg-dashboard
 description: Start / stop / open the interactive vivarium-dashboard server (the side-rail-tabbed UI — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB). Distinct from /pbg-server (the report-mirror server). Subcommands start, stop, status, open, restart.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: start|stop|status|open|restart [--port N] [--no-browser]
+argument-hint: start|stop|status|open|restart [--port N] [--browser] [--investigation SLUG]
 ---
 
 # pbg-dashboard
@@ -35,7 +35,7 @@ State files:
 
 - **`/pbg-dashboard status`** — `alive` / `stale` / `not-running`. Probes both the PID (`kill -0`) and the HTTP endpoint to distinguish a wedged process from a healthy one.
 
-- **`/pbg-dashboard open`** — open the dashboard URL in the browser. Auto-starts the server first if it isn't already running.
+- **`/pbg-dashboard open [--investigation SLUG]`** — open the dashboard URL in the browser. Auto-starts the server first if it isn't already running. With `--investigation SLUG` (or implicitly, the slug inferred from the current branch — see below), focus or open the dashboard tab AND switch the SPA's view to that investigation's detail via injected JS — bypassing the SPA's default-to-alphabetically-first behavior.
 
 - **`/pbg-dashboard restart`** — `stop` then `start`. Useful after a code change in an editable `vivarium-dashboard` install (Python reload isn't automatic; restart picks up changes).
 
@@ -44,14 +44,17 @@ Each subcommand prints a single JSON object describing the outcome.
 ## How to invoke
 
 ```bash
-# default: prefers port 8765, opens browser
+# default: prefers port 8765, leaves the browser alone (the URL is printed)
 python -m pbg_superpowers.dashboard start
+
+# open the browser too AND auto-pick the investigation matching this branch
+python -m pbg_superpowers.dashboard start --browser
+
+# force a specific investigation (implies --browser)
+python -m pbg_superpowers.dashboard start --investigation dnaa-replication
 
 # specific port (e.g. when 8765 is taken by another workspace)
 python -m pbg_superpowers.dashboard start --port 9001
-
-# headless (CI / scripts)
-python -m pbg_superpowers.dashboard start --no-browser
 
 # probe state
 python -m pbg_superpowers.dashboard status
@@ -79,11 +82,24 @@ If 1+2 hold but 3 doesn't, status reports `stale` with a note — the process ma
 
 Order of resolution:
 
-1. `<workspace>/.venv/bin/vivarium-dashboard` (workspace venv — matches the pbg-template scaffold flow).
-2. `$(which vivarium-dashboard)` (global install).
-3. `python -m vivarium_dashboard.server` (if `vivarium_dashboard` is importable from the current interpreter).
+1. `<workspace>/.venv/bin/vivarium-dashboard` — the canonical, preferred path. Composites resolve from the workspace's own site-packages.
+2. **Parent git-worktree's `.venv/bin/vivarium-dashboard`** — used when the current workspace is a secondary git worktree (its `.git` is a file pointing at `<main>/.git/worktrees/<name>`) and the local `.venv` is missing or doesn't have the binary. Safe because all worktrees of the same repo share source; the dashboard's `set_workspace_root()` + sys.path injection guarantees the **local** workspace's source wins for composite discovery. Avoids forcing a per-worktree `uv sync` (~5 min) just to spin up a server.
 
-If none resolve, `start` raises an error telling the user to install `vivarium-dashboard`.
+If neither path resolves, `start` raises an error and prints the install command. **Sibling-WORKSPACE venvs (different repos) are still off-limits** — those would silently load the wrong composites (mem3dg-readdy friction #13).
+
+## Investigation auto-pick (one-branch-per-investigation convention)
+
+The dashboard SPA auto-picks the alphabetically-first investigation when the current branch doesn't match the canonical `investigation/<slug>` pattern. This skill works around that by:
+
+1. **Explicit `--investigation <slug>`** — wins. Implies `--browser`.
+2. **Inferred from the current git branch** — when `--browser` is set (or implied) and `--investigation` isn't, the skill reads the branch name and matches it against `investigations/<slug>/investigation.yaml` directories. Match order:
+   - Exact branch == slug (`colonies` ↔ `investigations/colonies/`)
+   - `investigation/<slug>` prefix
+   - Token-overlap scoring — `feat/dnaa-biology` → `dnaa-replication` (shared token `dnaa`)
+   - Single-investigation workspace → unambiguous
+3. **Falls back to alphabetical** — if no inference applies, the SPA's own default takes over.
+
+When the slug is provided/inferred, the skill calls `_openInvestigationDetail(slug)` in the focused tab via AppleScript JS injection (Chrome family + Safari family on macOS). The JS polls for `_openInvestigationDetail` to be defined (up to 8 s) so it works whether the tab is already loaded or just opened.
 
 ## Safety
 
