@@ -261,10 +261,15 @@ def test_inplace_refuses_non_git_directory(tmp_path, plugin_root):
     assert "not a git repo" in (r.stderr + r.stdout)
 
 
-def test_inplace_autopin_pings_sibling_vivarium_dashboard(tmp_path, plugin_root):
-    """When a sibling ../vivarium-dashboard exists, the in-place scaffolder
-    appends a [tool.uv.sources] block so `uv pip install` resolves the
-    dep without further user action (friction #6)."""
+def test_inplace_autopin_pins_portable_git_source(tmp_path, plugin_root):
+    """The in-place scaffolder appends a [tool.uv.sources] block pinning
+    vivarium-dashboard to its public git repo (friction #6) so `uv pip
+    install` resolves the dep on any machine.
+
+    It must NEVER write a committed local-path source — even when a sibling
+    ../vivarium-dashboard checkout exists — because a committed path breaks
+    CI/Docker/collaborators with "Distribution not found at: file:///...".
+    """
     sibling = tmp_path / "vivarium-dashboard"
     sibling.mkdir()
     (sibling / "pyproject.toml").write_text("[project]\nname='vivarium-dashboard'\nversion='0'\n")
@@ -275,8 +280,11 @@ def test_inplace_autopin_pings_sibling_vivarium_dashboard(tmp_path, plugin_root)
 
     text = (repo / "pyproject.toml").read_text()
     assert "[tool.uv.sources]" in text
-    assert "vivarium-dashboard" in text
-    assert str(sibling) in text
+    assert 'git = "https://github.com/vivarium-collective/vivarium-dashboard.git"' in text
+    # No committed local path — neither the sibling abspath nor a relative one.
+    assert str(sibling) not in text
+    assert "path =" not in text.split("[tool.uv.sources]", 1)[1]
+    assert "editable" not in text.split("[tool.uv.sources]", 1)[1]
 
 
 def test_inplace_keeps_existing_package_dir(tmp_path, plugin_root):

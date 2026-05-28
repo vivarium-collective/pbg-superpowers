@@ -241,31 +241,32 @@ def _inplace_merge_gitignore(existing_path: Path, template_lines: list[str]) -> 
 
 
 def _inplace_autopin_vivarium(pyproject_path: Path) -> str | None:
-    """Mirror of template-init.sh's auto-pin block. If a sibling
-    `../vivarium-dashboard/` exists and the pyproject doesn't already
-    declare `[tool.uv.sources]`, append a vivarium-dashboard pin.
+    """Mirror of template-init.sh's auto-pin block. vivarium-dashboard isn't on
+    PyPI, so if the pyproject doesn't already declare `[tool.uv.sources]`,
+    append a *portable* git source for it.
 
-    Returns the absolute path that got pinned, or None if no pin was made
-    (either because the sibling is absent or the section already exists)."""
+    IMPORTANT: we deliberately never commit a local-path source, even when a
+    sibling `../vivarium-dashboard/` checkout exists. A committed local path
+    (relative or absolute) breaks `uv pip install` on every other machine — CI,
+    Docker, and collaborators — which is exactly the
+    "Distribution not found at: file:///.../vivarium-dashboard" failure this
+    scaffolder used to produce. For local dev against a sibling checkout,
+    override with an editable install into your venv instead:
+        uv pip install -e ../vivarium-dashboard
+
+    Returns the git URL that got pinned, or None if `[tool.uv.sources]` already
+    exists (we don't clobber user-set sources)."""
     text = pyproject_path.read_text()
     if "[tool.uv.sources]" in text:
         return None  # don't clobber user-set sources
-    env_path = os.environ.get("VIVARIUM_DASHBOARD_PATH")
-    candidates = []
-    if env_path:
-        candidates.append(Path(env_path).expanduser().resolve())
-    candidates.append((pyproject_path.parent.parent / "vivarium-dashboard").resolve())
-    sibling = next((c for c in candidates
-                    if c.is_dir() and (c / "pyproject.toml").is_file()),
-                   None)
-    if sibling is None:
-        return None
+    git_url = "https://github.com/vivarium-collective/vivarium-dashboard.git"
+    git_ref = os.environ.get("VIVARIUM_DASHBOARD_REF", "main")
     sep = "" if text.endswith("\n") else "\n"
     pyproject_path.write_text(
         f"{text}{sep}\n[tool.uv.sources]\n"
-        f'vivarium-dashboard = {{ path = "{sibling}", editable = true }}\n'
+        f'vivarium-dashboard = {{ git = "{git_url}", branch = "{git_ref}" }}\n'
     )
-    return str(sibling)
+    return git_url
 
 
 def _inplace_create_pkg(workspace_root: Path, package_path: str) -> bool:
