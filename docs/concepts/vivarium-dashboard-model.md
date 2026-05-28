@@ -232,13 +232,18 @@ runs: []
 # script (e.g. division-spanning multi-gen sims, calibration scripts,
 # parquet rerun harnesses).
 canonical_runs: []
-# Example:
+# Example (workspace-root-relative paths so the runner inherits CWD =
+# workspace root, where conventions like `out/cache/` resolve):
 # canonical_runs:
-#   - name: baseline          # required, unique, kebab-case; selected via --entry
-#     script: sims/run_dnaa_01_baseline.py   # required, path from workspace root
-#     args: ["60", "10"]      # optional, positional; stringified, no shell interp
-#     label: "60s smoke run"  # optional, human description
+#   - name: cell-cycle        # required, unique, kebab-case; selected via --entry
+#     script: studies/dnaa-01-expression-dynamics/sims/run_baseline.py   # required
+#     args: ['4020', '60', 'studies/dnaa-01-expression-dynamics/parquet-runs/cell-cycle.json']  # optional, positional, stringified, no shell interp
+#     label: "one cell cycle (4020s @ 60s)"
 #     default: true           # optional; first entry wins if none flagged
+#   - name: smoke
+#     script: studies/dnaa-01-expression-dynamics/sims/run_baseline.py
+#     args: ['60', '10', 'studies/dnaa-01-expression-dynamics/parquet-runs/smoke.json']
+#     label: "60s @ 10s smoke"
 
 conclusion: null
 ```
@@ -429,15 +434,15 @@ The `canonical_runs:` block on a study.yaml declares "here is how you re-run me"
 
 ```yaml
 canonical_runs:
-  - name: baseline
-    script: sims/run_dnaa_01_baseline.py
-    args: ["60", "10"]
-    label: "60s smoke run"
+  - name: cell-cycle
+    script: studies/dnaa-01-expression-dynamics/sims/run_baseline.py
+    args: ['4020', '60', 'studies/dnaa-01-expression-dynamics/parquet-runs/cell-cycle.json']
+    label: "one cell cycle (4020s @ 60s)"
     default: true
-  - name: long
-    script: sims/run_dnaa_01_baseline.py
-    args: ["3600", "60"]
-    label: "one cell cycle"
+  - name: smoke
+    script: studies/dnaa-01-expression-dynamics/sims/run_baseline.py
+    args: ['60', '10', 'studies/dnaa-01-expression-dynamics/parquet-runs/smoke.json']
+    label: "60s @ 10s smoke"
 ```
 
 - **Shape:** list of `{name, script, args?, label?, default?}`. `script` is a path relative to the workspace root; `args` are positional, stringified (no shell interpolation). Exactly one entry should be `default: true`; if none is, the first wins.
