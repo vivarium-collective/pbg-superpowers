@@ -1053,20 +1053,13 @@ def main(argv: list[str] | None = None) -> int:
     # --investigation always implies the user wants the browser to land on
     # that investigation, so it implicitly enables --browser.
     open_b = (bool(args.browser) and not args.no_browser) or bool(args.investigation)
-    # When --investigation isn't passed, infer it from the workspace's current
-    # git branch. Common branch-naming patterns map to an investigation slug:
-    #
-    #   investigation/<slug>            (dashboard SPA's canonical pattern)
-    #   feat/<slug>-investigation       (legacy)
-    #   feat/<slug>-mock-investigation* (legacy mock branches)
-    #   <slug>                          (plain slug branches, e.g. `colonies`)
-    #
-    # An entry in workspace.yaml.investigations[] (or
-    # investigations/<slug>/investigation.yaml) is required for the inferred
-    # slug to actually exist; we don't validate here — the dashboard will
-    # silently no-op if the slug doesn't resolve.
+    # `open` is inherently a browser-opener — auto-infer the investigation
+    # even without --browser. start/restart only infer when --browser was
+    # explicitly requested (otherwise they're headless / agent-driven and
+    # tabs shouldn't open).
+    will_show_browser = open_b or args.subcommand == "open"
     investigation = args.investigation
-    if investigation is None and open_b:
+    if investigation is None and will_show_browser:
         investigation = _infer_investigation_from_branch(ws)
     try:
         if args.subcommand == "start":
