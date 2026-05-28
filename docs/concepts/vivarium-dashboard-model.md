@@ -56,7 +56,7 @@ Studies move through five phases. Each phase has a distinct deliverable, distinc
 |---|---|---|
 | **Design** | The spec: purpose, pipeline_gate, simulation_set, model_change, key_assumptions, readouts, behavior_tests, conclusion_logic, limitations, implementation_requirements, bibliography | `/pbg-study new`, `/pbg-study fill-overview`, `/pbg-study set-objective`, baseline/variant/intervention `*-add` subcommands, `/pbg-investigation new`, `/pbg-investigation scaffold-from-plan` |
 | **Build** | The executable code: Process classes, listeners, composites that make the spec runnable against the workspace's simulator | `/pbg-expert` (sibling repo) or `/pbg-expert --lightweight` (in-workspace, single-tool or composite form), plus manual code in `pbg_<workspace>/processes/`. Gap-listed listeners + sim_data calibration also happen here. |
-| **Simulate** | The runs: `runs.db` populated with trajectories | `/pbg-study run-baseline`, `/pbg-study run-variant` |
+| **Simulate** | The runs: `runs.db` populated with trajectories | `/pbg-study run-baseline`, `/pbg-study run-variant`, `/pbg-study run-script` (bespoke runners declared in `canonical_runs:`) |
 | **Evaluate** | The verdict: behavioral test results, rendered visualizations, observations against `behavior_tests` | `POST /api/study-tests-run` (Tests tab), `/pbg-viz` (Visualizations tab) |
 | **Decide** | The conclusion: what we learned + next steps | `/pbg-study set-conclusion` |
 
@@ -217,6 +217,29 @@ tests:
 # /pbg-study run-baseline writes to runs_meta + history in the per-study DB.
 # The list below is kept only for v3 back-compat reads; do not write to it.
 runs: []
+
+# CANONICAL RUNS — declarative recipe for invoking the study's bespoke
+# runner scripts (the `sims/run_*.py` pattern used by v2ecoli-style
+# workspaces whose runners predate the dashboard-managed baseline /
+# variant flow). Optional. /pbg-study run-script <study> [--entry <n>]
+# reads this list, picks the default (or named) entry, and shells
+# `python <script> <args...>` from the workspace root.
+#
+# This is a SEPARATE run path from the dashboard-managed baseline /
+# variant entries above — those are executed by /api/study-run-baseline
+# and /api/study-run-variant, which know how to build the composite
+# in-process. canonical_runs are for studies that own their own runner
+# script (e.g. division-spanning multi-gen sims, calibration scripts,
+# parquet rerun harnesses).
+canonical_runs: []
+# Example:
+# canonical_runs:
+#   - name: baseline          # required, unique, kebab-case; selected via --entry
+#     script: sims/run_dnaa_01_baseline.py   # required, path from workspace root
+#     args: ["60", "10"]      # optional, positional; stringified, no shell interp
+#     label: "60s smoke run"  # optional, human description
+#     default: true           # optional; first entry wins if none flagged
+
 conclusion: null
 ```
 
@@ -397,6 +420,30 @@ A completed execution of a baseline composite or variant. The dashboard records 
 - **Shape:** `{run_id, variant: <name|null>, composite: <baseline-entry-name>, label, status, n_steps}`. `variant: null` indicates a baseline run.
 - **API:** `POST /api/study-run-baseline {study, composite?}`, `POST /api/study-run-variant {study, variant}`, `POST /api/study-run-delete`, `POST /api/study-runs-clear`, `POST /api/study-comparison-add {study, run_ids}`.
 - **Skill:** `/pbg-study run-baseline`, `/pbg-study run-variant`.
+
+#### Canonical run recipe (bespoke scripts)
+
+Some workspaces (notably v2ecoli's `sims/run_dnaa_*.py` family) ship runner scripts that predate the dashboard's baseline/variant flow — division-spanning multi-gen sims, calibration harnesses, parquet rerun wrappers. They don't fit the in-process composite executor, so the dashboard can't invoke them via `/api/study-run-baseline`.
+
+The `canonical_runs:` block on a study.yaml declares "here is how you re-run me" for those scripts:
+
+```yaml
+canonical_runs:
+  - name: baseline
+    script: sims/run_dnaa_01_baseline.py
+    args: ["60", "10"]
+    label: "60s smoke run"
+    default: true
+  - name: long
+    script: sims/run_dnaa_01_baseline.py
+    args: ["3600", "60"]
+    label: "one cell cycle"
+```
+
+- **Shape:** list of `{name, script, args?, label?, default?}`. `script` is a path relative to the workspace root; `args` are positional, stringified (no shell interpolation). Exactly one entry should be `default: true`; if none is, the first wins.
+- **No dashboard API.** This is a pure shell-out flow; the skill reads the YAML and execs `python <script> <args...>` from the workspace root.
+- **Skill:** `/pbg-study run-script <study> [--entry <name>] [--list]`.
+- **When to use it:** the runner is a hand-written script that owns its own composite construction and emitter wiring. When the runner can be expressed as a composite + `parameter_overrides`, prefer `run-baseline` / `run-variant` instead — the dashboard then surfaces the run in `runs.db` automatically.
 
 ### Visualization
 

@@ -44,6 +44,7 @@ If either is missing, the skill should fail with a clear actionable error pointi
 | Add a variant of a baseline composite | `/pbg-study variant-add <study> --name <n> --base-composite <baseline-name> --params '<json>'` |
 | Run a baseline composite | `/pbg-study run-baseline <study> [--composite <name>]` |
 | Run a variant | `/pbg-study run-variant <study> --variant <name>` |
+| Run a bespoke runner script | `/pbg-study run-script <study> [--entry <name>]` (reads `canonical_runs:` block) |
 | Record a textual intervention | `/pbg-study intervention-add <study> --name <n> --description '<text>'` |
 | Add a visualization | `/pbg-viz <study> <viz-name> '<description>'` |
 | Render a study report | `/pbg-report <study>` |

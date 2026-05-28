@@ -3,7 +3,7 @@ name: pbg-study
 description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
+argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|run-script|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
 ---
 
 # pbg-study
@@ -415,6 +415,34 @@ Run a variant. The server resolves the variant's `base_composite` against the St
 > and removes any `runs:` entries from `study.yaml`. Safe to call
 > before re-running a problematic baseline / variant. See
 > mem3dg-readdy friction log #27.
+
+#### `run-script <study-name> [--entry <name>] [--list]`
+
+Run a study's **bespoke runner script** declared in `study.yaml.canonical_runs[]`. This is the third sibling alongside `run-baseline` / `run-variant`, and serves studies whose runners predate the dashboard's in-process composite executor — division-spanning multi-gen sims, calibration harnesses, parquet rerun wrappers (the v2ecoli `sims/run_dnaa_*.py` family is the canonical example). See `canonical_runs:` in [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md#canonical-run-recipe-bespoke-scripts) for the schema.
+
+Flow:
+
+1. Locate `studies/<slug>/study.yaml` from the workspace root.
+2. Read `canonical_runs:`. Fail with a clear message if absent or empty: *"Study <slug> has no `canonical_runs:` block. Either add one (see docs/concepts/vivarium-dashboard-model.md#canonical-run-recipe-bespoke-scripts) or use `/pbg-study run-baseline` if the study has a baseline composite."*
+3. `--list`: print each entry as `<name> (default? ★) — <label or "—"> — python <script> <args...>`, exit 0.
+4. Else: pick the entry whose `default: true` is set; if none flagged, pick the first. `--entry <name>` overrides.
+5. Resolve `script:` against the workspace root. Fail if file doesn't exist.
+6. Shell `python <script> <stringified-args...>` from the workspace root, streaming stdout/stderr through. Return the subprocess exit code.
+
+```bash
+# Run the default entry
+/pbg-study run-script dnaa-01-expression-dynamics
+
+# Pick a named entry
+/pbg-study run-script dnaa-01-expression-dynamics --entry long
+
+# Inspect what's declared without running
+/pbg-study run-script dnaa-01-expression-dynamics --list
+```
+
+This is a pure shell-out — no dashboard endpoint involved. The script is expected to own its own composite construction and emitter wiring (and to call `flush_parquet(composite)` itself if it uses the parquet emitter; the context manager can't enforce flush — see v2ecoli friction note 2026-05-27 #3). Future work: a `canonical_runs:` entry could declare its emitter so a wrapper handles flush, but for now the contract is "the script does everything."
+
+> **When NOT to use run-script.** If the study's runner can be expressed as a composite plus `parameter_overrides`, prefer `run-baseline` / `run-variant` — those go through the dashboard, surface the run in `runs.db`, and integrate with the auto-renderer. `run-script` is for runners that genuinely can't fit that mold (multi-gen division, external orchestration, custom emitter pipelines).
 
 > **Gap — declarative sweeps not yet runnable.** The `study.yaml` schema
 > (`pbg-template`, Pass B) accepts `simulation_set` entries with
