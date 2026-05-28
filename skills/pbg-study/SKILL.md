@@ -3,7 +3,7 @@ name: pbg-study
 description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|run-script|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
+argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|run-script|clean|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
 ---
 
 # pbg-study
@@ -453,6 +453,53 @@ This is a pure shell-out — no dashboard endpoint involved. The script is expec
 > single entries. Adding a runner is tracked as Tier-B/B3 from the v2ecoli
 > feedback synthesis; build it when a real workspace needs to execute a
 > declared sweep.
+
+#### `clean <study-name> [--dry-run] [--include-out-paths]`
+
+Wipe conventional simulator output for a study so a `from scratch` rerun starts clean. Closes friction note 2026-05-27 #4 ("rerun from scratch had no single command — the agent had to know all the per-study side-effects to wipe by hand").
+
+**What gets removed** (only when actually present on disk):
+
+- `studies/<slug>/runs.db` and its WAL/SHM siblings (`-wal`, `-shm`).
+- `studies/<slug>/parquet-runs/` (the entire hive-partitioned tree).
+- With `--include-out-paths`: every `args[-1]` from each `canonical_runs:` entry that ends in `.json` (the runner's `out_path` summary JSON). Off by default — those JSONs are sometimes hand-edited / version-controlled, so opt-in.
+
+**What's never touched** (regardless of flags):
+
+- Git-tracked files. Each candidate path is checked against `git ls-files --error-unmatch` before deletion; matches are skipped + reported as `skipped (tracked): <path>`. This prevents `clean` from blowing away an output file that's been committed.
+- `studies/<slug>/study.yaml` itself.
+- `studies/<slug>/sims/` (the runner scripts).
+- `studies/<slug>/tests/` (the pytest suite).
+- `studies/<slug>/viz/` (visualization scripts).
+- `studies/<slug>/notes/` or `studies/<slug>/references/` (per CLAUDE.md cleanup-PR rule — these are field records that feed the next iteration of the spec).
+
+**Flow:**
+
+1. Common prelude (find `workspace.yaml`).
+2. Resolve `studies/<slug>/` from the workspace root. Fail if absent.
+3. Build the candidate list:
+   - `runs.db`, `runs.db-wal`, `runs.db-shm` (each if exists)
+   - `parquet-runs/` (if exists as dir)
+   - With `--include-out-paths`: read `canonical_runs:` from `study.yaml`; for each entry, take the last positional arg from `args:`; if it ends in `.json` and resolves to a path under `studies/<slug>/`, add it.
+4. For each candidate, run `git ls-files --error-unmatch <path>` (in the workspace root). On exit 0, the path is tracked — print `skipped (tracked): <path>` and skip.
+5. If `--dry-run`: print each `would remove: <path>` and exit 0.
+6. Otherwise remove each candidate (`rm -f` for files, `rm -rf` for `parquet-runs/`) and print `removed: <path>` per item.
+7. Final summary: `cleaned <K> path(s) (S skipped, T tracked)` and the path of any next-recommended action (`/pbg-study run-baseline <slug>` or `/pbg-study run-script <slug>` depending on whether `canonical_runs:` is present).
+
+```bash
+# Preview without removing
+/pbg-study clean dnaa-01-expression-dynamics --dry-run
+
+# Wipe runtime state (runs.db + parquet-runs/)
+/pbg-study clean dnaa-01-expression-dynamics
+
+# Also wipe canonical_runs out_path JSON summaries
+/pbg-study clean dnaa-01-expression-dynamics --include-out-paths
+```
+
+> **Why not a dashboard endpoint?** `clean` operates entirely on local files (no dashboard state besides `runs.db`, which the dashboard reads opportunistically). Doing this via the dashboard would mean serializing file paths over HTTP for no benefit. The skill shells `rm` directly.
+
+> **Investigation-level fan-out.** `/pbg-investigation run` doesn't yet have a companion `clean` — call `/pbg-study clean` per-member if you want a full investigation wipe. If this becomes routine, lift a `/pbg-investigation clean <slug> [--studies a,b]` analogous to the run orchestrator.
 
 ### Evaluate subcommands
 
