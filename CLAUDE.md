@@ -46,6 +46,7 @@ If either is missing, the skill should fail with a clear actionable error pointi
 | Run a variant | `/pbg-study run-variant <study> --variant <name>` |
 | Run a bespoke runner script | `/pbg-study run-script <study> [--entry <name>]` (reads `canonical_runs:` block) |
 | Run all studies in an investigation | `/pbg-investigation run <inv-slug> [--studies a,b] [--entry <name>]` (orchestrates `run-script` across members) |
+| Wipe runtime output for a from-scratch rerun | `/pbg-study clean <study> [--dry-run] [--include-out-paths]` (refuses to touch git-tracked files) |
 | Record a textual intervention | `/pbg-study intervention-add <study> --name <n> --description '<text>'` |
 | Add a visualization | `/pbg-viz <study> <viz-name> '<description>'` |
 | Render a study report | `/pbg-report <study>` |
