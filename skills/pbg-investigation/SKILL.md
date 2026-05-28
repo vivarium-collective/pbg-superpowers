@@ -123,9 +123,9 @@ os.replace(tmp, path)
 
 ---
 
-### `open <slug> [--no-server]`
+### `open <slug> [--no-server] [--share-artifacts] [--no-share-artifacts]`
 
-Create (or re-use) a git worktree for branch `<slug>` at the standard location `<workspace>/.pbg/worktrees/<slug>/`, then optionally start a per-worktree dashboard server in it.
+Create (or re-use) a git worktree for branch `<slug>` at the standard location `<workspace>/.pbg/worktrees/<slug>/`, then optionally start a per-worktree dashboard server in it. Auto-symlinks expensive-to-rebuild artifacts from a sibling worktree (closes friction #6 — `out/cache/` rebuilds taking minutes per new worktree).
 
 **Steps:**
 
@@ -134,17 +134,36 @@ Create (or re-use) a git worktree for branch `<slug>` at the standard location `
 3. Compute `worktree_path = <WORKSPACE_ROOT>/.pbg/worktrees/<slug>`.
 4. If `worktree_path` already exists AND is registered as a git worktree (check `git worktree list --porcelain`), print: `Worktree already exists at <worktree_path> (branch <slug>).` and skip to step 6.
 5. Otherwise, run `git worktree add <worktree_path> <slug>`. Surface any git error verbatim (most common: branch already checked out elsewhere — the standard worktree path is the only sanctioned mount point, so the user should `git worktree remove` the conflicting one first).
-6. Unless `--no-server` is given, start a dashboard server in the new worktree:
+6. **Share artifacts from a sibling worktree.** Read `workspace.yaml.runtime.shared_artifacts:` — a list of paths (relative to workspace root) that are expensive to rebuild and worth sharing across worktrees. Default if the field is absent: `["out/cache"]` (matches v2ecoli's ParCa-cache convention; harmless on workspaces that don't have one). For each declared path:
+   1. Skip if the target already exists in the new worktree (whether as file, dir, or symlink).
+   2. Search for a sibling worktree (any other entry from `git worktree list --porcelain`, plus the main checkout) that has the path **populated** — non-empty dir or non-zero file. Skip if none found.
+   3. **With `--share-artifacts`:** create a relative symlink from `<worktree_path>/<artifact>` → the sibling's path. Print `linked: <artifact> → <sibling>/<artifact>`.
+   4. **With `--no-share-artifacts`:** skip silently.
+   5. **Default (neither flag):** print a recommendation line per candidate — `would link: <artifact> → <sibling>/<artifact> (re-run with --share-artifacts to apply, or --no-share-artifacts to silence)`. Don't act. The friction author's "offer to symlink or copy" intent — discoverable, opt-in.
+7. Unless `--no-server` is given, start a dashboard server in the new worktree:
    ```bash
    cd "<worktree_path>" && bash scripts/serve.sh &
    ```
    The server self-registers in `~/.pbg/servers/<name>.<hash>.json` on boot. Wait briefly (poll `~/.pbg/servers/` up to ~5 s) and capture the URL for printing. If no record appears, print: `Server did not register within 5s — check scripts/serve.sh logs.` and continue (worktree is still usable).
-7. Print summary:
+8. Print summary:
    ```
-   Worktree:   <worktree_path>
-   Branch:     <slug>
-   Dashboard:  <url>          (omit if --no-server)
+   Worktree:    <worktree_path>
+   Branch:      <slug>
+   Artifacts:   <linked-count> linked from <sibling>  (omit if zero)
+   Dashboard:   <url>           (omit if --no-server)
    ```
+
+**Why symlink, not copy.** ParCa caches under `out/cache/` are read-only after build; the runners only ever read them. Symlinks save disk and stay current if the source worktree rebuilds. The friction note offered "symlink or copy" — copy is implementable as a future `--copy-artifacts` flag if anyone needs isolation.
+
+**Schema.** `workspace.yaml.runtime.shared_artifacts:` is a free-form list of workspace-relative paths. Examples:
+
+```yaml
+runtime:
+  shared_artifacts:
+    - out/cache                    # v2ecoli ParCa cache (default if field absent)
+    - out/cache-stage1-heuristic   # extra condition caches
+    - data/precomputed             # other workspaces' equivalents
+```
 
 **Standard location rationale.** Putting all worktrees under `<workspace>/.pbg/worktrees/` (a) keeps them close to the parent checkout for discovery and (b) lives inside `.pbg/` which is already conventionally git-ignored by workspace scaffolds, so the worktree directories themselves never accidentally show up in the parent's `git status`.
 

@@ -35,6 +35,10 @@ A directory containing `workspace.yaml`, a `pbg_<package>/` Python package, and 
 - **On disk:** `<workspace>/workspace.yaml` + `pbg_<pkg>/`.
 - **In the dashboard:** the root container; everything else lives inside it.
 - **Created by:** `/pbg-init`.
+- **`runtime:` block (optional).** Workspace-wide settings consumed by skills and runners:
+  - `default_emitter: parquet | sqlite` — picked up by bespoke runners via `--emitter` default (see [`runner_scripts.md`](../conventions/runner_scripts.md)).
+  - `subprocess_timeout_s: <int>` — overrides the dashboard's default per-tick subprocess timeout (used by long cell-cycle sims).
+  - `shared_artifacts: [<path>, ...]` — workspace-root-relative paths expensive to rebuild (caches, precomputed indexes). `/pbg-investigation open <slug>` detects when these are absent in a new worktree but populated in a sibling, and (with `--share-artifacts`) symlinks them across. Default if absent: `["out/cache"]` (v2ecoli ParCa-cache convention).
 
 ### Study
 
