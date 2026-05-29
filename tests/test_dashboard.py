@@ -120,6 +120,26 @@ def test_is_placeholder_true_when_bootstrap_stub(tmp_path):
     assert dash_mod._is_placeholder_or_missing(p) is True
 
 
+def test_is_placeholder_true_when_pbg_report_stub(tmp_path):
+    """`/pbg-report` writes a workspace-level stub via
+    pbg_superpowers.report.render_workspace_report() to the SAME path
+    the SPA uses. Body says 'No models yet' (note: shorter than the
+    pbg-template bootstrap stub's 'No models registered yet').
+    Without this marker, /pbg-report silently overwrites the SPA.
+    """
+    p = tmp_path / "reports" / "index.html"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        "<!doctype html><html><body>"
+        "<header><h1>v2ecoli</h1>"
+        "<p class='subtitle'>Workspace dashboard · regenerated 2026-05-28</p></header>"
+        "<div class='panel'><h2>Models</h2>"
+        "<p>No models yet. <code>/pbg-add-model &lt;name&gt;</code></p></div>"
+        "</body></html>"
+    )
+    assert dash_mod._is_placeholder_or_missing(p) is True
+
+
 def test_is_placeholder_false_when_real_spa(tmp_path):
     p = tmp_path / "reports" / "index.html"
     p.parent.mkdir(parents=True)

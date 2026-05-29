@@ -425,11 +425,25 @@ def prepare_investigation(workspace: Path | str, *,
     return subprocess.run(cmd, cwd=str(workspace)).returncode
 
 
-# Placeholder body shipped by pbg-template's reports/index.html.j2 before
-# /pbg-report (or render_dashboard()) populates the SPA. Detecting this
-# string lets `start()` decide whether to auto-render or refuse-with-hint
-# before the user sees the bootstrap stub at the dashboard URL.
-_REPORTS_PLACEHOLDER_MARKER = "No models registered yet"
+# Placeholder bodies that overwrite reports/index.html with something OTHER
+# than the rich vivarium-dashboard SPA. Detecting any of these lets
+# `start()` decide whether to auto-render the real SPA before the user
+# sees an empty page at the dashboard URL.
+#
+#   1. "No models registered yet" — pbg-template's bootstrap stub (the
+#      Jinja-rendered reports/index.html.j2 ships this body before
+#      /pbg-report or render_dashboard() populates the SPA).
+#   2. "No models yet" — pbg_superpowers.report.render_workspace_report()
+#      stub. /pbg-report invokes that helper, which writes a
+#      workspace-level dashboard (Models / Findings index / Recent
+#      decisions panels) to the SAME path the SPA uses. Without this
+#      marker, /pbg-report silently overwrites the SPA and the next
+#      `pbg-dashboard start` doesn't notice (mock 2026-05-28: the user
+#      sees a 4-line stub page until manually re-rendered).
+_REPORTS_PLACEHOLDER_MARKERS = (
+    "No models registered yet",
+    "No models yet",
+)
 
 
 def _reports_index(workspace: Path) -> Path:
@@ -437,13 +451,14 @@ def _reports_index(workspace: Path) -> Path:
 
 
 def _is_placeholder_or_missing(reports_path: Path) -> bool:
-    """True if reports/index.html is absent OR still the pbg-template stub."""
+    """True if reports/index.html is absent OR still a known stub."""
     if not reports_path.is_file():
         return True
     try:
-        return _REPORTS_PLACEHOLDER_MARKER in reports_path.read_text(errors="replace")
+        body = reports_path.read_text(errors="replace")
     except OSError:
         return True
+    return any(marker in body for marker in _REPORTS_PLACEHOLDER_MARKERS)
 
 
 def _try_render_dashboard(workspace: Path) -> tuple[bool, str | None]:
