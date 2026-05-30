@@ -1471,8 +1471,8 @@ def _check_missing_conditions_block(ctx: _LintContext) -> None:
             "model_settings}`. Without it the Build tab is BLANK for "
             "this study, even if v3 `baseline:` + `variants:` are "
             "populated. Add at minimum a `conditions.baseline.composite` "
-            "value; see CONTRIBUTING_STUDY_FIELDS.md (when added) for the "
-            "full schema."
+            "value; see the study lint-checks + data-model reference in "
+            "docs/concepts/vivarium-dashboard-model.md."
         ),
         check="missing_conditions_block",
     )
