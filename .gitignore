@@ -7,3 +7,7 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# IDE + local workspace runtime state
+.idea/
+.pbg/

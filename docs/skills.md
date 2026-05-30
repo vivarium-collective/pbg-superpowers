@@ -1,6 +1,6 @@
 # Skills catalog
 
-11 user-facing skills (plus `/pbg-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects). v0.9 consolidated the 17-skill v0.8 catalog — see the [migration table](#migration-from-v08) below.
+12 user-facing skills (plus `/pbg-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects). v0.9 consolidated the 17-skill v0.8 catalog — see the [migration table](#migration-from-v08) below.
 
 ## Wrap & compose
 
@@ -18,7 +18,8 @@
 | Skill | What it does |
 |---|---|
 | [`/pbg-workspace <name>`](../skills/pbg-workspace/SKILL.md) | Scaffold a fresh workspace — three modes: upstream-branch (clone an upstream model repo and create a workspace branch), standalone (clone `pbg-template`), or in-place (promote an existing checkout). |
-| [`/pbg-server [start\|stop\|status]`](../skills/pbg-server/SKILL.md) | Start/stop the dashboard server in the current workspace. Required precondition for the Studies skills. |
+| [`/pbg-dashboard [start\|stop\|status\|open\|restart]`](../skills/pbg-dashboard/SKILL.md) | Start/stop/open the interactive vivarium-dashboard (the side-rail-tabbed UI). The server the Studies skills depend on. Distinct from `/pbg-server`. |
+| [`/pbg-server [start\|stop\|status]`](../skills/pbg-server/SKILL.md) | Start/stop the **report-mirror** server (serves `reports/index.html`, proxies stage-skill events). NOT the interactive dashboard — that's `/pbg-dashboard`. |
 | [`/pbg-status`](../skills/pbg-status/SKILL.md) | Print workspace health: is this a workspace? server up? recent activity? Delegates the server-liveness section to `/pbg-server status`. |
 
 ## Catalog & registry
@@ -50,7 +51,7 @@ For the read/write surface each skill touches (which API endpoints, which on-dis
 
 ## Migration from v0.8
 
-The v0.8 catalog had 17 user-invocable skills. v0.9 cuts that to 11
+The v0.8 catalog had 17 user-invocable skills. v0.9 cuts that to 12
 without losing any capability — repetitive trios are merged behind one
 front door, and prototyping flags fold into the canonical commands.
 

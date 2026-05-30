@@ -1,6 +1,6 @@
 # pbg-superpowers
 
-A Claude Code plugin for building **multiscale models in the Process Bigraph framework**. Ships 11 `/pbg-*` skills that scaffold the mechanical parts of compositional modeling — wrapping a simulator as a typed Process, composing Processes into a Composite, organizing the work as a reproducible workspace, and managing studies + runs + visualizations through a local dashboard.
+A Claude Code plugin for building **multiscale models in the Process Bigraph framework**. Ships 12 `/pbg-*` skills that scaffold the mechanical parts of compositional modeling — wrapping a simulator as a typed Process, composing Processes into a Composite, organizing the work as a reproducible workspace, and managing studies + runs + visualizations through a local dashboard.
 
 For **computational biologists** who want their models to be reusable, recombinable, and runnable by others — without writing the registry, packaging, schema, and report boilerplate by hand. Framework background: [Agmon & Spangler (2026)](docs/references/papers/agmon-spangler-2026-process-bigraphs-main.pdf).
 
@@ -31,7 +31,7 @@ For testers evaluating the UI against an existing or scaffold-only workspace. No
     bash use-this-template-init.sh
     vivarium-dashboard serve --workspace .
 
-Open the printed URL and browse the seven tabs — Registry, Composites, Studies, Investigations, Visualizations, Decisions, Runs. Create studies and investigations directly through the UI. Scaffolding details in the [pbg-template](https://github.com/vivarium-collective/pbg-template) README; serving details (ports, multi-workspace) in the [vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard) README.
+Open the printed URL and browse the side-rail tabs — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB (the canonical set is owned by the [vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard); see `/pbg-dashboard`). Create studies and investigations directly through the UI. Scaffolding details in the [pbg-template](https://github.com/vivarium-collective/pbg-template) README; serving details (ports, multi-workspace) in the [vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard) README.
 
 ### Path B — Dashboard + AI agent (pbg-superpowers integration)
 
@@ -91,7 +91,7 @@ A workspace can wrap or live beside one or more composite-only repos. Use `/pbg-
 
 ## Skills
 
-11 skills, grouped by purpose (wrap & compose · workspace lifecycle · catalog · run & study). See [`docs/skills.md`](docs/skills.md) for the full catalog.
+12 skills, grouped by purpose (wrap & compose · workspace lifecycle · catalog · run & study). See [`docs/skills.md`](docs/skills.md) for the full catalog.
 
 ## Companion repos
 

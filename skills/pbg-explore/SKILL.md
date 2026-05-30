@@ -1,6 +1,9 @@
 ---
 name: pbg-explore
 description: Launch the dashboard's Composite Explorer for a specific composite spec id. Ensures the dashboard server is up, opens the explorer URL in focus mode. Usage `/pbg-explore <spec-id>`.
+user-invocable: true
+allowed-tools: Bash(*) Read
+argument-hint: <spec-id>
 ---
 
 # /pbg-explore — Launch the Composite Explorer for one spec

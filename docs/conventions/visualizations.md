@@ -1,8 +1,8 @@
 # Visualization convention
 
 Visualizations are `process_bigraph.Step` subclasses, specifically
-extending `pbg_superpowers.visualization.Visualization`. As of v0.4.15,
-they are real Steps wireable into Composite specs — not just discoverable
+extending `pbg_superpowers.visualization.Visualization`. They are real
+Steps wireable into Composite specs — not just discoverable
 post-simulation renderers.
 
 ## Why a Step?
