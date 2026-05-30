@@ -1,10 +1,8 @@
 ---
 name: pbg-suggest
 description: Internal dashboard callback — invoked by the vivarium-dashboard "Suggest" button to draft a repo name, PR title, or PR body in response to a request file. Not part of the user-facing catalog; do not invoke directly. The dashboard prints the exact `/pbg-suggest <id>` to run when needed.
-arguments:
-  - name: request-id
-    description: ID of the request file (e.g. repo-name-1778394000). Supplied by the dashboard; users do not type this by hand.
-    required: true
+user-invocable: false
+argument-hint: <request-id>
 ---
 
 # /pbg-suggest <request-id>
