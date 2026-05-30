@@ -8,12 +8,13 @@ that function.
 """
 from __future__ import annotations
 import json
-import re
 import shutil
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
 from typing import Any
+
+from pbg_superpowers.text_utils import first_sentence
 
 import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -142,21 +143,8 @@ def render_workspace_report(
 
 
 def _first_sentence(text: str, *, max_chars: int = 220) -> str:
-    """Pull the first sentence (or first line) for a one-liner preview.
-
-    Heuristic: split on the first sentence terminator (``. ! ?``) followed
-    by whitespace or end-of-string. If the result is longer than
-    ``max_chars`` (e.g. terse find with no terminator), truncate with an
-    ellipsis. Newlines collapse to a single space.
-    """
-    if not text:
-        return ""
-    flat = re.sub(r"\s+", " ", text.strip())
-    m = re.search(r"(?<=[.!?])\s", flat)
-    s = (flat[: m.start() + 1] if m else flat).rstrip()
-    if len(s) > max_chars:
-        s = s[: max_chars - 1].rstrip() + "…"
-    return s
+    """One-liner preview — see :func:`pbg_superpowers.text_utils.first_sentence`."""
+    return first_sentence(text, max_chars=max_chars)
 
 
 def _harvest_findings(ws_root: Path) -> list[dict]:

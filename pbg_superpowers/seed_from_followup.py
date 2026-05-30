@@ -66,6 +66,8 @@ from typing import Any
 
 import yaml
 
+from pbg_superpowers.text_utils import first_sentence
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -189,11 +191,7 @@ _TARGET_HINT_RE = re.compile(
 
 
 def _first_sentence(text: str) -> str:
-    if not text:
-        return ""
-    flat = re.sub(r"\s+", " ", text.strip())
-    m = re.search(r"(?<=[.!?])\s", flat)
-    return (flat[: m.start() + 1] if m else flat).rstrip()
+    return first_sentence(text)
 
 
 def _derive_question(next_action: str | None, statement: str) -> str:

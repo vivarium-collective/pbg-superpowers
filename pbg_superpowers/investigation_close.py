@@ -39,7 +39,6 @@ from __future__ import annotations
 import dataclasses
 import datetime as _dt
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -48,7 +47,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
+from pbg_superpowers.paths import find_workspace_root
+from pbg_superpowers.study_io import (
+    atomic_write as _atomic_write,
+    dump_yaml as _dump_yaml,
+    load_yaml_mapping as _load_yaml,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -57,16 +61,7 @@ import yaml
 
 
 def _walk_to_workspace(start: Path) -> Path:
-    cur = start.resolve()
-    while True:
-        if (cur / "workspace.yaml").is_file():
-            return cur
-        if cur.parent == cur:
-            raise FileNotFoundError(
-                f"not inside a pbg workspace (no workspace.yaml found "
-                f"in {start.resolve()} or any parent)"
-            )
-        cur = cur.parent
+    return find_workspace_root(start)
 
 
 def _investigation_yaml(ws_root: Path, slug: str) -> Path:
@@ -79,23 +74,8 @@ def _investigation_yaml(ws_root: Path, slug: str) -> Path:
     return p
 
 
-def _load_yaml(path: Path) -> dict:
-    spec = yaml.safe_load(path.read_text()) or {}
-    if not isinstance(spec, dict):
-        raise ValueError(f"{path}: top-level YAML is not a mapping")
-    return spec
-
-
-def _dump_yaml(spec: dict) -> str:
-    return yaml.safe_dump(
-        spec, sort_keys=False, default_flow_style=False, allow_unicode=True
-    )
-
-
-def _atomic_write(path: Path, text: str) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text)
-    os.replace(tmp, path)
+# _load_yaml / _dump_yaml / _atomic_write are imported from study_io (see the
+# import block above) — duplicated here before the Theme 3 consolidation.
 
 
 # ---------------------------------------------------------------------------

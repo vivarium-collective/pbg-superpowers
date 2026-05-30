@@ -26,13 +26,14 @@ documented in SKILL.md).
 """
 from __future__ import annotations
 
-import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
 import yaml
+
+from pbg_superpowers.study_io import load_yaml, save_yaml_atomic
 
 from .expert_search import search_expert_docs
 
@@ -103,30 +104,21 @@ class WalkResult:
 
 
 def load_study(study_yaml: Path) -> dict:
-    return yaml.safe_load(study_yaml.read_text()) or {}
+    return load_yaml(study_yaml)
 
 
 def save_study_atomic(study_yaml: Path, data: dict) -> None:
     """tmp + rename — same convention used by propose-followup / seed-from-followup."""
-    tmp = study_yaml.with_suffix(study_yaml.suffix + ".tmp")
-    tmp.write_text(yaml.safe_dump(data, sort_keys=False, width=1000))
-    os.replace(tmp, study_yaml)
+    save_yaml_atomic(study_yaml, data)
 
 
 # ---------------------------------------------------------------------------
 # Workspace discovery
 # ---------------------------------------------------------------------------
 
-
-def find_workspace_root(start: Path) -> Path:
-    """Walk up from start to find workspace.yaml. Raise FileNotFoundError if absent."""
-    cur = start.resolve()
-    while True:
-        if (cur / "workspace.yaml").is_file():
-            return cur
-        if cur.parent == cur:
-            raise FileNotFoundError(f"No workspace.yaml found at or above {start}")
-        cur = cur.parent
+# Canonical implementation lives in paths.py; re-exported here for the
+# historical callers (and study_verify) that import it from this module.
+from pbg_superpowers.paths import find_workspace_root  # noqa: E402,F401
 
 
 def study_dir_from_slug(ws_root: Path, slug: str) -> Path:
