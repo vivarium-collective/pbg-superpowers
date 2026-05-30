@@ -51,6 +51,8 @@ from typing import Iterable, Iterator
 
 import yaml
 
+from pbg_superpowers.bibtex import bib_keys
+
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -642,23 +644,12 @@ def _flag_if_truncated(ctx: _LintContext, path: str, value: str) -> None:
 
 
 def _bib_keys_for_workspace(ws_root: Path) -> set[str]:
-    """Read every @entry key from <ws>/references/papers.bib. Cached per call."""
-    bib = ws_root / "references" / "papers.bib"
-    if not bib.is_file():
-        return set()
-    keys: set[str] = set()
-    for line in bib.read_text().splitlines():
-        s = line.strip()
-        if not s.startswith("@") or "{" not in s:
-            continue
-        try:
-            after_brace = s.split("{", 1)[1]
-            key = after_brace.split(",", 1)[0].split()[0].rstrip("}").strip()
-            if key:
-                keys.add(key)
-        except (IndexError, ValueError):
-            continue
-    return keys
+    """Every @entry key declared in the workspace bibliography.
+
+    Delegates to the shared :func:`pbg_superpowers.bibtex.bib_keys` so the
+    publish-gate linter and the verify gate agree on file + parser.
+    """
+    return bib_keys(ws_root)
 
 
 def _expert_doc_names_for_workspace(ws_root: Path) -> set[str]:
