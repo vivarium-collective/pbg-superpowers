@@ -53,12 +53,12 @@ verify`` shells out to ``python -m pbg_superpowers.study_verify
 from __future__ import annotations
 
 import json
-import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
+from pbg_superpowers.bibtex import bib_keys
 from pbg_superpowers.paths import find_workspace_root
 from pbg_superpowers.study_io import load_yaml as _load_yaml
 
@@ -295,25 +295,17 @@ def _check_parent_studies(study: dict, ws_root: Path | None) -> Iterable[VerifyF
             )
 
 
-_BIB_KEY_RE = re.compile(r"@\w+\s*\{\s*([^,\s]+)")
-
-
 def _load_bib_keys(ws_root: Path | None) -> set[str] | None:
-    """Read bibtex keys from references.bib if present. None if no bib file."""
+    """Workspace bib keys, or None when there's no bib file (soft-skip).
+
+    Delegates to the shared :func:`pbg_superpowers.bibtex.bib_keys` so verify
+    resolves the SAME file (``references/papers.bib`` first) and parser as the
+    report linter — previously verify read a different file with a different
+    regex, so a cite could pass one gate and fail the other.
+    """
     if ws_root is None:
         return None
-    candidates = [
-        ws_root / "references" / "references.bib",
-        ws_root / "references.bib",
-    ]
-    for c in candidates:
-        if c.is_file():
-            try:
-                text = c.read_text(errors="ignore")
-            except OSError:
-                continue
-            return {m.group(1) for m in _BIB_KEY_RE.finditer(text)}
-    return None
+    return bib_keys(ws_root, missing_ok=True)
 
 
 def _iter_cites(study: dict) -> Iterable[tuple[str, str]]:

@@ -33,6 +33,7 @@ from typing import Any, Callable, Iterable
 
 import yaml
 
+from pbg_superpowers.bibtex import bib_keys
 from pbg_superpowers.study_io import load_yaml, save_yaml_atomic
 
 from .expert_search import search_expert_docs
@@ -349,26 +350,13 @@ _STOP = {
 
 
 def load_bib_keys(ws_root: Path) -> set[str]:
-    """Read every @entry key from references/papers.bib (best-effort)."""
-    bib = ws_root / "references" / "papers.bib"
-    if not bib.is_file():
-        return set()
-    keys: set[str] = set()
-    for line in bib.read_text().splitlines():
-        s = line.strip()
-        if not s.startswith("@") or "{" not in s:
-            continue
-        try:
-            after_brace = s.split("{", 1)[1]
-            # Key runs from `{` to the first `,` (BibTeX entry-key terminator).
-            # If there's no comma on this line, take everything up to whitespace
-            # or closing brace.
-            key = after_brace.split(",", 1)[0].split()[0].rstrip("}").strip()
-            if key:
-                keys.add(key)
-        except (IndexError, ValueError):
-            continue
-    return keys
+    """Every @entry key declared in the workspace bibliography (best-effort).
+
+    Thin wrapper over the shared :func:`pbg_superpowers.bibtex.bib_keys` so the
+    findings writer, the report linter, and study verify all resolve the same
+    file with the same parser.
+    """
+    return bib_keys(ws_root)
 
 
 def collect_cited_bib_keys(findings: Iterable[ProposedFinding]) -> set[str]:
