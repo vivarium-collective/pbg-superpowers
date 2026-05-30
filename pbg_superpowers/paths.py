@@ -23,6 +23,16 @@ from pathlib import Path
 WORKSPACE_MARKER = "workspace.yaml"
 
 
+def _walk_for_marker(cur: Path) -> Path | None:
+    """Walk up from directory `cur` to the nearest ancestor with the marker."""
+    while True:
+        if (cur / WORKSPACE_MARKER).is_file():
+            return cur
+        if cur.parent == cur:
+            return None
+        cur = cur.parent
+
+
 def workspace_root(start: Path | str | None = None) -> Path:
     """Return the nearest ancestor directory containing workspace.yaml.
 
@@ -40,11 +50,32 @@ def workspace_root(start: Path | str | None = None) -> Path:
         s = Path(start).resolve()
         cur = s if s.is_dir() else s.parent
 
-    while True:
-        if (cur / WORKSPACE_MARKER).is_file():
-            return cur
-        if cur.parent == cur:
-            raise FileNotFoundError(
-                f"No {WORKSPACE_MARKER} found at or above {start or caller_file}"
-            )
-        cur = cur.parent
+    found = _walk_for_marker(cur)
+    if found is None:
+        raise FileNotFoundError(
+            f"No {WORKSPACE_MARKER} found at or above {start or caller_file}"
+        )
+    return found
+
+
+def find_workspace_root(
+    start: Path | str, *, missing_ok: bool = False
+) -> Path | None:
+    """Explicit-start workspace-root lookup for module (non-script) callers.
+
+    The single source of truth behind the historical copies in
+    ``study_findings``/``study_narrative``/``investigation_close``/``runner``.
+    Unlike :func:`workspace_root`, ``start`` is required (no ``_getframe``
+    magic) and a file path walks up from its parent directory.
+
+    Raises ``FileNotFoundError`` when no ``workspace.yaml`` is found, unless
+    ``missing_ok=True`` (then returns ``None`` — the runner's contract).
+    """
+    s = Path(start).resolve()
+    cur = s if s.is_dir() else s.parent
+    found = _walk_for_marker(cur)
+    if found is None and not missing_ok:
+        raise FileNotFoundError(
+            f"No {WORKSPACE_MARKER} found at or above {start}"
+        )
+    return found

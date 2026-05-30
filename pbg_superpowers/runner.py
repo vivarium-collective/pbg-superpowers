@@ -38,6 +38,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
 
+from pbg_superpowers.paths import find_workspace_root
+
 
 # ---------------------------------------------------------------------------
 # Schema (mirrors vivarium_dashboard.lib.composite_runs)
@@ -95,11 +97,9 @@ def _generate_run_id(spec_id: str, params: dict | None, ts: float) -> str:
 
 
 def _find_workspace_root(start: Path | None = None) -> Path | None:
-    cur = Path(start or Path.cwd()).resolve()
-    for d in (cur, *cur.parents):
-        if (d / "workspace.yaml").is_file():
-            return d
-    return None
+    # Canonical walk lives in paths.find_workspace_root; runner's contract is
+    # to return None (not raise) when there's no workspace above cwd.
+    return find_workspace_root(start or Path.cwd(), missing_ok=True)
 
 
 # ---------------------------------------------------------------------------

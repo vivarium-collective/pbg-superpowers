@@ -59,9 +59,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
-import yaml
-
-from pbg_superpowers.study_findings import find_workspace_root
+from pbg_superpowers.paths import find_workspace_root
+from pbg_superpowers.study_io import load_yaml as _load_yaml
 
 
 # ---------------------------------------------------------------------------
@@ -93,10 +92,6 @@ class VerifyFinding:
 # ---------------------------------------------------------------------------
 # Load helpers
 # ---------------------------------------------------------------------------
-
-
-def _load_yaml(p: Path) -> dict:
-    return yaml.safe_load(p.read_text()) or {}
 
 
 def _names_from_list(items: list | None, key: str = "name") -> list[str]:
