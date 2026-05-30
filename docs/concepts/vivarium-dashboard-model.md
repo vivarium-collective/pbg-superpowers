@@ -764,6 +764,36 @@ When a collision occurs, the validation error message now includes a `Note:`
 suffix naming the reserved field, so you know to rename your custom field
 rather than guessing at a shape mismatch.
 
+## Study lint checks (`/pbg-report`) {#study-lint-checks}
+
+`/pbg-report`'s structural lint (Pass B) warns on common empty-field gaps in
+`studies/<slug>/study.yaml` so a study card isn't half-blank. The check ids
+below are the literal `check=` values emitted by
+`pbg_superpowers.report_linter`; the field set + enum values themselves are
+defined by [`study.schema.json`](https://github.com/vivarium-collective/pbg-template/blob/main/template/.pbg/schemas/study.schema.json)
+(see the [multi-axis status](#multi-axis-status) table for the status enums).
+**All of these are non-blocking** — a study still passes lint with them; they
+mark the gap for the next scaffolding pass.
+
+| Check id | Field(s) | Triggers when |
+|---|---|---|
+| `missing_baseline` | `baseline` or `conditions.baseline` | both absent |
+| `missing_variants` | `variants` or `conditions.variants` | both absent / empty |
+| `missing_conditions_block` | `conditions:` (v4) | absent AND no `model_change` / `implementation_requirements` |
+| `missing_simulation_set` | `simulation_set:` | absent / empty |
+| `missing_planned_runs` | `planned_runs:` / `runs:` | both absent |
+| `missing_readouts` | `readouts:` | absent / empty |
+| `missing_visualizations` | `visualizations:` | absent / empty |
+| `missing_provenance` | a finding's `provenance:` | a `findings[]` entry has no provenance object |
+| `status_legacy_only` | multi-axis status axes | only the legacy `status:` is set |
+| `dag_edges_legacy_only` | `pipeline_gate:` | only the legacy `parent_studies:` is set |
+| `narrative_spine_completeness` | v4 narrative-spine sections | info-level nudge per missing section |
+
+To scaffold a complete study, fill (in rough order): multi-axis status +
+`pipeline_gate`, `conditions.baseline.composite`, a `simulation_set` entry per
+planned variant, `readouts`, `behavior_tests`, and at least one
+`visualizations` entry — re-running `/pbg-report` until the warnings clear.
+
 ## Migration notes
 
 - **v2 → v3 on read:** `vivarium_dashboard.lib.spec_migration.migrate_v2_to_v3` runs automatically in `load_spec`. Skills never need to invoke it.
