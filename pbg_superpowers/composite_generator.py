@@ -28,6 +28,19 @@ class GeneratorEntry:
     # a Study is built on top of this composite the dashboard merges these
     # defaults into its visualizations list; Studies can still declare extras.
     visualizations: list[dict] = field(default_factory=list)
+    # Emitter(s) this composite ships as its default observation sink. Each
+    # entry is a lightweight ``{address, config, paths?}`` dict: ``address`` is
+    # the registered emitter link (e.g. ``"local:ParquetEmitter"``), ``config``
+    # is the base config the workspace merges into the emitter step, and the
+    # optional ``paths`` lists dotted observable store-paths to wire. Unlike a
+    # full process-node spec, the emit-schema + topology are left for the
+    # generator/runner to compute — this declaration only selects which
+    # emitter(s) to install and with what base config. Parallel to
+    # ``visualizations``: when present, a workspace that builds this composite
+    # standalone (no dashboard observable-injection) uses these as its default
+    # emitter set, so e.g. a parquet sink travels with the generator instead of
+    # being toggled by external override globals. See ``emitter_defaults``.
+    emitters: list[dict] = field(default_factory=list)
     # Callables ``(core) -> core | None`` that register the custom types /
     # processes this generator's document references but that a bare
     # ``build_core()`` doesn't know about. v2ecoli friction #16 (2026-05-19):
@@ -51,6 +64,7 @@ def composite_generator(
     description: str = "",
     parameters: dict[str, dict] | None = None,
     visualizations: list[dict] | None = None,
+    emitters: list[dict] | None = None,
     default_n_steps: int | None = None,
     core_extensions: list[Callable[[Any], Any]] | None = None,
 ) -> Callable[[Callable[..., dict]], Callable[..., dict]]:
@@ -71,6 +85,29 @@ def composite_generator(
     composite author considers canonical) without having to hand-author them
     in every Study spec.
 
+    `emitters` (optional) declares the default observation sink(s) this
+    composite ships with. Each entry is a lightweight
+    ``{"address": "local:ParquetEmitter", "config": {...}, "paths": [...]}``
+    dict — ``address`` selects the registered emitter link, ``config`` is the
+    base config merged into the emitter step, and the optional ``paths`` lists
+    dotted observable store-paths to wire. The emit-schema and topology are
+    NOT part of this declaration; the generator/runner computes them. This is
+    the standalone analogue of the dashboard's run-time observable injection:
+    when a workspace builds the composite outside the Investigations flow, it
+    reads these defaults (via :func:`emitter_defaults`) so the composite still
+    has a sink. External override mechanisms a workspace may keep (e.g.
+    v2ecoli's ``set_parquet_emitter_override``) take precedence; the declared
+    default fills in when none is set. Example::
+
+        @composite_generator(
+            name="baseline",
+            emitters=[{
+                "address": "local:ParquetEmitter",
+                "config": {"out_dir": "out/parquet"},
+            }],
+        )
+        def baseline(core=None): ...
+
     `default_n_steps` (optional) is a UI hint for the Composite Explorer's
     ``steps`` pre-fill. It is NOT a composite-builder kwarg — runtime knobs
     are framework-owned and live next to the generator entry.
@@ -90,6 +127,8 @@ def composite_generator(
         )
         def attachment(core=None): ...
     """
+    validated_emitters = _validate_emitters(emitters, name)
+
     def decorate(fn: Callable[..., dict]) -> Callable[..., dict]:
         entry = GeneratorEntry(
             id=f"{fn.__module__}.{name}",
@@ -97,6 +136,7 @@ def composite_generator(
             description=description,
             parameters=parameters or {},
             visualizations=list(visualizations or []),
+            emitters=validated_emitters,
             func=fn,
             module=fn.__module__,
             default_n_steps=default_n_steps,
@@ -106,6 +146,50 @@ def composite_generator(
         fn._composite_generator_entry = entry  # introspection sidecar
         return fn
     return decorate
+
+
+def _validate_emitters(emitters: list[dict] | None, name: str) -> list[dict]:
+    """Normalise + sanity-check the decorator's ``emitters`` declaration.
+
+    Each entry must be a dict with a non-empty string ``address``. ``config``,
+    when present, must be a dict; ``paths``, when present, must be a list of
+    strings. We validate at decoration time (not first use) so a malformed
+    declaration fails loudly on import — the same place a bad ``parameters``
+    block would. Returns a fresh list of copied dicts so later mutation of the
+    caller's literal can't leak into the registry.
+    """
+    out: list[dict] = []
+    for i, em in enumerate(emitters or []):
+        where = f"{name!r} emitters[{i}]"
+        if not isinstance(em, dict):
+            raise ValueError(f"{where}: each emitter must be a dict, got {type(em).__name__}")
+        address = em.get("address")
+        if not isinstance(address, str) or not address:
+            raise ValueError(f"{where}: 'address' must be a non-empty string")
+        config = em.get("config", {})
+        if not isinstance(config, dict):
+            raise ValueError(f"{where}: 'config' must be a dict")
+        paths = em.get("paths")
+        if paths is not None and not (
+            isinstance(paths, list) and all(isinstance(p, str) for p in paths)
+        ):
+            raise ValueError(f"{where}: 'paths' must be a list of strings")
+        out.append(dict(em))
+    return out
+
+
+def emitter_defaults(fn_or_entry: Any) -> list[dict]:
+    """Return the declared default emitter(s) for a generator.
+
+    Accepts either a decorated generator function (reads its
+    ``_composite_generator_entry`` sidecar) or a :class:`GeneratorEntry`.
+    Returns the (possibly empty) ``emitters`` list — a workspace builds the
+    composite's default sink from this when it isn't running under the
+    dashboard's observable-injection flow. Returns ``[]`` for anything that
+    isn't a registered generator, so callers can use it unconditionally.
+    """
+    entry = getattr(fn_or_entry, "_composite_generator_entry", fn_or_entry)
+    return list(getattr(entry, "emitters", []) or [])
 
 
 def apply_core_extensions(entry: GeneratorEntry, core: Any) -> Any:

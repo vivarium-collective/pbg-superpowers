@@ -8,7 +8,7 @@ import pytest
 
 from pbg_superpowers.composite_generator import (
     build_generator, composite_generator, GeneratorEntry, _REGISTRY,
-    apply_core_extensions,
+    apply_core_extensions, emitter_defaults,
 )
 
 
@@ -224,6 +224,75 @@ def test_decorator_visualizations_optional():
     assert entry.visualizations == []
 
 
+def test_decorator_accepts_emitters():
+    """``emitters`` ships the composite's default observation sink(s) — a
+    lightweight {address, config, paths} selection, parallel to
+    ``visualizations``."""
+    emitters = [
+        {
+            "address": "local:ParquetEmitter",
+            "config": {"out_dir": "out/parquet"},
+            "paths": ["stores.x"],
+        },
+    ]
+
+    @composite_generator(name="em", description="", parameters={}, emitters=emitters)
+    def builder(core=None):
+        return {"stores": {"x": 0.0}}
+
+    entry = _REGISTRY[f"{builder.__module__}.em"]
+    assert entry.emitters == emitters
+    # Defensive copy — mutating the caller's list/dict shouldn't reach the entry.
+    emitters.append({"address": "local:SQLiteEmitter"})
+    assert len(entry.emitters) == 1
+    emitters_inner = entry.emitters[0]
+    assert emitters_inner["config"]["out_dir"] == "out/parquet"
+
+
+def test_decorator_emitters_optional():
+    @composite_generator(name="em-opt", description="", parameters={})
+    def builder(core=None):
+        return {}
+
+    entry = _REGISTRY[f"{builder.__module__}.em-opt"]
+    assert entry.emitters == []
+
+
+def test_emitter_defaults_accessor_reads_function_and_entry():
+    emitters = [{"address": "local:ParquetEmitter", "config": {"out_dir": "d"}}]
+
+    @composite_generator(name="em-acc", description="", parameters={}, emitters=emitters)
+    def builder(core=None):
+        return {}
+
+    # From the decorated function (sidecar) and from the entry directly.
+    assert emitter_defaults(builder) == emitters
+    entry = _REGISTRY[f"{builder.__module__}.em-acc"]
+    assert emitter_defaults(entry) == emitters
+    # Non-generators yield [] so callers can use it unconditionally.
+    assert emitter_defaults(object()) == []
+    assert emitter_defaults(lambda: None) == []
+
+
+@pytest.mark.parametrize(
+    "bad, match",
+    [
+        ([{"config": {}}], "address"),                       # missing address
+        ([{"address": ""}], "address"),                      # empty address
+        ([{"address": 1}], "address"),                       # non-string address
+        ([{"address": "local:X", "config": []}], "config"),  # config not a dict
+        ([{"address": "local:X", "paths": "a.b"}], "paths"),  # paths not a list
+        ([{"address": "local:X", "paths": [1]}], "paths"),    # paths not strings
+        (["not-a-dict"], "must be a dict"),                  # entry not a dict
+    ],
+)
+def test_decorator_emitters_validation(bad, match):
+    with pytest.raises(ValueError, match=match):
+        @composite_generator(name="em-bad", description="", parameters={}, emitters=bad)
+        def builder(core=None):
+            return {}
+
+
 def _make_entry(parameters, body):
     @composite_generator(name="t", description="", parameters=parameters)
     def _fn(core=None, **kw):
@@ -369,6 +438,8 @@ def test_discover_all_merges_specs_and_generators(tmp_path, installed_fake_pkg):
     # visualizations is always propagated as a list (empty when the generator
     # omits it) so dashboard callers can rely on the key existing.
     assert merged[gen_id].get("visualizations") == []
+    # emitters likewise — the default observation sink(s) travel with the entry.
+    assert merged[gen_id].get("emitters") == []
 
 
 # ---------------------------------------------------------------------------
