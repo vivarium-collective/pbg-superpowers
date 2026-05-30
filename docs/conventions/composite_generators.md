@@ -77,6 +77,59 @@ Same shape as the static-spec format:
 | `default` | matching `type` | Used when the caller doesn't override |
 | `description` | string (optional) | Surfaced in dashboard form labels |
 
+### Default emitter(s)
+
+A generator can declare the observation sink(s) its composite ships with via
+`emitters`, the same way `visualizations` declares canonical plots. Each entry
+is a lightweight selection — **not** a full process-node spec:
+
+```python
+@composite_generator(
+    name="baseline",
+    emitters=[{
+        "address": "local:ParquetEmitter",       # registered emitter link
+        "config": {"out_dir": "out/parquet"},     # base config, merged in
+        "paths": ["bulk", "listeners.mass"],       # optional: observable paths
+    }],
+)
+def baseline(core=None): ...
+```
+
+| Key | Type | Description |
+|---|---|---|
+| `address` | string (required) | Registered emitter link, e.g. `local:ParquetEmitter` |
+| `config` | object (optional) | Base config merged into the emitter step |
+| `paths` | list[string] (optional) | Dotted observable store-paths to wire |
+
+The emit-schema and topology are deliberately **not** part of this
+declaration — the generator (or the workspace's emitter-resolution code)
+computes them, because they often depend on the composite's runtime shape.
+`emitters` only answers *which* sink to install and with *what* base config.
+
+This is the standalone analogue of the dashboard's run-time observable
+injection (which builds an emitter from `spec.yaml.observables`). When a
+workspace builds the composite **outside** that flow, it reads these defaults
+via `emitter_defaults(fn_or_entry)` so the composite still has a sink. Any
+external override the workspace keeps (e.g. v2ecoli's
+`set_parquet_emitter_override`) takes precedence; the declared default fills
+in when none is set. Resolution order, as wired in v2ecoli's baseline:
+
+```
+1. external parquet override  (set_parquet_emitter_override)
+2. external sqlite override   (set_emitter_override)
+3. external null override     (set_null_emitter_override)
+4. generator-declared default (entry.emitters)   <-- this convention
+5. RAMEmitter fallback
+```
+
+```python
+from pbg_superpowers.composite_generator import emitter_defaults
+
+emitter_defaults(baseline)        # [{"address": "local:ParquetEmitter", ...}]
+emitter_defaults(some_entry)      # same, from a GeneratorEntry
+emitter_defaults(object())        # [] — safe on non-generators
+```
+
 ## Discovery
 
 ```python
