@@ -25,7 +25,7 @@ has a richer (but composite-agnostic-incompatible) input contract using
 from __future__ import annotations
 import json
 
-from .visualization import Visualization, as_visualization
+from .visualization import Visualization
 
 
 _PALETTE = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
@@ -163,30 +163,47 @@ DemoMultiTimeSeriesPlot.__pb_kind__ = 'visualization'
 DemoMultiTimeSeriesPlot.__pb_aliases__ = ['DemoMultiTimeSeriesPlot']
 
 
-@as_visualization(
-    inputs={'time': 'list[float]', 'value': 'list[float]'},
-    name='DemoListLinePlot',
-    demo={'time': [0.0, 1.0, 2.0, 3.0, 4.0], 'value': [1.0, 1.5, 2.1, 2.8, 3.4]},
-)
-def update_demo_list_line_plot(state):
+class DemoListLinePlot(Visualization):
     """Stateless: render full ``time``/``value`` trajectories as one line.
 
     Intended for replay/post-hoc use where the input store already holds the
     full trajectory list. In streaming use, wire to a scalar-accumulating
     upstream Step or use :class:`DemoTimeSeriesPlot` instead.
+
+    (Migrated off the deprecated ``@as_visualization`` decorator to the
+    canonical subclass form — matches its two siblings above and removes the
+    import-time DeprecationWarning the decorator emitted.)
     """
-    time = state.get('time') or []
-    value = state.get('value') or []
-    traces = [{
-        'x': list(time),
-        'y': list(value),
-        'mode': 'lines',
-        'line': {'color': '#3b82f6', 'width': 2},
-    }]
-    layout = {
-        'margin': {'l': 48, 'r': 12, 't': 28, 'b': 36},
-        'xaxis': {'title': {'text': 'time'}},
-        'yaxis': {'title': {'text': 'value'}},
-        'height': 280,
-    }
-    return {'html': _plotly_html(traces, layout)}
+
+    def inputs(self):
+        return {'time': 'list[float]', 'value': 'list[float]'}
+
+    def update(self, state):
+        time = state.get('time') or []
+        value = state.get('value') or []
+        traces = [{
+            'x': list(time),
+            'y': list(value),
+            'mode': 'lines',
+            'line': {'color': '#3b82f6', 'width': 2},
+        }]
+        layout = {
+            'margin': {'l': 48, 'r': 12, 't': 28, 'b': 36},
+            'xaxis': {'title': {'text': 'time'}},
+            'yaxis': {'title': {'text': 'value'}},
+            'height': 280,
+        }
+        return {'html': _plotly_html(traces, layout)}
+
+    @classmethod
+    def demo(cls):
+        return {'time': [0.0, 1.0, 2.0, 3.0, 4.0],
+                'value': [1.0, 1.5, 2.1, 2.8, 3.4]}
+
+    @classmethod
+    def is_visualization(cls) -> bool:
+        return True
+
+
+DemoListLinePlot.__pb_kind__ = 'visualization'
+DemoListLinePlot.__pb_aliases__ = ['DemoListLinePlot']

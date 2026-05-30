@@ -2,7 +2,7 @@
 from pbg_superpowers._demo_visualizations import (
     DemoTimeSeriesPlot,
     DemoMultiTimeSeriesPlot,
-    update_demo_list_line_plot as DemoListLinePlot,
+    DemoListLinePlot,
 )
 from pbg_superpowers.visualization import Visualization
 
