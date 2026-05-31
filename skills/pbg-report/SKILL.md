@@ -131,6 +131,8 @@ The existing pre-publication linter from `pbg_superpowers.report_linter.lint_wor
 - **unresolved_placeholders** (error) — string fields containing `TBD`/`TODO`/`XXX`/`[fill in]`/`<insert>`.
 - **duplicate_modal_phrases** (warning) — pairs of behavior_test descriptions ≥90% character-identical.
 - **truncated_takeaways** (error) — `conclusion_logic.if_pass`/`if_fail` ending mid-sentence or <20 chars.
+- **status_claims_done_no_runs_recorded** (warning) — a study declares completion (`status: completed` / `gate_status: passed` / `evaluation_status: evaluated`) but records no run provenance at all (no `runs:`/`simulation_set:`/`planned_runs:`), so it renders as not-run/pending despite the headline.
+- **reviewer_clarity_ambiguity** (warning) — anything that would read ambiguously on the per-study run/test/verdict strip: ran-but-every-test-pending (no `runs[].outcomes` recorded), or `gate_status: passed` while a test is recorded FAILED. Single-sourced from `study_status.study_clarity_summary`.
 
 Only **error**-level findings block publication.
 
@@ -167,6 +169,32 @@ python -c "from pathlib import Path; \
 ```
 
 The skill reads `workspace.yaml` for the workspace slug, then builds `pbg_doc` from `pbg_<slug>.document.build_document()` if available; falls back to an empty dict.
+
+## Before sending to a reviewer — verify the rendered artifact
+
+A clean lint + a successful render does **not** mean the report reads correctly.
+The per-investigation report a reviewer downloads is built **client-side**
+(`walkthrough.js`), and its per-study run/test/verdict markers derive from
+`runs[].outcomes` + the 6-axis status — not from a study's hand-set
+`status: passed`. So:
+
+1. **Open the dashboard and look at the actual study cards** (`/pbg-dashboard
+   open --investigation <slug>`), or download the report. Confirm the
+   "Ran · Tests · Verdict" strip and the test pills say what you expect — a
+   test with no recorded `runs[].outcomes` shows **⏳ pending** even if its
+   `status` is `passed`.
+2. **If a correct change isn't showing**, check the install mode before
+   debugging the code: a workspace `.venv` often runs **non-editable, git-pinned**
+   `vivarium-dashboard` / `pbg-superpowers`. Make the source live and restart:
+   ```bash
+   uv pip install -e <path-to-vivarium-dashboard> --no-deps
+   uv pip install -e <path-to-pbg-superpowers> --no-deps
+   python -m pbg_superpowers.dashboard restart
+   ```
+
+The full reviewer-feedback workflow (parse → map → classify → verify-rendered →
+ship) is documented in
+[handling investigation feedback](../../docs/conventions/handling-investigation-feedback.md).
 
 ## Override file format
 
