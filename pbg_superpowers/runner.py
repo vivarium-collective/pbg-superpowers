@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from pbg_superpowers.paths import find_workspace_root
+from pbg_superpowers.workspace_paths import WorkspacePaths
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +175,7 @@ def pbg_runner(
     workspace_root = Path(workspace_root).resolve()
 
     if db_file is None:
-        db_file = workspace_root / "studies" / study / "runs.db"
+        db_file = WorkspacePaths.load(workspace_root).studies / study / "runs.db"
     db_path = Path(db_file).resolve()
     db_path.parent.mkdir(parents=True, exist_ok=True)
 

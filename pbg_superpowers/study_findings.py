@@ -35,6 +35,7 @@ import yaml
 
 from pbg_superpowers.bibtex import bib_keys
 from pbg_superpowers.study_io import load_yaml, save_yaml_atomic
+from pbg_superpowers.workspace_paths import WorkspacePaths
 
 from .expert_search import search_expert_docs
 
@@ -123,7 +124,7 @@ from pbg_superpowers.paths import find_workspace_root  # noqa: E402,F401
 
 
 def study_dir_from_slug(ws_root: Path, slug: str) -> Path:
-    sd = ws_root / "studies" / slug
+    sd = WorkspacePaths.load(ws_root).studies / slug
     if not (sd / "study.yaml").is_file():
         raise FileNotFoundError(f"studies/{slug}/study.yaml not found under {ws_root}")
     return sd

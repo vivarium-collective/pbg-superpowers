@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import Any
 
 from pbg_superpowers.paths import find_workspace_root
+from pbg_superpowers.workspace_paths import WorkspacePaths
 from pbg_superpowers.study_io import (
     atomic_write as _atomic_write,
     dump_yaml as _dump_yaml,
@@ -65,7 +66,7 @@ def _walk_to_workspace(start: Path) -> Path:
 
 
 def _investigation_yaml(ws_root: Path, slug: str) -> Path:
-    p = ws_root / "investigations" / slug / "investigation.yaml"
+    p = WorkspacePaths.load(ws_root).investigations / slug / "investigation.yaml"
     if not p.is_file():
         raise FileNotFoundError(
             f"Investigation '{slug}' not found at {p}. Run "
@@ -216,7 +217,7 @@ def derive_contributors(
     # Augment with .pbg/agent-sessions/ entries when present. Each
     # session file is JSON with shape {agent_name, session_id, ...}; the
     # mechanic groups sessions by agent_name.
-    sessions_dir = ws_root / ".pbg" / "agent-sessions"
+    sessions_dir = WorkspacePaths.load(ws_root).pbg / "agent-sessions"
     if sessions_dir.is_dir():
         sessions_by_agent: OrderedDict[str, list[str]] = OrderedDict()
         for sf in sorted(sessions_dir.glob("*.json")):
@@ -349,7 +350,7 @@ def close_investigation(
     ))
 
     # 3. Render report.
-    workspace_report = ws_root / "reports" / "index.html"
+    workspace_report = WorkspacePaths.load(ws_root).reports / "index.html"
     if skip_report:
         result.actions.append(CloseAction(
             kind="skip",

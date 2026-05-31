@@ -52,6 +52,7 @@ from typing import Iterable, Iterator
 import yaml
 
 from pbg_superpowers.bibtex import bib_keys
+from pbg_superpowers.workspace_paths import WorkspacePaths
 
 
 # ---------------------------------------------------------------------------
@@ -139,12 +140,12 @@ def _override_key(*, check: str, slug: str, field_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-_OVERRIDE_FILE_REL = Path(".pbg") / "report-lint-overrides.json"
+_OVERRIDE_FILE_NAME = "report-lint-overrides.json"
 
 
 def override_path(ws_root: Path) -> Path:
     """Where the override JSON lives, relative to the workspace root."""
-    return ws_root / _OVERRIDE_FILE_REL
+    return WorkspacePaths.load(ws_root).pbg / _OVERRIDE_FILE_NAME
 
 
 def load_overrides(ws_root: Path) -> set[str]:
@@ -253,7 +254,8 @@ def _iter_study_specs(ws_root: Path) -> Iterator[tuple[str, dict]]:
     Silently skips unparseable YAML (the report renderer reports those
     separately; the linter focuses on content checks).
     """
-    studies_dir = ws_root / "studies"
+    wp = WorkspacePaths.load(ws_root)
+    studies_dir = wp.studies
     if studies_dir.is_dir():
         for child in sorted(studies_dir.iterdir()):
             if not child.is_dir():
@@ -267,7 +269,7 @@ def _iter_study_specs(ws_root: Path) -> Iterator[tuple[str, dict]]:
                 continue
             slug = data.get("name") or child.name
             yield slug, data
-    invs_dir = ws_root / "investigations"
+    invs_dir = wp.investigations
     if invs_dir.is_dir():
         for child in sorted(invs_dir.iterdir()):
             if not child.is_dir():
@@ -1060,7 +1062,7 @@ def _check_status_legacy_only(ctx: _LintContext) -> None:
 
 
 def _runs_db_path(ws_root: Path, slug: str) -> Path:
-    return ws_root / "studies" / slug / "runs.db"
+    return WorkspacePaths.load(ws_root).studies / slug / "runs.db"
 
 
 def _runs_db_run_ids(ws_root: Path, slug: str) -> set[str]:

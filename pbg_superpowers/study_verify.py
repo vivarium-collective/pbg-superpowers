@@ -61,6 +61,7 @@ from typing import Iterable
 from pbg_superpowers.bibtex import bib_keys
 from pbg_superpowers.paths import find_workspace_root
 from pbg_superpowers.study_io import load_yaml as _load_yaml
+from pbg_superpowers.workspace_paths import WorkspacePaths
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +283,7 @@ def _check_parent_studies(study: dict, ws_root: Path | None) -> Iterable[VerifyF
         slug = p if isinstance(p, str) else (p.get("study") if isinstance(p, dict) else None)
         if not isinstance(slug, str) or not slug:
             continue
-        target = ws_root / "studies" / slug / "study.yaml"
+        target = WorkspacePaths.load(ws_root).studies / slug / "study.yaml"
         if not target.is_file():
             yield VerifyFinding(
                 level="error",
