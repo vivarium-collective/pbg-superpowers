@@ -31,8 +31,8 @@
 ./references/papers/.keep
 ./reports/assets/.keep
 ./reports/index.html
-./scripts/_catalog/modules.json
-./scripts/_catalog/sync-catalog.py
+./scripts/_catalog/README.md
+./scripts/_catalog/overlay.json
 ./scripts/_migrate_v1_to_v2.py
 ./scripts/add-dataset.sh
 ./scripts/add-reference.sh
