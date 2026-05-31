@@ -52,6 +52,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from pbg_superpowers.workspace_paths import WorkspacePaths
+
 
 _GEN_ID_RE = re.compile(r"^gen-\d{8}T\d{6}Z-[0-9a-f]{6}$")
 
@@ -89,7 +91,7 @@ class Generation:
 # ---------------------------------------------------------------------------
 
 def generations_dir(ws_root: Path | str) -> Path:
-    return Path(ws_root) / ".pbg" / "generations"
+    return WorkspacePaths.load(ws_root).pbg / "generations"
 
 
 def _manifest_path(ws_root: Path | str, generation_id: str) -> Path:

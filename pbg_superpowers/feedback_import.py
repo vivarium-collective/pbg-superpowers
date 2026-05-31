@@ -24,6 +24,8 @@ from pathlib import Path
 import click
 import yaml
 
+from pbg_superpowers.workspace_paths import WorkspacePaths
+
 
 def _read_feedback_yaml(path: Path) -> dict:
     if not path.is_file():
@@ -85,7 +87,7 @@ def load_investigation_feedback(workspace: Path | str, investigation: str) -> di
     dashboard uses to render imported feedback per study (Thread B.1), closing
     the loop so the next generation visibly answers it.
     """
-    inv_dir = Path(workspace) / "investigations" / investigation
+    inv_dir = WorkspacePaths.load(workspace).investigations / investigation
     by_section: dict[str, list[dict]] = {}
     for path in _feedback_files(inv_dir):
         try:
@@ -193,7 +195,7 @@ def write_feedback_payload(workspace: Path | str, payload: dict,
     workspace = Path(workspace)
     payload = _validate_payload(payload)
     inv = payload["meta"]["investigation"]
-    inv_dir = workspace / "investigations" / inv
+    inv_dir = WorkspacePaths.load(workspace).investigations / inv
     if not inv_dir.is_dir():
         raise FeedbackImportError(
             f"investigations/{inv}/ does not exist under {workspace}.")

@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from pbg_superpowers.paths import find_workspace_root
+from pbg_superpowers.workspace_paths import WorkspacePaths
 from pbg_superpowers.study_io import (
     atomic_write as _atomic_write,
     dump_yaml as _dump,
@@ -49,7 +50,7 @@ def _walk_to_workspace(start: Path) -> Path:
 
 
 def _study_yaml(ws_root: Path, slug: str) -> Path:
-    p = ws_root / "studies" / slug / "study.yaml"
+    p = WorkspacePaths.load(ws_root).studies / slug / "study.yaml"
     if not p.is_file():
         raise FileNotFoundError(
             f"Study '{slug}' not found at {p}. Run '/pbg-study new <name> "

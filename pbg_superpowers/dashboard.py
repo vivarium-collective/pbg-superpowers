@@ -26,13 +26,15 @@ import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 
+from pbg_superpowers.workspace_paths import WorkspacePaths
+
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
 def _state_dir(workspace: Path) -> Path:
-    d = workspace / ".pbg" / "dashboard"
+    d = WorkspacePaths.load(workspace).pbg / "dashboard"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -79,7 +81,7 @@ def _pick_free_port(preferred: int = 8765) -> int:
 # can't bookmark a stable URL. Persist the first-picked port per workspace
 # so `restart` reuses it instead of re-rolling.
 def _preferred_port_file(workspace: Path) -> Path:
-    return workspace / ".pbg" / "dashboard" / "preferred-port"
+    return WorkspacePaths.load(workspace).pbg / "dashboard" / "preferred-port"
 
 
 def _read_preferred_port(workspace: Path) -> int | None:
@@ -447,7 +449,7 @@ _REPORTS_PLACEHOLDER_MARKERS = (
 
 
 def _reports_index(workspace: Path) -> Path:
-    return workspace / "reports" / "index.html"
+    return WorkspacePaths.load(workspace).reports / "index.html"
 
 
 def _is_placeholder_or_missing(reports_path: Path) -> bool:
@@ -899,7 +901,7 @@ def _switch_investigation_in_browser(slug: str) -> bool:
 
 def _list_workspace_investigations(workspace: Path) -> list[str]:
     """Slugs of every investigation present in ``<workspace>/investigations/``."""
-    root = workspace / "investigations"
+    root = WorkspacePaths.load(workspace).investigations
     if not root.is_dir():
         return []
     return sorted(
