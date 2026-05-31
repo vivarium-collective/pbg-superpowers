@@ -302,6 +302,12 @@ CHECKS = (
     "finding_references_unknown_expert_doc",
     # Derive-on-read status drift (v2ecoli round-2 #2)
     "status_out_of_date_vs_runs",
+    # Forward-drift: declares done/passed but records no runs (dnaa-replication
+    # 2026-05-31 — reviewer couldn't tell if studies had actually run)
+    "status_claims_done_no_runs_recorded",
+    # Reviewer-facing clarity strip ambiguities (single-sourced from
+    # study_status.study_clarity_summary): ran-but-tests-pending, gate↔test drift
+    "reviewer_clarity_ambiguity",
     # S3: v4 narrative-spine nudge — info-level reminder of missing dnaa-style sections
     "narrative_spine_completeness",
     # Expert-handoff readiness — every study card in a generated report
@@ -1127,6 +1133,99 @@ def _check_status_out_of_date_vs_runs(ctx: _LintContext) -> None:
         )
 
 
+def _check_status_claims_done_but_no_runs_recorded(ctx: _LintContext) -> None:
+    """Forward-drift: a study DECLARES completion/pass but records no runs.
+
+    ``status_disagreements`` deliberately ignores this direction — a stored
+    ``ran`` with an empty *local* runs.db is ambiguous, because the db may live
+    in a different checkout. But when the study's OWN spec carries no ``runs:``
+    block AND runs.db is empty, there is nothing in-repo backing the claim, so
+    the derive-on-read ``simulation_status`` resolves to ``not_run`` and the
+    report renders the study as "pending / not run" even though its headline
+    says passed.
+
+    This is the gap a reviewer hit on v2ecoli dnaa-replication (Rashmi,
+    2026-05-31): "I think the first study is passed. But I am not sure whether
+    it ran the simulations or not. Tests still show pending." The two
+    foundational studies declared ``status: completed`` / ``gate_status:
+    passed`` but had no ``runs:`` block, so the report showed them as not-run.
+    Warning-level (non-blocking): the fix is to record a ``runs:`` block with
+    parquet provenance, or to correct the status to match what actually ran.
+    """
+    spec = ctx.spec
+    legacy = str(spec.get("status") or "").strip().lower()
+    claims_done = (
+        legacy in {"completed", "complete", "done", "passed"}
+        or spec.get("gate_status") == "passed"
+        or spec.get("evaluation_status") == "evaluated"
+        or spec.get("simulation_status") == "ran"
+    )
+    if not claims_done:
+        return
+    # "Run provenance" = the author recorded SOMETHING about execution: a
+    # `runs:` block (what derive_simulation_status actually reads), or at least
+    # a `simulation_set:` / `planned_runs:` block. Only flag when ALL of these
+    # are absent and runs.db is empty — i.e. the study claims done but records
+    # nothing whatsoever about what ran (the dnaa-0/1 pre-migration state).
+    has_evidence = any(
+        isinstance(spec.get(k), list) and len(spec.get(k)) > 0
+        for k in ("runs", "simulation_set", "planned_runs")
+    )
+    if has_evidence:
+        return
+    try:
+        if _runs_db_rows(ctx.ws_root, ctx.slug):
+            return  # runs.db has rows → backed by local execution state
+    except Exception:
+        pass
+    claimed_by = (
+        "gate_status: passed" if spec.get("gate_status") == "passed"
+        else "evaluation_status: evaluated"
+        if spec.get("evaluation_status") == "evaluated"
+        else "simulation_status: ran" if spec.get("simulation_status") == "ran"
+        else f"status: {spec.get('status')!r}"
+    )
+    ctx.add(
+        level="warning",
+        field_path="runs",
+        message=(
+            f"study declares completion ({claimed_by}) but records no runs "
+            "anywhere — no `runs:`, `simulation_set:`, or `planned_runs:` block "
+            "and runs.db has no rows. With no `runs:` block, simulation_status "
+            "derives to not_run and the report shows this study as "
+            "not-run/pending despite the passing headline. Add a `runs:` block "
+            "with parquet provenance (see another study's `runs:` for the "
+            "shape) or correct the status to match what actually ran."
+        ),
+        check="status_claims_done_no_runs_recorded",
+    )
+
+
+def _check_reviewer_clarity_ambiguities(ctx: _LintContext) -> None:
+    """Surface anything that would render ambiguously on the reviewer-facing
+    run/test/verdict strip — single-sourced from
+    ``study_status.study_clarity_summary`` so the linter flags exactly what the
+    report would show unclearly. Covers the "ran but every test renders pending"
+    and "gate passed but a test FAILED" cases (the dnaa-replication 2026-05-31
+    feedback). The "declares done but no runs" case is left to
+    ``status_claims_done_no_runs_recorded`` to avoid double-flagging.
+    """
+    try:
+        from pbg_superpowers import study_status as _ss
+    except ImportError:
+        return
+    summary = _ss.study_clarity_summary(ctx.spec, ctx.spec.get("runs"))
+    for note in summary.get("ambiguities", []):
+        if "no runs are recorded" in note or "renders as" in note:
+            continue  # handled by status_claims_done_no_runs_recorded
+        ctx.add(
+            level="warning",
+            field_path="runs[].outcomes" if "pending" in note else "gate_status",
+            message=f"reviewer-facing clarity: {note}",
+            check="reviewer_clarity_ambiguity",
+        )
+
+
 def _check_runs_yaml_vs_db_drift(ctx: _LintContext) -> None:
     """Per F2, runs.db is the canonical record of which runs exist. The
     `study.yaml.runs[]` field stays in the schema as a soft-deprecated
@@ -1698,6 +1797,8 @@ _CHECK_FUNCTIONS = (
     _check_status_legacy_only,
     _check_runs_yaml_vs_db_drift,
     _check_status_out_of_date_vs_runs,
+    _check_status_claims_done_but_no_runs_recorded,
+    _check_reviewer_clarity_ambiguities,
     _check_narrative_spine_completeness,
     # Expert-handoff readiness (warning-level — see CHECKS comment block)
     _check_missing_baseline,

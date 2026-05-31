@@ -68,6 +68,16 @@ The phases are sequential at a coarse level but **iterative in practice**: Evalu
 
 Investigations aggregate over their constituent studies: an Investigation card surfaces the slowest-phase member (e.g., one study still in Design blocks the Investigation from leaving Design overall).
 
+### Reviewer-facing status clarity
+
+A recurring reviewer complaint is "I can't tell which studies ran, whether the tests ran, or whether the study passed." The fix is **derive-on-read + single-sourced**, not hand-set fields:
+
+- **`pbg_superpowers.study_status.study_clarity_summary(spec, runs)`** is the single source of truth. It returns one normalized object — `{ran, tests, verdict, ambiguities}` — that every renderer reads, so the run/test/verdict markers are computed **once** and shown consistently.
+- **The test markers mirror the renderer exactly.** A study's per-test pill is derived from the **latest run's `outcomes[test_name].result`** (PASS/FAIL/SKIP), **not** from the test's own `status:` field. A test with `status: passed` but no recorded run-outcome renders **⏳ pending**. So to make a passing test *show* as passing, record `runs[].outcomes: {<test_name>: {result: PASS}}` on the latest run — see [handling investigation feedback](../conventions/handling-investigation-feedback.md).
+- **`simulation_status` / `evaluation_status` are derived from `runs`**, never trusted from the stored field; a study that declares `status: completed` but records no `runs:` derives `not_run` and renders as "pending" despite the headline.
+- **The downloadable report** (`walkthrough.js` `_buildInvestigationReportHtml`) renders a per-study **"Ran · Tests · Verdict" strip** from `study_clarity_summary` (server-injected as `spec.clarity_summary`, with an equivalent client-side fallback).
+- **The report-linter guards this**: `status_claims_done_no_runs_recorded` (declares done but no run provenance) and `reviewer_clarity_ambiguity` (ran-but-every-test-pending, gate↔test divergence) both run in `pbg-report` Pass B, single-sourced from the same summary.
+
 ### 8-section canonical Study structure
 
 A v3 `study.yaml` is organized into 8 user-facing sections plus two cross-cutting fields. Each section maps to a top-level YAML field. The shape below mirrors `studies/dnaa-01-expression-dynamics/study.yaml` in a v2ecoli workspace — read that file for live, expanded values.
