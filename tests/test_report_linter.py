@@ -433,6 +433,20 @@ def test_status_legacy_only_silent_on_findings_internal_status(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def test_reviewer_clarity_flags_ran_but_tests_pending(tmp_path):
+    """A study that ran + declares gate passed but whose run has no outcomes
+    (so every test pill renders 'pending') is flagged by the clarity check."""
+    ws = _copy_fixture("reviewer-clarity", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    flagged = by_check.get("reviewer_clarity_ambiguity", [])
+    assert len(flagged) == 1
+    f = flagged[0]
+    assert f.level == "warning"
+    assert f.study_slug == "study-ran-no-outcomes"
+    assert "pending" in f.message
+
+
 def test_status_claims_done_no_runs_fires_when_no_run_provenance(tmp_path):
     """A study declaring completion (gate passed / ran / evaluated) with no
     runs:, simulation_set:, or planned_runs: block fires a warning; a sibling

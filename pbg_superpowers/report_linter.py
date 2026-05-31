@@ -305,6 +305,9 @@ CHECKS = (
     # Forward-drift: declares done/passed but records no runs (dnaa-replication
     # 2026-05-31 — reviewer couldn't tell if studies had actually run)
     "status_claims_done_no_runs_recorded",
+    # Reviewer-facing clarity strip ambiguities (single-sourced from
+    # study_status.study_clarity_summary): ran-but-tests-pending, gate↔test drift
+    "reviewer_clarity_ambiguity",
     # S3: v4 narrative-spine nudge — info-level reminder of missing dnaa-style sections
     "narrative_spine_completeness",
     # Expert-handoff readiness — every study card in a generated report
@@ -1198,6 +1201,31 @@ def _check_status_claims_done_but_no_runs_recorded(ctx: _LintContext) -> None:
     )
 
 
+def _check_reviewer_clarity_ambiguities(ctx: _LintContext) -> None:
+    """Surface anything that would render ambiguously on the reviewer-facing
+    run/test/verdict strip — single-sourced from
+    ``study_status.study_clarity_summary`` so the linter flags exactly what the
+    report would show unclearly. Covers the "ran but every test renders pending"
+    and "gate passed but a test FAILED" cases (the dnaa-replication 2026-05-31
+    feedback). The "declares done but no runs" case is left to
+    ``status_claims_done_no_runs_recorded`` to avoid double-flagging.
+    """
+    try:
+        from pbg_superpowers import study_status as _ss
+    except ImportError:
+        return
+    summary = _ss.study_clarity_summary(ctx.spec, ctx.spec.get("runs"))
+    for note in summary.get("ambiguities", []):
+        if "no runs are recorded" in note or "renders as" in note:
+            continue  # handled by status_claims_done_no_runs_recorded
+        ctx.add(
+            level="warning",
+            field_path="runs[].outcomes" if "pending" in note else "gate_status",
+            message=f"reviewer-facing clarity: {note}",
+            check="reviewer_clarity_ambiguity",
+        )
+
+
 def _check_runs_yaml_vs_db_drift(ctx: _LintContext) -> None:
     """Per F2, runs.db is the canonical record of which runs exist. The
     `study.yaml.runs[]` field stays in the schema as a soft-deprecated
@@ -1770,6 +1798,7 @@ _CHECK_FUNCTIONS = (
     _check_runs_yaml_vs_db_drift,
     _check_status_out_of_date_vs_runs,
     _check_status_claims_done_but_no_runs_recorded,
+    _check_reviewer_clarity_ambiguities,
     _check_narrative_spine_completeness,
     # Expert-handoff readiness (warning-level — see CHECKS comment block)
     _check_missing_baseline,

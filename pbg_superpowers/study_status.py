@@ -110,6 +110,154 @@ def derive_status(spec: dict, runs: list[dict] | None,
     }
 
 
+# ---------------------------------------------------------------------------
+# Clarity summary — a single normalized "did it run / were the tests run / did
+# it pass" object that every renderer (pbg-report slim renderer, the dashboard
+# downloadable report) reads, so the run/test/verdict markers are derived ONCE
+# and shown consistently everywhere. Driven by reviewer feedback on
+# dnaa-replication (2026-05-31): "make it clear which studies have run, if the
+# tests were run and if the study passed."
+# ---------------------------------------------------------------------------
+
+_TEST_PASS = {"pass", "passed", "ok"}
+_TEST_FAIL = {"fail", "failed", "error"}
+_TEST_SKIP = {"skip", "skipped", "inconclusive", "partial"}
+# A test with no recorded run-outcome renders as "pending" (the report keys the
+# pill off the latest run's outcomes, NOT the test's own status field).
+
+
+def _study_tests(spec: dict) -> list[dict]:
+    """The test list a report shows, in renderer-precedence order."""
+    for key in ("tests", "behavior_tests", "expected_behavior"):
+        v = spec.get(key)
+        if isinstance(v, list) and v:
+            return [t for t in v if isinstance(t, dict)]
+    return []
+
+
+def _latest_run(runs: list[dict] | None) -> dict | None:
+    """The run a report reads outcomes from: the last entry in ``runs``."""
+    runs = runs or []
+    return runs[-1] if runs else None
+
+
+def count_test_outcomes(spec: dict, runs: list[dict] | None) -> dict:
+    """Count tests by the result a report WOULD render for each.
+
+    Mirrors the renderer exactly: the pill comes from the latest run's
+    ``outcomes[test_name].result`` (PASS/FAIL/SKIP); a test with no matching
+    outcome renders ``pending`` regardless of its own ``status`` field. Returns
+    ``{total, pass, fail, skip, pending}``.
+    """
+    tests = _study_tests(spec)
+    latest = _latest_run(runs if runs is not None else spec.get("runs"))
+    outcomes = (latest or {}).get("outcomes") or {}
+    counts = {"total": len(tests), "pass": 0, "fail": 0, "skip": 0, "pending": 0}
+    for t in tests:
+        out = outcomes.get(t.get("name"))
+        res = out.get("result") if isinstance(out, dict) else out
+        r = str(res or "").strip().lower()
+        if r in _TEST_PASS:
+            counts["pass"] += 1
+        elif r in _TEST_FAIL:
+            counts["fail"] += 1
+        elif r in _TEST_SKIP:
+            counts["skip"] += 1
+        else:
+            counts["pending"] += 1
+    return counts
+
+
+def study_clarity_summary(spec: dict, runs: list[dict] | None = None) -> dict:
+    """One normalized run/test/verdict object for the reviewer-facing strip.
+
+    Returns::
+
+        {
+          "ran":     {"status": "ran"|"running"|"not_run", "n_runs": int,
+                      "latest": str|None, "label": str},
+          "tests":   {"total","pass","fail","skip","pending": int, "label": str},
+          "verdict": {"value": str, "label": str, "glyph": str, "cls": str},
+          "ambiguities": [str, ...],
+        }
+
+    ``ran`` is derived from ``runs`` (observable). ``tests`` mirrors the pill the
+    report would render. ``verdict`` prefers the authored ``gate_status`` (the
+    pipeline verdict) and otherwise derives from the test results. Anything that
+    would read ambiguously to a reviewer is listed in ``ambiguities`` (the
+    report-linter surfaces these; the strip can show a ⚠ marker).
+    """
+    runs = runs if runs is not None else (spec.get("runs") or [])
+    n_complete = sum(
+        1 for r in runs
+        if str((r or {}).get("status") or "").strip().lower() in _RUN_COMPLETE
+    )
+    sim = derive_simulation_status(runs)
+    latest = _latest_run(runs)
+    ran_label = (
+        f"Ran · {n_complete} run{'s' if n_complete != 1 else ''}" if sim == "ran"
+        else "Running…" if sim == "running" else "Not run"
+    )
+    ran = {"status": sim, "n_runs": n_complete,
+           "latest": (latest or {}).get("name"), "label": ran_label}
+
+    tc = count_test_outcomes(spec, runs)
+    parts = []
+    if tc["pass"]:    parts.append(f"{tc['pass']}✓")
+    if tc["fail"]:    parts.append(f"{tc['fail']}✗")
+    if tc["skip"]:    parts.append(f"{tc['skip']}⏭")
+    if tc["pending"]: parts.append(f"{tc['pending']}⏳")
+    tests = dict(tc, label=("Tests: " + " · ".join(parts)) if tc["total"]
+                 else "No tests declared")
+
+    # Verdict — prefer the authored pipeline gate, then test-derived.
+    gate = str(spec.get("gate_status") or "").strip().lower()
+    _VMAP = {
+        "passed":          ("passed", "Passed", "✅", "v-pass"),
+        "failed":          ("failed", "Failing", "❌", "v-fail"),
+        "failed_evaluation": ("failed", "Failing", "❌", "v-fail"),
+        "blocked":         ("blocked", "Blocked", "⛔", "v-block"),
+        "needs_calibration": ("calibrating", "Needs calibration", "🔄", "v-cal"),
+        "in_progress":     ("in_progress", "In progress", "🔶", "v-warn"),
+    }
+    if gate in _VMAP:
+        v, label, glyph, cls = _VMAP[gate]
+    elif sim != "ran":
+        v, label, glyph, cls = ("not_started", "Not run", "○", "v-none")
+    elif tc["fail"]:
+        v, label, glyph, cls = ("failing", "Failing", "❌", "v-fail")
+    elif tc["pending"] and tc["total"]:
+        v, label, glyph, cls = ("in_progress", "Tests pending", "⏳", "v-warn")
+    elif tc["pass"]:
+        v, label, glyph, cls = ("passed", "Passed", "✅", "v-pass")
+    else:
+        v, label, glyph, cls = ("in_progress", "In progress", "🔶", "v-warn")
+    verdict = {"value": v, "label": label, "glyph": glyph, "cls": cls}
+
+    # Ambiguities a reviewer would trip on.
+    ambiguities: list[str] = []
+    if sim == "ran" and tests["total"] and tc["pending"] == tests["total"]:
+        ambiguities.append(
+            "ran, but every test renders 'pending' — no run outcomes recorded "
+            "(add runs[].outcomes so the tests show pass/fail)")
+    elif sim == "ran" and tc["pending"]:
+        ambiguities.append(
+            f"{tc['pending']} of {tests['total']} tests render 'pending' "
+            "(no run outcome recorded for them)")
+    if gate == "passed" and tc["fail"]:
+        ambiguities.append(
+            "gate_status: passed but a test is recorded FAILED — verdict and "
+            "test outcomes disagree")
+    if str(spec.get("status") or "").lower() in {"completed", "passed", "done"} \
+            and sim == "not_run":
+        ambiguities.append(
+            "headline status says done but no runs are recorded → renders as "
+            "not-run")
+
+    return {"ran": ran, "tests": tests, "verdict": verdict,
+            "ambiguities": ambiguities}
+
+
 # Axis value ordering, least→most advanced. Disagreements are only flagged
 # when the DERIVED value outranks the stored one — i.e. execution has moved
 # past what the stored status claims (the round-2 #2 case: a "planning" /
