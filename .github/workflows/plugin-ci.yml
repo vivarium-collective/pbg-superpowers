@@ -25,10 +25,21 @@ jobs:
           # present, but in CI we want to actually run them. Clone the template
           # to the expected path before pytest collects.
           PBG_TEMPLATE_REPO: https://github.com/vivarium-collective/pbg-template.git
+          # PINNED, not `main`. The golden-manifest + schema-sync tests compare
+          # against pbg-template's on-disk tree, so an unpinned `main` makes any
+          # merge there break this repo's CI. This SHA is the pbg-template ref
+          # pbg-superpowers is currently synced to (#28 catalog-overlay; pre-#29
+          # `layout` block, pre-#30 nested-by-default). To adopt a newer
+          # pbg-template: bump this SHA, then `cp` the schema + regenerate the
+          # snapshot (scripts/update-scaffold-snapshot.py) in the same PR.
+          PBG_TEMPLATE_REF: 856f41519ab00bda348a8db6c9a7f22bb906377d
         run: |
           mkdir -p ~/code
           if [ ! -d ~/code/pbg-template ]; then
-            git clone --depth 1 "$PBG_TEMPLATE_REPO" ~/code/pbg-template || true
+            git init -q ~/code/pbg-template
+            git -C ~/code/pbg-template remote add origin "$PBG_TEMPLATE_REPO"
+            git -C ~/code/pbg-template fetch -q --depth 1 origin "$PBG_TEMPLATE_REF"
+            git -C ~/code/pbg-template checkout -q FETCH_HEAD
           fi
           source .venv/bin/activate
           pytest -v
