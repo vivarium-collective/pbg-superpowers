@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from pbg_superpowers.workspace_paths import WorkspacePaths
+
 
 PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser().resolve()
 
@@ -36,10 +38,10 @@ def test_scaffold_creates_expected_files(tmp_path, plugin_root):
         ".gitignore",
         ".claude/settings.json",
         "docs/decisions.yaml",
-        "references/papers.bib",
-        "references/claims.yaml",
-        "experiments/_runs.yaml",
-        "reports/index.html",
+        "workspace/references/papers.bib",
+        "workspace/references/claims.yaml",
+        "workspace/experiments/_runs.yaml",
+        "workspace/reports/index.html",
         "scripts/lint-workspace.py",
         ".pbg/schemas/workspace.schema.json",
     ]
@@ -168,11 +170,14 @@ def test_inplace_promotes_existing_composite_repo(tmp_path, plugin_root):
 
     # Workspace marker landed.
     assert (repo / "workspace.yaml").is_file()
-    # Template-shipped trees landed.
-    for sub in ("notes", "references", "scripts", ".pbg"):
-        assert (repo / sub).is_dir(), f"missing template dir: {sub}"
+    # Template-shipped trees landed. Research dirs (notes/, references/) are
+    # resolved through the layout (nested under workspace/ in the current
+    # scaffold); scripts/ and .pbg/ stay at the workspace root.
+    wp = WorkspacePaths.load(repo)
+    for d in (wp.notes, wp.references, wp.scripts, wp.pbg):
+        assert d.is_dir(), f"missing template dir: {d}"
     # The notes convention from F6 ships through too.
-    assert (repo / "notes" / "README.md").is_file()
+    assert (wp.notes / "README.md").is_file()
     # Existing files preserved (NOT clobbered).
     assert "Existing repo" in (repo / "README.md").read_text()
     # .j2 files should all be rendered away.

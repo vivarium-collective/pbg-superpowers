@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from pbg_superpowers.workspace_paths import WorkspacePaths
+
 
 PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser().resolve()
 
@@ -33,12 +35,22 @@ def test_server_serves_workspace_report(tmp_path, plugin_root):
          "--template-source", str(PBG_TEMPLATE)],
         check=True, cwd=plugin_root,
     )
-    # Render the static dashboard once so the server has something to serve
+    # Render the static dashboard once so the server has something to serve.
+    # Under the nested scaffold the report lands at workspace/reports/ (resolved
+    # via WorkspacePaths); the report-mirror server serves the workspace-root
+    # `reports/` tree, so mirror the rendered output there.
     subprocess.run(
         [sys.executable, "-c",
-         f"from pathlib import Path; "
-         f"from pbg_superpowers.report import render_workspace_report; "
-         f"render_workspace_report(Path(r'{ws}'), today='2026-05-09')"],
+         "import shutil; "
+         "from pathlib import Path; "
+         "from pbg_superpowers.report import render_workspace_report; "
+         "from pbg_superpowers.workspace_paths import WorkspacePaths; "
+         f"ws = Path(r'{ws}'); "
+         "render_workspace_report(ws, today='2026-05-09'); "
+         "reports = WorkspacePaths.load(ws).reports; "
+         "flat = ws / 'reports'; "
+         "shutil.copytree(reports, flat, dirs_exist_ok=True) "
+         "if reports.resolve() != flat.resolve() else None"],
         check=True, cwd=plugin_root,
     )
 
