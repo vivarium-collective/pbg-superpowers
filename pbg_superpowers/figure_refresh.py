@@ -13,6 +13,8 @@ Placeholders substituted before each command runs (cwd = workspace root):
   {study}  — the study slug
   {figdir} — ``reports/figures/<slug>``
   {ws}     — the workspace root
+  {py}     — the invoking interpreter (``sys.executable``) — use ``{py} scripts/foo.py``
+             instead of bare ``python`` so the render gets the venv's deps
 
 This keeps figure RENDERING workspace-specific (the commands are the study's own
 bespoke renderers — many read parquet directly and have no ``inputs_map`` for
@@ -95,6 +97,12 @@ def refresh_study_figures(ws_root: Path, slug: str,
         "study": slug,
         "figdir": str(ws_root / "reports" / "figures" / slug),
         "ws": str(ws_root),
+        # The interpreter that invoked us — almost always the workspace venv's
+        # python (the driver / `python -m pbg_superpowers.figure_refresh` runs
+        # under it). Studies should write "{py} scripts/foo.py", NOT bare
+        # "python ...", so the render gets the venv's deps instead of whatever
+        # `python` PATH happens to resolve to (a recurring v2ecoli footgun).
+        "py": sys.executable,
     }
     ran: list[str] = []
     failed: list[str] = []

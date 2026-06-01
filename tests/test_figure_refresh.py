@@ -24,11 +24,13 @@ def _ws(tmp_path, cmds, with_run=True):
 
 
 def test_dry_run_substitutes_placeholders(tmp_path):
-    ws = _ws(tmp_path, ["echo {run} {study} {figdir} {ws}"])
+    import sys
+    ws = _ws(tmp_path, ["{py} {run} {study} {figdir} {ws}"])
     res = refresh_study_figures(ws, "s", dry_run=True)
     assert res["skipped"] is None
     assert len(res["ran"]) == 1 and res["failed"] == []
     c = res["ran"][0]
+    assert c.startswith(sys.executable)  # {py} -> invoking interpreter
     assert "parquet-runs/r1" in c
     assert " s " in c
     assert "reports/figures/s" in c
