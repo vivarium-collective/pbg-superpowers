@@ -42,8 +42,10 @@ in the override file remains an error and blocks publication.
 from __future__ import annotations
 
 import datetime as _dt
+import glob as _glob
 import hashlib
 import json
+import os as _os
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -308,6 +310,9 @@ CHECKS = (
     # Reviewer-facing clarity strip ambiguities (single-sourced from
     # study_status.study_clarity_summary): ran-but-tests-pending, gate↔test drift
     "reviewer_clarity_ambiguity",
+    # Figure shows a previous run's results (dnaa-replication 2026-06-01 —
+    # verdict said PASS but the plots were the prior run's render)
+    "figure_stale_vs_run",
     # S3: v4 narrative-spine nudge — info-level reminder of missing dnaa-style sections
     "narrative_spine_completeness",
     # Expert-handoff readiness — every study card in a generated report
@@ -1226,6 +1231,63 @@ def _check_reviewer_clarity_ambiguities(ctx: _LintContext) -> None:
         )
 
 
+def _check_figure_stale_vs_run(ctx: _LintContext) -> None:
+    """Flag a declared visualization whose rendered figure is OLDER than the
+    study's newest run data — i.e. the plot shows a previous run's results.
+
+    dnaa-replication 2026-06-01: dnaa-2's verdict/tests were flipped to PASS
+    (DnaA-ATP ~0.45) but the figures were still the prior Step-2 render (~0.997),
+    so the report contradicted itself. This compares each declared
+    ``visualizations[].name`` figure (reports/figures/<slug>/<name>.* or
+    studies/<slug>/charts/<name>.*) against the newest *.pq mtime under the
+    study's ``runs[].parquet`` dirs. Warning-level (re-render from the canonical
+    run to clear it). Silent when there's no on-disk run data to compare (the
+    parquet may live in another checkout).
+    """
+    spec = ctx.spec
+    vizzes = spec.get("visualizations") or []
+    runs = spec.get("runs") or []
+    if not vizzes or not runs:
+        return
+    newest_run = 0.0
+    for r in runs:
+        p = (r or {}).get("parquet")
+        if not p:
+            continue
+        base = ctx.ws_root / p
+        for f in _glob.glob(str(base / "**" / "*.pq"), recursive=True):
+            try:
+                newest_run = max(newest_run, _os.path.getmtime(f))
+            except OSError:
+                pass
+    if newest_run == 0.0:
+        return  # no run data on disk to compare against
+    fig_dirs = [ctx.ws_root / "reports" / "figures" / ctx.slug,
+                ctx.ws_root / "studies" / ctx.slug / "charts"]
+    for v in vizzes:
+        name = (v or {}).get("name")
+        if not name:
+            continue
+        figs = []
+        for d in fig_dirs:
+            for ext in (".html", ".svg", ".png"):
+                figs.extend(_glob.glob(str(d / f"{name}{ext}")))
+        if not figs:
+            continue  # absence handled by missing_visualizations
+        freshest = max(_os.path.getmtime(f) for f in figs)
+        if freshest < newest_run:
+            ctx.add(
+                level="warning",
+                field_path=f"visualizations[{name}]",
+                message=(
+                    f"figure '{name}' was last rendered before the study's "
+                    "newest run data — it likely shows a previous run's "
+                    "results. Re-render it from the canonical run."
+                ),
+                check="figure_stale_vs_run",
+            )
+
+
 def _check_runs_yaml_vs_db_drift(ctx: _LintContext) -> None:
     """Per F2, runs.db is the canonical record of which runs exist. The
     `study.yaml.runs[]` field stays in the schema as a soft-deprecated
@@ -1799,6 +1861,7 @@ _CHECK_FUNCTIONS = (
     _check_status_out_of_date_vs_runs,
     _check_status_claims_done_but_no_runs_recorded,
     _check_reviewer_clarity_ambiguities,
+    _check_figure_stale_vs_run,
     _check_narrative_spine_completeness,
     # Expert-handoff readiness (warning-level — see CHECKS comment block)
     _check_missing_baseline,

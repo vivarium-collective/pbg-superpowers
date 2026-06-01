@@ -447,6 +447,47 @@ def test_reviewer_clarity_flags_ran_but_tests_pending(tmp_path):
     assert "pending" in f.message
 
 
+def _build_figure_ws(tmp_path, fig_mtime, run_mtime):
+    """Minimal ws: one study with a declared viz, a rendered figure, and a run
+    parquet — with controllable mtimes (figure vs run data)."""
+    import os
+    ws = tmp_path / "ws"
+    (ws / "studies" / "study-x" / "charts").mkdir(parents=True)
+    figdir = ws / "reports" / "figures" / "study-x"; figdir.mkdir(parents=True)
+    pqdir = ws / "studies" / "study-x" / "parquet-runs" / "r1" / "history"
+    pqdir.mkdir(parents=True)
+    (ws / "workspace.yaml").write_text(
+        "schema_version: 2\nname: w\ncreated: '2026-06-01'\n"
+        "plugin_version: 0.8.1\npackage_path: pkg\n")
+    (ws / "studies" / "study-x" / "study.yaml").write_text(
+        "name: study-x\nbaseline:\n  - name: b\n    composite: pkg.x\n"
+        "visualizations:\n  - name: fig_a\n    address: local:V\n"
+        "runs:\n  - name: r1\n    status: completed\n"
+        "    parquet: studies/study-x/parquet-runs/r1\n")
+    fig = figdir / "fig_a.html"; fig.write_text("<html>")
+    pq = pqdir / "0.pq"; pq.write_text("x")
+    os.utime(fig, (fig_mtime, fig_mtime))
+    os.utime(pq, (run_mtime, run_mtime))
+    return ws
+
+
+def test_figure_stale_vs_run_flags_old_figure(tmp_path):
+    """A declared figure older than the study's newest run data is flagged."""
+    ws = _build_figure_ws(tmp_path, fig_mtime=1000, run_mtime=2000)
+    flagged = _findings_by_check(lint_workspace_report(ws)).get("figure_stale_vs_run", [])
+    assert len(flagged) == 1
+    assert flagged[0].level == "warning"
+    assert flagged[0].study_slug == "study-x"
+    assert "fig_a" in flagged[0].message
+
+
+def test_figure_stale_vs_run_silent_when_figure_fresh(tmp_path):
+    """A figure rendered AFTER the run data is not flagged."""
+    ws = _build_figure_ws(tmp_path, fig_mtime=3000, run_mtime=2000)
+    flagged = _findings_by_check(lint_workspace_report(ws)).get("figure_stale_vs_run", [])
+    assert flagged == []
+
+
 def test_status_claims_done_no_runs_fires_when_no_run_provenance(tmp_path):
     """A study declaring completion (gate passed / ran / evaluated) with no
     runs:, simulation_set:, or planned_runs: block fires a warning; a sibling
