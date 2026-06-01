@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from pbg_superpowers.text_utils import first_sentence
+from pbg_superpowers.workspace_paths import WorkspacePaths
 
 import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -110,17 +111,18 @@ def render_workspace_report(
                     if f.level == "error" and f.override_key not in overrides:
                         write_override(ws_root, f)
     today = today or date.today().isoformat()
+    wp = WorkspacePaths.load(ws_root)
     ws = yaml.safe_load((ws_root / "workspace.yaml").read_text())
-    decisions_file = ws_root / "docs" / "decisions.yaml"
+    decisions_file = wp.docs / "decisions.yaml"
     decisions = (
         (yaml.safe_load(decisions_file.read_text()) or {}).get("decisions", [])
         if decisions_file.exists() else []
     )
     env = _env(resource_dir("templates") / "workspace" / "reports")
     tpl = env.get_template("index.html.j2")
-    out = ws_root / "reports" / "index.html"
+    out = wp.reports / "index.html"
     out.parent.mkdir(parents=True, exist_ok=True)
-    _copy_assets(ws_root / "reports" / "assets")
+    _copy_assets(wp.reports / "assets")
     # Pass 10B: also harvest cross-study findings for the dashboard link
     # + a sibling findings.html page (which is rendered next).
     findings_count = _count_workspace_findings(ws_root)
@@ -159,7 +161,7 @@ def _harvest_findings(ws_root: Path) -> list[dict]:
     enum values) are skipped — the linter is the right place to surface
     those, not the rendering pipeline.
     """
-    studies_dir = ws_root / "studies"
+    studies_dir = WorkspacePaths.load(ws_root).studies
     if not studies_dir.is_dir():
         return []
     valid_status = {"confirms", "partial", "contradicts", "novel"}
@@ -259,9 +261,10 @@ def render_workspace_findings_index(
 
     env = _env(resource_dir("templates") / "workspace" / "reports")
     tpl = env.get_template("findings_index.html.j2")
-    out = ws_root / "reports" / "findings.html"
+    reports = WorkspacePaths.load(ws_root).reports
+    out = reports / "findings.html"
     out.parent.mkdir(parents=True, exist_ok=True)
-    _copy_assets(ws_root / "reports" / "assets")
+    _copy_assets(reports / "assets")
     out.write_text(tpl.render(
         workspace_name=ws.get("name", ws_root.name),
         generated_at=today,
