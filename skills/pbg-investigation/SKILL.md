@@ -10,7 +10,7 @@ argument-hint: <subcmd> [args...]
 
 The interface for **Investigations** in the vivarium-dashboard: named collections of studies that together answer a higher-level research question.
 
-An Investigation lives at `investigations/<slug>/investigation.yaml`. It lists member studies by slug, carries its own question/hypothesis/description, and links acceptance criteria to specific `expected_behavior[i].name` entries on member studies.
+An Investigation lives at `$INVESTIGATIONS_DIR/<slug>/investigation.yaml` (resolved from `workspace.yaml` `layout:`; `investigations/<slug>/` by default). It lists member studies by slug, carries its own question/hypothesis/description, and links acceptance criteria to specific `expected_behavior[i].name` entries on member studies.
 
 See [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md) for the canonical data model.
 
@@ -18,8 +18,8 @@ See [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-d
 
 An Investigation slug is also a **git branch name** and a **worktree directory name**. The three are kept in 1:1 correspondence so that parallel agents can each work on a different Investigation without trampling each other's files, runtime DBs (`.pbg/composite-runs.db`), or dashboard ports.
 
-- `new <slug>` creates `investigations/<slug>/investigation.yaml` AND the git branch `<slug>`, then commits the new YAML on that branch.
-- `open <slug>` creates (or reuses) a worktree at `<workspace>/.pbg/worktrees/<slug>/` checked out to branch `<slug>`. By default it also boots a per-worktree dashboard server (one server per worktree — intentional parallelism).
+- `new <slug>` creates `$INVESTIGATIONS_DIR/<slug>/investigation.yaml` AND the git branch `<slug>`, then commits the new YAML on that branch.
+- `open <slug>` creates (or reuses) a worktree at `.pbg/worktrees/<slug>/` checked out to branch `<slug>`. By default it also boots a per-worktree dashboard server (one server per worktree — intentional parallelism).
 - The cross-worktree sidebar switcher in the dashboard reads `~/.pbg/servers/*.json` so every worktree's dashboard sees every other live worktree's Investigation as a clickable row.
 
 ## Write strategy
@@ -32,7 +32,14 @@ All sub-commands:
 
 1. Walk up from cwd to find `workspace.yaml`. Fail with a clear message if not found.
 2. Set `WORKSPACE_ROOT` to that directory.
-3. Investigation files live at `$WORKSPACE_ROOT/investigations/<slug>/investigation.yaml`.
+3. Resolve workspace directories (honors `workspace.yaml` `layout:` — works for flat or nested workspaces):
+
+   ```bash
+   eval "$(python -m pbg_superpowers.paths --env --workspace "$WORKSPACE_ROOT")"
+   ```
+
+   This exports `$INVESTIGATIONS_DIR`, `$STUDIES_DIR`, `$REPORTS_DIR`, etc. (each = absolute path). Use these variables for the studies/investigations/references/reports paths below — do NOT hardcode `investigations/`, `studies/`, `reports/`. (The hidden `.pbg/` machine-state dir stays at the workspace root by default — use it literally.)
+4. Investigation files live at `$INVESTIGATIONS_DIR/<slug>/investigation.yaml`.
 
 No server-info check is required for read/write operations (files are written directly). Server is only used if you add a `list` display that needs resolved-study data from `/api/iset-list`.
 
@@ -44,15 +51,15 @@ All `<slug>` arguments must match `^[a-z0-9][a-z0-9_-]*$`. Reject with a clear e
 
 ### `new <slug>`
 
-Create `investigations/<slug>/investigation.yaml` with placeholder fields, create a matching git branch `<slug>`, and commit the new YAML on it.
+Create `$INVESTIGATIONS_DIR/<slug>/investigation.yaml` with placeholder fields, create a matching git branch `<slug>`, and commit the new YAML on it.
 
 **Steps:**
 
 1. Validate slug format. Fail if invalid.
-2. Check `investigations/<slug>/investigation.yaml` does NOT already exist. Fail with "Investigation '<slug>' already exists at investigations/<slug>/investigation.yaml. Use set-overview to update fields." if it does.
+2. Check `$INVESTIGATIONS_DIR/<slug>/investigation.yaml` does NOT already exist. Fail with "Investigation '<slug>' already exists at $INVESTIGATIONS_DIR/<slug>/investigation.yaml. Use set-overview to update fields." if it does.
 3. Check no git branch named `<slug>` exists (`git show-ref --verify --quiet refs/heads/<slug>`). Fail with: "Branch '<slug>' already exists. Pick a different slug or rename the existing branch." if it does.
 4. Create branch `<slug>` from current HEAD and switch to it: `git checkout -b <slug>`.
-5. Create the `investigations/<slug>/` directory if absent.
+5. Create the `$INVESTIGATIONS_DIR/<slug>/` directory if absent.
 6. Write `investigation.yaml` as a v2-shape scaffold with the narrative spine commented in as TODO placeholders. Prefer the dashboard's `/api/iset-create` endpoint when a server is running (it uses the canonical scaffolder); fall back to writing the body directly when offline:
 
 ```yaml
@@ -103,8 +110,8 @@ acceptance_criteria: []
 
 All v2 narrative-spine fields are optional per `investigation.schema.json`, so the scaffold validates on day one. The user opts in by uncommenting + filling sections. See `template/NEXT_STEPS.md` in pbg-template for the full pattern + when to fill each.
 
-7. `git add investigations/<slug>/investigation.yaml` then commit: `git commit -m "feat(investigation): scaffold <slug>"`. Do NOT push — the user pushes manually when ready.
-8. Print: `Created branch '<slug>' + investigations/<slug>/investigation.yaml (committed). Use /pbg-investigation open <slug> to create a worktree and start a dashboard, or /pbg-investigation add-study <slug> <study-slug> to add member studies.`
+7. `git add "$INVESTIGATIONS_DIR/<slug>/investigation.yaml"` then commit: `git commit -m "feat(investigation): scaffold <slug>"`. Do NOT push — the user pushes manually when ready.
+8. Print: `Created branch '<slug>' + $INVESTIGATIONS_DIR/<slug>/investigation.yaml (committed). Use /pbg-investigation open <slug> to create a worktree and start a dashboard, or /pbg-investigation add-study <slug> <study-slug> to add member studies.`
 
 **Rollback on failure:** if step 4 succeeds but a later step fails, the assistant must `git checkout -` back to the previous branch and `git branch -D <slug>` to leave the repo in a clean state before reporting the error.
 
@@ -112,8 +119,9 @@ All v2 narrative-spine fields are optional per `investigation.schema.json`, so t
 
 ```python
 import os, yaml, tempfile
+from pbg_superpowers.paths import workspace_dir
 
-path = os.path.join(workspace_root, "investigations", slug, "investigation.yaml")
+path = str(workspace_dir("investigations", root=workspace_root) / slug / "investigation.yaml")
 os.makedirs(os.path.dirname(path), exist_ok=True)
 tmp = path + ".tmp"
 with open(tmp, "w") as f:
@@ -125,13 +133,13 @@ os.replace(tmp, path)
 
 ### `open <slug> [--no-server] [--share-artifacts] [--no-share-artifacts]`
 
-Create (or re-use) a git worktree for branch `<slug>` at the standard location `<workspace>/.pbg/worktrees/<slug>/`, then optionally start a per-worktree dashboard server in it. Auto-symlinks expensive-to-rebuild artifacts from a sibling worktree (closes friction #6 — `out/cache/` rebuilds taking minutes per new worktree).
+Create (or re-use) a git worktree for branch `<slug>` at the standard location `.pbg/worktrees/<slug>/`, then optionally start a per-worktree dashboard server in it. Auto-symlinks expensive-to-rebuild artifacts from a sibling worktree (closes friction #6 — `out/cache/` rebuilds taking minutes per new worktree).
 
 **Steps:**
 
 1. Validate slug format.
 2. Check branch `<slug>` exists (`git show-ref --verify --quiet refs/heads/<slug>`). If not, fail with: `No branch named '<slug>'. Create it first with /pbg-investigation new <slug>, or rename an existing branch with git branch -m <old> <slug>.`
-3. Compute `worktree_path = <WORKSPACE_ROOT>/.pbg/worktrees/<slug>`.
+3. Compute `worktree_path = .pbg/worktrees/<slug>`.
 4. If `worktree_path` already exists AND is registered as a git worktree (check `git worktree list --porcelain`), print: `Worktree already exists at <worktree_path> (branch <slug>).` and skip to step 6.
 5. Otherwise, run `git worktree add <worktree_path> <slug>`. Surface any git error verbatim (most common: branch already checked out elsewhere — the standard worktree path is the only sanctioned mount point, so the user should `git worktree remove` the conflicting one first).
 6. **Share artifacts from a sibling worktree.** Read `workspace.yaml.runtime.shared_artifacts:` — a list of paths (relative to workspace root) that are expensive to rebuild and worth sharing across worktrees. Default if the field is absent: `["out/cache"]` (matches v2ecoli's ParCa-cache convention; harmless on workspaces that don't have one). For each declared path:
@@ -165,7 +173,7 @@ runtime:
     - data/precomputed             # other workspaces' equivalents
 ```
 
-**Standard location rationale.** Putting all worktrees under `<workspace>/.pbg/worktrees/` (a) keeps them close to the parent checkout for discovery and (b) lives inside `.pbg/` which is already conventionally git-ignored by workspace scaffolds, so the worktree directories themselves never accidentally show up in the parent's `git status`.
+**Standard location rationale.** Putting all worktrees under `.pbg/worktrees/` (a) keeps them close to the parent checkout for discovery and (b) lives inside the `.pbg/` dir which is already conventionally git-ignored by workspace scaffolds, so the worktree directories themselves never accidentally show up in the parent's `git status`.
 
 ---
 
@@ -175,7 +183,7 @@ List all investigations in the workspace.
 
 **Steps:**
 
-1. Glob `investigations/*/investigation.yaml` relative to `WORKSPACE_ROOT`.
+1. Glob `$INVESTIGATIONS_DIR/*/investigation.yaml`.
 2. For each file: load YAML, extract `name`, `title`, `status`, `len(studies)`.
 3. Sort by `name` alphabetically.
 4. Print one line per investigation:
@@ -194,9 +202,9 @@ Append a study slug to an investigation's `studies:` list.
 
 **Steps:**
 
-1. Load `investigations/<inv-slug>/investigation.yaml`. Fail if absent.
+1. Load `$INVESTIGATIONS_DIR/<inv-slug>/investigation.yaml`. Fail if absent.
 2. Check `<study-slug>` is not already in `studies[]`. Fail: "Study '<study-slug>' is already in investigation '<inv-slug>'." if duplicate.
-3. Warn (do NOT refuse) if `studies/<study-slug>/study.yaml` does not exist: "Warning: studies/<study-slug>/study.yaml not found. The study slug will be added but may not resolve in the dashboard."
+3. Warn (do NOT refuse) if `$STUDIES_DIR/<study-slug>/study.yaml` does not exist: "Warning: $STUDIES_DIR/<study-slug>/study.yaml not found. The study slug will be added but may not resolve in the dashboard."
 4. Append `<study-slug>` to `studies[]`.
 5. Atomic write.
 6. Print: `Added '<study-slug>' to investigation '<inv-slug>' (now <N> studies).`
@@ -209,7 +217,7 @@ Remove a study slug from an investigation's `studies:` list.
 
 **Steps:**
 
-1. Load `investigations/<inv-slug>/investigation.yaml`. Fail if absent.
+1. Load `$INVESTIGATIONS_DIR/<inv-slug>/investigation.yaml`. Fail if absent.
 2. If `<study-slug>` is not in `studies[]`, print: "Study '<study-slug>' is not in investigation '<inv-slug>'. No changes made." and exit without error.
 3. Remove `<study-slug>` from `studies[]`.
 4. Atomic write.
@@ -225,7 +233,7 @@ Update one or more overview fields on an investigation. Each flag is optional; o
 
 **Steps:**
 
-1. Load `investigations/<inv-slug>/investigation.yaml`. Fail if absent.
+1. Load `$INVESTIGATIONS_DIR/<inv-slug>/investigation.yaml`. Fail if absent.
 2. Parse flags. Require at least one flag — fail with usage if none given.
 3. For each provided flag, update the corresponding YAML field. Do not touch unspecified fields.
 4. Atomic write.
@@ -250,7 +258,7 @@ Update the `status:` field on an investigation.
 **Steps:**
 
 1. Validate `<status>` against the allowed set. Fail with a list of valid values if not recognized.
-2. Load `investigations/<inv-slug>/investigation.yaml`. Fail if absent.
+2. Load `$INVESTIGATIONS_DIR/<inv-slug>/investigation.yaml`. Fail if absent.
 3. Set `status: <status>`.
 4. Atomic write.
 5. Print: `Set status of '<inv-slug>' to '<status>'.`
@@ -303,9 +311,9 @@ For each study, pick the most important `expected_behavior` entry (the one that 
 ```
 Would create:
 
-  investigations/<name>/investigation.yaml
-  studies/<study-1-slug>/study.yaml
-  studies/<study-2-slug>/study.yaml
+  $INVESTIGATIONS_DIR/<name>/investigation.yaml
+  $STUDIES_DIR/<study-1-slug>/study.yaml
+  $STUDIES_DIR/<study-2-slug>/study.yaml
   ...
 
 Proceed? [yes / no / edit]
@@ -385,13 +393,13 @@ Run the investigation's bespoke-script studies in declaration order by calling `
 
 **Flow:**
 
-1. Common prelude (find `workspace.yaml`, read `.pbg/server/server-info`).
-2. Load `investigations/<inv-slug>/investigation.yaml`. Fail with a clear message if absent.
+1. Common prelude (find `workspace.yaml`, resolve workspace dirs, read `.pbg/server/server-info`).
+2. Load `$INVESTIGATIONS_DIR/<inv-slug>/investigation.yaml`. Fail with a clear message if absent.
 3. Resolve the run list:
    - Start from `investigation.yaml.studies` in declared order.
    - If `--studies` is given, intersect (preserving the investigation's order, not the flag's order); fail if any flag-named slug is absent from the investigation.
 4. For each study slug, classify it:
-   - **`runnable`** — `studies/<slug>/study.yaml` exists AND has a non-empty `canonical_runs:` list. Will be run.
+   - **`runnable`** — `$STUDIES_DIR/<slug>/study.yaml` exists AND has a non-empty `canonical_runs:` list. Will be run.
    - **`no-recipe`** — `study.yaml` exists but `canonical_runs:` is missing/empty. Skipped (addresses friction #9 — dnaa-05 / dnaa-06 have only spec, no `sims/`).
    - **`missing`** — `study.yaml` absent. Skipped with a warning.
 5. Print the plan: a numbered list of `[runnable|no-recipe|missing] <slug>` lines + the planned `python <script> <args...>` for each runnable one.
@@ -425,7 +433,7 @@ The orchestrator is intentionally thin — it does not write to `runs.db`, doesn
 
 ### `close <slug> [--dry-run] [--no-pr] [--skip-report] [--json]`
 
-Close an investigation: render the workspace report, copy it into `investigations/<slug>/report.html` (so it lands as a git-tracked artifact), stamp the investigation YAML with `status: closed`, `closed_at`, `report_url`, and a populated `contributors[]`, commit on the investigation branch, and open a PR. **Never auto-merges** — stops after `gh pr create`; the user clicks merge in the GitHub UI per the standing no-auto-merge instruction.
+Close an investigation: render the workspace report, copy it into `$INVESTIGATIONS_DIR/<slug>/report.html` (so it lands as a git-tracked artifact), stamp the investigation YAML with `status: closed`, `closed_at`, `report_url`, and a populated `contributors[]`, commit on the investigation branch, and open a PR. **Never auto-merges** — stops after `gh pr create`; the user clicks merge in the GitHub UI per the standing no-auto-merge instruction.
 
 **Arguments:**
 
@@ -439,7 +447,7 @@ Close an investigation: render the workspace report, copy it into `investigation
 
 1. **Humans** — derived from `git log --pretty='%an|%ae|%H' <main>..<branch>`. Each unique (name, email) pair becomes one entry with `kind: human`, `roles: [implementer]`, and `commits: <count>`.
 2. **Agents (via Co-Authored-By trailer)** — commits on the branch whose body contains `Co-Authored-By: <name> <email>` where the email is `*@noreply.anthropic.com`, contains `bot`, or has `ci` as a name-part are added with `kind: agent`, `roles: [agent_runner]`.
-3. **Agents (via .pbg/agent-sessions/)** — every JSON file under `.pbg/agent-sessions/<id>.json` with shape `{agent_name, session_id, ...}` is grouped by `agent_name` and added (or merged into an existing entry) with `sessions[]` populated.
+3. **Agents (via the `.pbg/` agent-sessions dir)** — every JSON file under `.pbg/agent-sessions/<id>.json` with shape `{agent_name, session_id, ...}` is grouped by `agent_name` and added (or merged into an existing entry) with `sessions[]` populated.
 
 **User edits are preserved.** If you've previously curated `roles` or `notes` on a contributor entry, re-running close keeps those — only `commits` and `sessions` are refreshed.
 
@@ -448,9 +456,9 @@ Close an investigation: render the workspace report, copy it into `investigation
 1. Resolve workspace + investigation YAML; verify branch exists.
 2. Derive contributors (above).
 3. Render workspace report via `pbg_superpowers.report.render_workspace_report` (unless `--skip-report`).
-4. Copy `reports/index.html` → `investigations/<slug>/report.html` (currently `reports/` is git-ignored; the copied path lives under `investigations/` which is tracked).
+4. Copy `$REPORTS_DIR/index.html` → `$INVESTIGATIONS_DIR/<slug>/report.html` (currently the reports dir is git-ignored; the copied path lives under the investigations dir which is tracked).
 5. Update `investigation.yaml`: `status: closed`, `closed_at: <ISO-8601>`, `report_url: report.html`, `contributors: <merged>`.
-6. `git add investigations/<slug>/{investigation.yaml,report.html}` + `git commit -m "close(investigation): <slug>"` on the investigation branch.
+6. `git add "$INVESTIGATIONS_DIR/<slug>/investigation.yaml" "$INVESTIGATIONS_DIR/<slug>/report.html"` + `git commit -m "close(investigation): <slug>"` on the investigation branch.
 7. `gh pr view <branch>` → if PR exists, refresh body via `gh pr edit`; else `git push -u origin <branch>` + `gh pr create --base <main> --head <branch>`. **Never `--auto`.**
 
 Returns a `CloseResult` (printed plain or JSON) listing every action taken, the contributor list, and the PR URL.
