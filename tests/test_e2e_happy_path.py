@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from pbg_superpowers.workspace_paths import WorkspacePaths
+
 
 PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser().resolve()
 
@@ -126,9 +128,10 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
          cwd=ws)
 
     # 8. Assertions on the rendered reports
-    assert (ws / "reports" / "index.html").exists()
+    ws_reports = WorkspacePaths.load(ws).reports
+    assert (ws_reports / "index.html").exists()
     assert (ws / "models" / "m" / "reports" / "index.html").exists()
-    workspace_html = (ws / "reports" / "index.html").read_text()
+    workspace_html = (ws_reports / "index.html").read_text()
     assert "demo" in workspace_html
     assert "models/m/reports/index.html" in workspace_html  # link to per-model report
     model_html = (ws / "models" / "m" / "reports" / "index.html").read_text()
