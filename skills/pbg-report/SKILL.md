@@ -32,9 +32,19 @@ These are reviewer-readiness issues: lint says "the YAML is well-formed"; the au
 | `--skip-audit` | Skip Pass A; run Pass B + render. Use for routine end-of-stage refreshes invoked by other skills. |
 | `--force` | Bypass blocking findings from either pass; log to `.pbg/report-lint-overrides.json` and render. |
 
+## Resolve workspace directories first
+
+Set `WORKSPACE_ROOT` to the workspace root (the directory holding `workspace.yaml`; `.` for the common case where the skill runs from the workspace root). Then resolve the workspace dirs (honors `workspace.yaml` `layout:` — works for flat or nested workspaces):
+
+```bash
+eval "$(python -m pbg_superpowers.paths --env --workspace "$WORKSPACE_ROOT")"
+```
+
+This exports `$INVESTIGATIONS_DIR`, `$STUDIES_DIR`, `$REPORTS_DIR`, etc. (each = absolute path). Use these variables for the studies/investigations/references/reports paths below — do NOT hardcode `investigations/`, `studies/`, `reports/`. (The hidden `.pbg/` machine-state dir stays at the workspace root by default — use it literally.)
+
 ## Pass A — Reviewer-readiness audit (NEW)
 
-Runs **before** the structural lint. Read-only. For each `investigations/<slug>/investigation.yaml`, perform these checks in order. Print findings as you go; group by severity (blocking / warning / info) at the end.
+Runs **before** the structural lint. Read-only. For each `$INVESTIGATIONS_DIR/<slug>/investigation.yaml` (resolved from `workspace.yaml` `layout:`; `investigations/<slug>/` by default), perform these checks in order. Print findings as you go; group by severity (blocking / warning / info) at the end.
 
 ### A1. Branch state
 
@@ -43,7 +53,7 @@ git status --porcelain
 git log --oneline origin/main..HEAD | head -5
 ```
 
-- **blocking** if uncommitted changes touch `studies/*/study.yaml`, `studies/*/charts/`, or `investigations/*/investigation.yaml`. Either commit or stash. Print which files.
+- **blocking** if uncommitted changes touch `$STUDIES_DIR/*/study.yaml`, `$STUDIES_DIR/*/charts/`, or `$INVESTIGATIONS_DIR/*/investigation.yaml`. Either commit or stash. Print which files.
 - **info** if branch is N commits ahead of `origin/main` and N > 0. Show head 5 commits so the user remembers what's pending.
 
 ### A2. Executive-verdict freshness
@@ -52,15 +62,15 @@ For each investigation:
 
 ```bash
 # Find newest chart svg mtime under any member study
-find studies/*/charts/ -name '*.svg' -print0 | xargs -0 stat -f "%m %N" 2>/dev/null | sort -rn | head -1
-stat -f "%m %N" investigations/<slug>/investigation.yaml
+find "$STUDIES_DIR"/*/charts/ -name '*.svg' -print0 | xargs -0 stat -f "%m %N" 2>/dev/null | sort -rn | head -1
+stat -f "%m %N" "$INVESTIGATIONS_DIR/<slug>/investigation.yaml"
 ```
 
 - **warning** if any chart SVG was modified AFTER `investigation.yaml`. Suggest: "The verdict block predates the latest chart edits — confirm `executive.new_empirical_evidence` references the newest charts."
 
 ### A3. Chart-reference integrity
 
-Extract every `chart:` and `companion_charts:` path mentioned anywhere in `investigations/<slug>/investigation.yaml`. For each path:
+Extract every `chart:` and `companion_charts:` path mentioned anywhere in `$INVESTIGATIONS_DIR/<slug>/investigation.yaml`. For each path:
 
 - **blocking** if the file doesn't exist. The render would 404.
 - **warning** if the cited chart appears in any study yaml's `companion_charts:` list (= was demoted) but the investigation verdict cites it as the primary `chart:`. The verdict is one revision behind. Print the (verdict line, demoting study) pair.
@@ -93,7 +103,7 @@ Mine these sources:
 2. **`open_questions:` with `status: open`** — if the verdict claims an architectural unblock, check whether any blocking open_question actually contradicts it.
 3. **Mass-listener gaps** — if behavior_tests in a study assert on observables that no chart visualizes, propose a chart.
 4. **Stale review-thread topics** — when on a PR-attached branch: `gh pr view <N> --json reviews,comments`. For each unresolved thread topic, see whether commits since address it; flag any that DON'T match a recent commit.
-5. **Run outcomes** — scan `studies/*/study.yaml` `runs:` for any outcome other than `completed`. Flag.
+5. **Run outcomes** — scan `$STUDIES_DIR/*/study.yaml` `runs:` for any outcome other than `completed`. Flag.
 
 ### A7. Output format
 
@@ -104,9 +114,9 @@ Mine these sources:
   info:      <N> findings
 
 Findings (severity, scope, message, suggested fix):
-  [blocking] verdict→chart: investigations/<slug>/investigation.yaml cites
-             studies/.../charts/00_X.svg as primary, but that chart is in
-             studies/<study>/study.yaml.preliminary_findings.companion_charts
+  [blocking] verdict→chart: $INVESTIGATIONS_DIR/<slug>/investigation.yaml cites
+             $STUDIES_DIR/.../charts/00_X.svg as primary, but that chart is in
+             $STUDIES_DIR/<study>/study.yaml.preliminary_findings.companion_charts
              (= demoted). Promote chart 02_Y.svg instead.
   [warning]  numerical drift: verdict says "50-80 g/L" but chart-02 meta says
              "9.6 g/L peak". Update verdict line 372 to "9.6 g/L".
@@ -123,7 +133,7 @@ If `blocking > 0` and `--force` is NOT set, exit before Pass B with a non-zero s
 
 ## Pass B — Structural lint (UNCHANGED)
 
-The existing pre-publication linter from `pbg_superpowers.report_linter.lint_workspace_report()`. Checks every study under `<ws>/studies/` and `<ws>/investigations/`:
+The existing pre-publication linter from `pbg_superpowers.report_linter.lint_workspace_report()`. Checks every study under the workspace's studies and investigations dirs (`$STUDIES_DIR` / `$INVESTIGATIONS_DIR`, layout-resolved; the linter resolves these itself from `--ws`):
 
 - **incomplete_summaries** (error) — `evaluation_status: evaluated` but `conclusion_logic` is empty.
 - **status_contradictions** (error) — gate/evaluation/sim/impl/review combinations that cannot logically co-exist.
@@ -149,7 +159,8 @@ After both passes succeed (or `--force`):
 
 ```bash
 # Prefer the vivarium-dashboard full SPA renderer when installed
-# (produces the 110+ KB interactive SPA shell at reports/index.html):
+# (produces the 110+ KB interactive SPA shell at $REPORTS_DIR/index.html;
+#  pass the workspace ROOT — the renderer resolves the layout-aware reports dir itself):
 python -c "from pathlib import Path; \
            from vivarium_dashboard.lib.report import render_workspace_report; \
            render_workspace_report(Path('.'))"
@@ -198,7 +209,7 @@ ship) is documented in
 
 ## Override file format
 
-`<ws>/.pbg/report-lint-overrides.json`:
+`.pbg/report-lint-overrides.json`:
 
 ```json
 {

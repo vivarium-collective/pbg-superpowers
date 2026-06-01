@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from pbg_superpowers.report import render_workspace_report, render_model_report
+from pbg_superpowers.workspace_paths import WorkspacePaths
 
 
 PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser().resolve()
@@ -36,7 +37,7 @@ def test_render_workspace_report_smoke(tmp_path, plugin_root):
     assert "demo-ws" in html
     assert "Workspace dashboard" in html
     # Assets copied
-    assets = ws / "reports" / "assets"
+    assets = WorkspacePaths.load(ws).reports / "assets"
     assert (assets / "style.css").exists()
     assert (assets / "render-helpers.js").exists()
 

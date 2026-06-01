@@ -79,3 +79,59 @@ def find_workspace_root(
             f"No {WORKSPACE_MARKER} found at or above {start}"
         )
     return found
+
+
+def workspace_dir(name: str, *, root: Path | str | None = None) -> Path:
+    """Absolute path to a workspace directory by logical name, honoring the
+    optional ``layout:`` map in ``workspace.yaml`` (flat defaults otherwise).
+
+    `name` is one of: studies, investigations, composites, references, datasets,
+    notes, experiments, reports, pbg, scripts, tests, docs, package.
+    `root` defaults to the nearest workspace.yaml at/above CWD.
+    """
+    from .workspace_paths import WorkspacePaths
+    if root is not None:
+        ws = Path(root).resolve()
+    else:
+        ws = find_workspace_root(Path.cwd())
+    return WorkspacePaths.load(ws).dir(name)
+
+
+def _main(argv=None) -> int:
+    """CLI: print the resolved absolute path of a workspace directory.
+
+    Used by the /pbg-* skills so their shell file-ops stay correct under any
+    `layout:` (flat or nested), e.g.:
+
+        INV_DIR="$(python -m pbg_superpowers.paths investigations --workspace "$WS")"
+        git add "$INV_DIR/<slug>/investigation.yaml"
+
+    Or export every directory at once:
+
+        eval "$(python -m pbg_superpowers.paths --env --workspace "$WS")"
+        # -> $STUDIES_DIR, $INVESTIGATIONS_DIR, $REFERENCES_DIR, ...
+    """
+    import argparse
+    from .workspace_paths import WorkspacePaths, LAYOUT_DEFAULTS
+
+    ap = argparse.ArgumentParser(prog="pbg_superpowers.paths")
+    ap.add_argument("name", nargs="?", help="logical dir (studies, investigations, ...)")
+    ap.add_argument("--workspace", help="workspace root (default: walk up from CWD)")
+    ap.add_argument("--env", action="store_true",
+                    help="print 'export <NAME>_DIR=...' for every directory")
+    args = ap.parse_args(argv)
+
+    root = Path(args.workspace).resolve() if args.workspace else find_workspace_root(Path.cwd())
+    wp = WorkspacePaths.load(root)
+    if args.env:
+        for key in list(LAYOUT_DEFAULTS) + ["package"]:
+            print(f"export {key.upper()}_DIR={wp.dir(key)}")
+        return 0
+    if not args.name:
+        ap.error("a directory name is required (or use --env)")
+    print(wp.dir(args.name))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

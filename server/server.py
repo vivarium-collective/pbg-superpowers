@@ -9,9 +9,17 @@ from threading import Lock
 
 import yaml
 
+from pbg_superpowers.workspace_paths import WorkspacePaths
+
 
 WORKSPACE: Path = Path("/")  # set by main()
 LOCK = Lock()
+
+
+def _wp() -> WorkspacePaths:
+    """Resolve the active workspace's directory layout (honors workspace.yaml
+    `layout:`; flat defaults otherwise)."""
+    return WorkspacePaths.load(WORKSPACE)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -20,7 +28,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path in ("/", "/index.html"):
-            return self._serve_file(WORKSPACE / "reports" / "index.html", "text/html")
+            return self._serve_file(_wp().reports / "index.html", "text/html")
         if self.path.startswith("/api/state"):
             return self._serve_state()
         if self.path.startswith("/api/events"):
@@ -31,7 +39,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_composites()
         # Default: serve under reports/
         rel = self.path.lstrip("/")
-        path = WORKSPACE / "reports" / rel
+        path = _wp().reports / rel
         return self._serve_file(path, self._guess_mime(rel))
 
     def do_POST(self):
@@ -39,7 +47,7 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode()
             with LOCK:
-                events = WORKSPACE / ".pbg" / "server" / "state" / "events"
+                events = _wp().pbg / "server" / "state" / "events"
                 events.parent.mkdir(parents=True, exist_ok=True)
                 with events.open("a") as f:
                     f.write(body + "\n")
@@ -78,7 +86,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_guidance(self):
-        content_dir = WORKSPACE / ".pbg" / "server" / "content"
+        content_dir = _wp().pbg / "server" / "content"
         if not content_dir.exists():
             self.send_response(204)
             self.end_headers()
@@ -93,7 +101,7 @@ class Handler(BaseHTTPRequestHandler):
     def _serve_composites(self):
         from pbg_superpowers.composite_discovery import discover_all
         extra_search_paths: list[Path] = []
-        local_composites = WORKSPACE / "composites"
+        local_composites = _wp().composites
         if local_composites.is_dir():
             extra_search_paths.append(local_composites)
         try:
