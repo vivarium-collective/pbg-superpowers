@@ -179,17 +179,103 @@ def _validate_emitters(emitters: list[dict] | None, name: str) -> list[dict]:
 
 
 def emitter_defaults(fn_or_entry: Any) -> list[dict]:
-    """Return the declared default emitter(s) for a generator.
+    """Return the declared default emitter(s) for a generator OR static spec.
 
-    Accepts either a decorated generator function (reads its
-    ``_composite_generator_entry`` sidecar) or a :class:`GeneratorEntry`.
-    Returns the (possibly empty) ``emitters`` list — a workspace builds the
-    composite's default sink from this when it isn't running under the
-    dashboard's observable-injection flow. Returns ``[]`` for anything that
-    isn't a registered generator, so callers can use it unconditionally.
+    Accepts a decorated generator function (reads its
+    ``_composite_generator_entry`` sidecar), a :class:`GeneratorEntry`, or a
+    parsed static composite-spec ``dict`` (reads its top-level ``emitters:``
+    key — the static-spec analogue of the decorator's ``emitters=``). Returns
+    the (possibly empty) ``emitters`` list — a workspace builds the composite's
+    default sink from this when it isn't running under the dashboard's
+    observable-injection flow. Returns ``[]`` for anything that declares none,
+    so callers can use it unconditionally.
     """
+    if isinstance(fn_or_entry, dict):  # parsed static composite spec
+        return list(fn_or_entry.get("emitters") or [])
     entry = getattr(fn_or_entry, "_composite_generator_entry", fn_or_entry)
     return list(getattr(entry, "emitters", []) or [])
+
+
+def _emitter_node_from_decl(decl: dict, *, run_id: str | None = None,
+                            out_dir: Any = None, registered=None,
+                            fallback: str = "local:RAMEmitter") -> dict:
+    """Materialise one ``emitters=`` declaration into a process-bigraph step node.
+
+    The declaration is the lightweight ``{address, config?, paths?}`` form; the
+    emit-schema + topology are computed here (they depend on the composite's
+    shape, so they aren't part of the declaration). Each ``paths`` entry (slash-
+    or dot-joined) becomes one ``config.emit`` column wired to that store;
+    ``global_time`` is always emitted so trajectories have a time axis and the
+    Step re-fires every tick. When the declared ``address`` isn't in
+    ``registered`` (the core's link registry), it degrades to ``fallback`` so
+    the composite still builds — the convention's RAMEmitter safety net.
+    """
+    address = decl.get("address") or fallback
+    name = address.split(":", 1)[-1]
+    if registered is not None and name not in registered:
+        address = fallback
+        name = address.split(":", 1)[-1]
+
+    emit_schema: dict = {}
+    inputs: dict = {}
+    for p in decl.get("paths") or []:
+        parts = [seg for seg in str(p).replace(".", "/").split("/") if seg]
+        if not parts:
+            continue
+        key = "_".join(parts)
+        emit_schema[key] = "node"
+        inputs[key] = parts
+    if "global_time" not in inputs:
+        inputs["global_time"] = ["global_time"]
+        emit_schema["global_time"] = "node"
+
+    config = dict(decl.get("config") or {})
+    config["emit"] = emit_schema
+    # Run-specific layering for hive-partitioned parquet sinks: a per-run out_dir
+    # + experiment_id partition. Applied to any *ParquetEmitter (the generic
+    # ParquetEmitter and workspace variants like DataFrameParquetEmitter), which
+    # understand these keys; other sinks keep their declared base config.
+    if name.endswith("ParquetEmitter"):
+        if out_dir is not None:
+            config["out_dir"] = str(out_dir)
+        if run_id is not None:
+            config.setdefault("partitioning_keys", ["experiment_id"])
+            md = dict(config.get("metadata") or {})
+            md.setdefault("experiment_id", run_id)
+            config["metadata"] = md
+
+    return {"_type": "step", "address": address, "config": config, "inputs": inputs}
+
+
+def install_default_emitters(state: dict, source: Any, *, run_id: str | None = None,
+                             out_dir: Any = None, core: Any = None) -> dict:
+    """Return a copy of ``state`` with the composite's declared default
+    emitter(s) installed as ``emitter`` / ``emitter_<i>`` step nodes.
+
+    ``source`` is a generator fn/entry or a parsed static-spec dict — whatever
+    :func:`emitter_defaults` understands. This is the convention's install step:
+    a composite built outside the dashboard's observable-injection flow still
+    gets its declared sink. Resolution order (declared → RAMEmitter fallback) is
+    handled per-node by :func:`_emitter_node_from_decl`; external overrides are
+    layered by the caller before this call.
+
+    ``run_id`` / ``out_dir`` are run-specific parquet parameters (ignored by
+    non-parquet sinks). ``core`` (when given) lets the installer degrade an
+    unregistered declared address to RAMEmitter. Returns ``state`` unchanged
+    when nothing is declared, so callers can invoke it unconditionally.
+    """
+    decls = emitter_defaults(source)
+    if not decls:
+        return dict(state)
+    registered = getattr(core, "link_registry", None) if core is not None else None
+    new_state = dict(state)
+    for i, decl in enumerate(decls):
+        if not isinstance(decl, dict):
+            continue
+        key = "emitter" if i == 0 else f"emitter_{i}"
+        new_state[key] = _emitter_node_from_decl(
+            decl, run_id=run_id, out_dir=out_dir, registered=registered)
+    return new_state
 
 
 def apply_core_extensions(entry: GeneratorEntry, core: Any) -> Any:
