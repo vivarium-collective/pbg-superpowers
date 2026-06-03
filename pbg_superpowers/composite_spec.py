@@ -61,6 +61,17 @@ def validate_spec(spec: dict) -> None:
     if requires and not isinstance(requires, dict):
         raise ValueError("spec.requires must be a dict if present")
 
+    # Optional default-emitter declaration (the static-spec analogue of
+    # @composite_generator(emitters=[...])). Each entry is a lightweight
+    # {address, config?, paths?} selection; see composite_generator.emitter_defaults.
+    emitters = spec.get("emitters")
+    if emitters is not None:
+        if not isinstance(emitters, list):
+            raise ValueError("spec.emitters must be a list if present")
+        for i, em in enumerate(emitters):
+            if not isinstance(em, dict) or not em.get("address"):
+                raise ValueError(f"spec.emitters[{i}] must be a dict with an 'address'")
+
 
 # ---------------------------------------------------------------------------
 # Parameter substitution
@@ -160,4 +171,12 @@ def build_composite_from_spec(spec: dict, overrides: dict[str, Any] | None = Non
 
     params = spec.get("parameters") or {}
     state = substitute_parameters(spec.get("state") or {}, params, overrides)
+
+    # Install the composite's declared default emitter(s) (spec.emitters), so a
+    # composite built outside the dashboard's observable-injection flow still
+    # ships with its sink. No-op when nothing is declared. The declared address
+    # degrades to RAMEmitter if it isn't registered on `core`.
+    from pbg_superpowers.composite_generator import install_default_emitters
+    state = install_default_emitters(state, spec, core=core)
+
     return Composite({"state": state}, core=core)
