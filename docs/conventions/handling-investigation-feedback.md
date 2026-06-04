@@ -121,6 +121,45 @@ the code: `python -c "import vivarium_dashboard, os; print(os.path.dirname(vivar
   install mode (step 6).
 - **Echoing a reviewer's imprecise detail verbatim** — verify against the data
   (step 2).
+- **Imposing the strictest reading of an acceptance criterion and recording a
+  FAIL** — when a metric is evaluated over a multi-generation lineage, default to
+  the *aggregate* (generation-average / steady-generation) reading, not strict
+  per-generation. See "Acceptance criteria" below. (Cost of getting this wrong:
+  a wrongly-recorded QUALIFIED/FAIL, plus chasing a "drift" the reviewer never
+  considered a failure — a whole confirmatory sweep that wasn't needed.)
+- **Accumulating per-run plots in a study's charts** — when a new canonical/latest
+  run supersedes earlier ones, REMOVE (or demote) the superseded runs' figures.
+  A charts section showing several runs reads as "which one is real?" to a
+  reviewer. Keep only the latest/canonical run's plots.
+
+## Acceptance criteria: default to the aggregate for steady-state / lineage metrics
+
+A metric measured across a multi-generation lineage is almost never "in band on
+every tick of every generation." Two reasons, both expected, neither a failure:
+
+1. **Stabilization transient** — the first generation(s) after a burned-in resume
+   (or after a mechanism change) are still settling; early gens may sit outside
+   the band while the system relaxes to steady state.
+2. **Within-cycle oscillation** — pools that accumulate-then-halve at division
+   (DnaA, mass, most counts) exceed/undershoot the band within a cycle by design;
+   they are "in band" on the *cycle/generation average*, not every instant.
+
+So when a study yaml encodes a band test, **default `pass_if.op` to the aggregate**
+(`generation_average_in_range`, or a steady-generation mean that drops the startup
+gens) rather than `in_range_every_generation`. Reserve the strict per-generation
+form for criteria a reviewer has explicitly stated must hold every generation.
+
+Signals that the aggregate is the intended criterion (treat as the default unless
+told otherwise):
+- the reviewer's language is "**within the band**" / "in range", not "every
+  generation";
+- the study's own `scientific_argument`/evidence already notes the metric
+  oscillates or that "in band = cycle-mean, not every tick";
+- the metric is a pool that doubles per cycle.
+
+If genuinely ambiguous, encode the criterion explicitly in the test and surface
+the choice to the reviewer **before** recording a fail — do not pick the strict
+reading, record FAIL, and start diagnosing a non-problem.
 
 ## Related
 

@@ -59,6 +59,28 @@ For studies that need to parametrize across all runs, set
 `study.yaml.tests.data_source: all_runs` and use the `runs` fixture
 (parametrized) instead.
 
+### Band / steady-state criteria — default to the generation AVERAGE
+
+When a test asserts a metric is "in band" over a multi-generation lineage, write
+it as a **generation-average / steady-generation** check, NOT strict
+per-generation. Early generations stabilize after a burned-in resume, and pools
+that double-then-halve per cycle (DnaA, mass, counts) cross the band within a
+cycle by design — both are expected, neither is a failure. So prefer:
+
+```python
+def test_dnaA_atp_fraction_in_band(run):
+    # generation-average (drop the stabilizing first gen), not every tick
+    per_gen = run.per_generation_mean("dnaA_ATP_over_total")
+    assert 0.2 <= mean(per_gen) <= 0.5            # aggregate criterion
+    # NOT: assert all(0.2 <= g <= 0.5 for g in per_gen)   # over-strict
+```
+
+Use the strict per-generation form ONLY when a reviewer explicitly requires it.
+Picking the strict reading and recording a FAIL when the aggregate passes wastes
+a review round (and often a confirmatory sweep). See
+[handling-investigation-feedback.md#acceptance-criteria](../../docs/conventions/handling-investigation-feedback.md)
+for the full rationale and the signals that the aggregate is intended.
+
 ## Cross-study dependencies (parent_studies)
 
 A study can declare ordering against other studies in the workspace via

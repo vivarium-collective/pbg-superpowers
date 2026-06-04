@@ -75,6 +75,12 @@ Extract every `chart:` and `companion_charts:` path mentioned anywhere in `$INVE
 - **blocking** if the file doesn't exist. The render would 404.
 - **warning** if the cited chart appears in any study yaml's `companion_charts:` list (= was demoted) but the investigation verdict cites it as the primary `chart:`. The verdict is one revision behind. Print the (verdict line, demoting study) pair.
 
+### A3b. Superseded-run chart hygiene
+
+For each study, inspect `visualizations:` (and the `charts/` dir). If figures from **multiple different runs/seeds** are present (e.g. a `seed0` reproduction alongside a `seed1` canonical run), that reads to a reviewer as "which run is real?".
+
+- **warning** — a study's charts mix more than one run/seed. Recommend: keep only the **canonical / latest run's** figures; remove or demote the superseded run's plots. (Reviewers routinely ask for exactly this — "remove plots from previous runs, keep only the latest.") When a new canonical run lands, prune the old run's figures in the same edit rather than accumulating them.
+
 ### A4. Numerical-claim consistency
 
 For each chart referenced from the verdict, read its `<basename>.meta.json` sibling (same dir). Extract numeric values + units from the meta's `interpretation:` and `caption:` fields. Grep the verdict text for the same units (g/L, mM, orders, hours, mg/L, etc.). Flag when a verdict number doesn't match its chart-meta within 5% (or isn't an obvious round-number of it).
