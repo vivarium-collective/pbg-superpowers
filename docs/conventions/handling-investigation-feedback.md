@@ -128,9 +128,18 @@ the code: `python -c "import vivarium_dashboard, os; print(os.path.dirname(vivar
   a wrongly-recorded QUALIFIED/FAIL, plus chasing a "drift" the reviewer never
   considered a failure — a whole confirmatory sweep that wasn't needed.)
 - **Accumulating per-run plots in a study's charts** — when a new canonical/latest
-  run supersedes earlier ones, REMOVE (or demote) the superseded runs' figures.
-  A charts section showing several runs reads as "which one is real?" to a
-  reviewer. Keep only the latest/canonical run's plots.
+  run supersedes earlier ones, REMOVE the superseded runs' figures. A charts section
+  showing several runs reads as "which one is real?" to a reviewer. Keep only the
+  latest/canonical run's plots.
+- **Trimming `visualizations:` and thinking the chart is gone** — the report
+  discovers every `*.png`/`*.svg` FILE in `charts/` (via `/api/study-charts`), NOT
+  the `visualizations:` list. Editing the list changes nothing a reviewer sees; you
+  must `git rm` the file (and fix any prose/`provenance` that references it). Verify
+  with `curl /api/study-charts/<study>` — it must return only the charts you intend.
+  (Real case: a reviewer asked three times to "keep only the latest one"; the
+  `visualizations:` list already had one entry, but five chart files were still on
+  disk and still rendering — this is exactly the "verify the rendered artifact",
+  step 5, trap.)
 
 ## Acceptance criteria: default to the aggregate for steady-state / lineage metrics
 
