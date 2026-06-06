@@ -14,6 +14,20 @@ An Investigation lives at `$INVESTIGATIONS_DIR/<slug>/investigation.yaml` (resol
 
 See [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md) for the canonical data model.
 
+## Layout (investigation-centric, nested)
+
+Studies live **nested under their investigation**:
+`investigations/<inv>/studies/<slug>/study.yaml`, each carrying an `investigation: <inv>`
+back-ref. The investigation's publication/report lives at `investigations/<inv>/reports/`
+(per-investigation — there is **no global repo-wide report**).
+
+- **Resolve a study dir** (nested- and flat-aware): `python -m pbg_superpowers.paths --study <slug>`.
+- **Create a new study** under `$INVESTIGATIONS_DIR/<inv>/studies/<slug>/` (write the `investigation:` back-ref).
+- Legacy flat `studies/<slug>/` still resolves (back-compat) until a repo is migrated with `pbg-migrate-nested`.
+
+This block governs the paths below: where older text says `studies/<slug>/` or `$STUDIES_DIR/<slug>/`, prefer the resolver / the nested path.
+
+
 ## Investigation ≡ branch ≡ worktree
 
 An Investigation slug is also a **git branch name** and a **worktree directory name**. The three are kept in 1:1 correspondence so that parallel agents can each work on a different Investigation without trampling each other's files, runtime DBs (`.pbg/composite-runs.db`), or dashboard ports.
