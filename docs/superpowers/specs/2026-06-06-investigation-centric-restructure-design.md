@@ -31,7 +31,8 @@ subsequent investigations.
    lists known repos; picking one opens/navigates to that repo's dashboard URL,
    auto-starting its server if needed. No single-server re-rooting refactor.
 4. **`composites/`, `references/`, `datasets/` stay repo-level** (shared across
-   investigations). Only `studies/` nests under investigations.
+   investigations). **`studies/` AND `reports/` (publications) nest per-investigation** —
+   each investigation carries its own publication; there is NO global repo-wide report.
 5. **One spec, phased implementation** (3 PRs, ordered).
 
 ## Architecture
@@ -70,6 +71,10 @@ subsequent investigations.
   present top-level `studies:` as the legacy flat layout (so un-migrated repos still load).
 - Dashboard discovery (`server.py`) reuses `iset-list` / `iset/<name>` but resolves member
   studies under `investigations/<slug>/studies/`.
+- **Reports/publications are per-investigation**: resolve at `investigations/<slug>/reports/`
+  (add a `report_dir(inv_slug)` resolver in Phase 2). The legacy repo-level `reports/` (the
+  workspace-wide `index.html`) is retired in favor of one publication per investigation;
+  the dashboard renders the selected investigation's report, not a global one.
 
 ### Lifecycle (one investigation per branch/draft PR)
 
