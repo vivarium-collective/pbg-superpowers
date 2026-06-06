@@ -59,3 +59,25 @@ def test_migrate_preserves_git_history(tmp_path):
          "investigations/inv-a/studies/s1/study.yaml"],
         cwd=ws, capture_output=True, text=True).stdout
     assert "init" in log  # history followed across the move
+
+
+def test_soft_orphan_when_owning_investigation_absent(tmp_path):
+    """A study whose back-ref names an investigation with no investigation.yaml
+    in this checkout is a soft-orphan (not moved), not a silent mis-move."""
+    import subprocess as sp
+    sp.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    sp.run(["git", "config", "user.email", "t@t"], cwd=tmp_path, check=True)
+    sp.run(["git", "config", "user.name", "t"], cwd=tmp_path, check=True)
+    (tmp_path / "workspace.yaml").write_text("name: demo\n", encoding="utf-8")
+    inv = tmp_path / "investigations" / "inv-a"; inv.mkdir(parents=True)
+    (inv / "investigation.yaml").write_text("name: inv-a\nstudies:\n  - s1\n", encoding="utf-8")
+    for slug, owner in [("s1", "inv-a"), ("foreign", "inv-elsewhere")]:
+        d = tmp_path / "studies" / slug; d.mkdir(parents=True)
+        (d / "study.yaml").write_text(f"name: {slug}\ninvestigation: {owner}\n", encoding="utf-8")
+    sp.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    sp.run(["git", "commit", "-qm", "init"], cwd=tmp_path, check=True)
+    plan = plan_migration(tmp_path)
+    assert [m["slug"] for m in plan["moves"]] == ["s1"]          # only the present-owner study
+    orph = {o["slug"]: o for o in plan["orphans"]}
+    assert "foreign" in orph
+    assert "inv-elsewhere" in orph["foreign"].get("reason", "")  # explains why

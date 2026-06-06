@@ -2,8 +2,8 @@
 
 Maps each flat ``studies/<slug>/`` to its owning investigation (investigation.yaml
 ``studies[]`` ∪ study.yaml ``investigation:`` back-ref), moves with ``git mv`` to
-preserve history, and rewrites ``workspace.yaml`` ``layout:``. Studies with no owner
-are reported as orphans and left in place. Idempotent — re-running after a migration
+preserve history, and rewrites ``workspace.yaml`` ``layout:``. Studies whose owning investigation is absent here (lives on another branch)
+or unknown are reported as orphans and left in place. Idempotent — re-running after a migration
 finds nothing left to move.
 
 CLI:
@@ -47,6 +47,14 @@ def plan_migration(workspace: Path) -> dict:
     """Compute the flat->nested moves + orphans without touching the filesystem."""
     wp = WorkspacePaths.load(workspace)
     owners = _owner_map(wp)
+    inv_root = wp.dir("investigations")
+    # Only nest a study if its owning investigation actually exists here
+    # (investigation.yaml present). Studies owned by an investigation that lives
+    # on another branch are SOFT-ORPHANS — left in place with a reason, never
+    # mis-moved under an empty investigation dir.
+    present = set()
+    if inv_root.is_dir():
+        present = {f.parent.name for f in inv_root.glob("*/investigation.yaml")}
     flat = wp.dir("studies")
     moves: list[dict] = []
     orphans: list[dict] = []
@@ -55,12 +63,17 @@ def plan_migration(workspace: Path) -> dict:
             if not (s / "study.yaml").is_file():
                 continue
             inv = owners.get(s.name)
-            if inv:
-                dest = wp.dir("investigations") / inv / "studies" / s.name
+            if inv and inv in present:
+                dest = inv_root / inv / "studies" / s.name
                 moves.append({"slug": s.name, "src": str(s), "dest": str(dest),
                               "investigation": inv})
+            elif inv:
+                orphans.append({"slug": s.name, "src": str(s),
+                                "reason": f"owning investigation {inv!r} has no "
+                                          f"investigation.yaml in this checkout"})
             else:
-                orphans.append({"slug": s.name, "src": str(s)})
+                orphans.append({"slug": s.name, "src": str(s),
+                                "reason": "no owning investigation"})
     return {"workspace": str(workspace), "moves": moves, "orphans": orphans}
 
 
@@ -104,7 +117,7 @@ def main(argv=None) -> int:
     for m in res["moves"]:
         print(f"  {m['slug']} -> investigations/{m['investigation']}/studies/{m['slug']}")
     for o in res["orphans"]:
-        print(f"  ORPHAN (left in place): {o['slug']}")
+        print(f"  ORPHAN (left in place): {o['slug']} — {o.get('reason','')}")
     if args.dry_run:
         print("(dry-run)")
     return 0
