@@ -119,10 +119,14 @@ def _main(argv=None) -> int:
     ap.add_argument("--workspace", help="workspace root (default: walk up from CWD)")
     ap.add_argument("--env", action="store_true",
                     help="print 'export <NAME>_DIR=...' for every directory")
+    ap.add_argument("--study", help="resolve a study dir by slug (nested-aware)")
     args = ap.parse_args(argv)
 
     root = Path(args.workspace).resolve() if args.workspace else find_workspace_root(Path.cwd())
     wp = WorkspacePaths.load(root)
+    if args.study:
+        print(wp.study_dir(args.study))
+        return 0
     if args.env:
         for key in list(LAYOUT_DEFAULTS) + ["package"]:
             print(f"export {key.upper()}_DIR={wp.dir(key)}")
