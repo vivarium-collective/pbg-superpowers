@@ -67,20 +67,25 @@ inputs:
   expert_docs: [inputs/notes/rashmi-2026-05-31.md]
 ```
 
-### Sidebar
-- KEEP the global top-rail **Inputs** item, but reframe its lead to *repo-wide /
-  shared data sources* (imported source packages + shared datasets/refs).
-- Add an **Inputs** entry to the per-investigation lower section (the rail group that
-  shows the loaded investigation's Studies). It is visible only when an investigation
-  is loaded and shows *that* investigation's inputs.
+### Inputs tab — investigation-first (parallel to SimulationsDB)
+The global top-rail **Inputs** tab shows TWO sections, **current-investigation-first**
+(the same pattern as SimulationsDB):
+1. **This investigation's inputs** (top) — the loaded investigation's
+   datasets/references/expert-docs from `investigations/<slug>/inputs/` +
+   `investigation.yaml.inputs`. (Revised 2026-06-07: surfaced in the global tab rather
+   than a separate sidebar item.)
+2. **Repo-wide data sources** (below) — imported source packages (e.g. `ecoli-sources`
+   TSVs) + shared datasets/refs not owned by any investigation.
+On-disk ownership is unchanged (investigation-specific under
+`investigations/<slug>/inputs/`; repo-wide stays repo-level).
 
 ### Server
 - `WorkspacePaths.inputs_dir(slug) -> investigations/<slug>/inputs` (pbg-superpowers +
   vendored dashboard copy, drift-guarded like `study_dir`).
-- The inputs endpoint becomes investigation-scoped: `GET /api/iset/<slug>/inputs`
-  returns `{datasets, references, expert_docs}` resolved from
-  `investigations/<slug>/inputs/` + `investigation.yaml.inputs`. The old global
-  `page-workspace-inputs` route is removed (or 410s with a pointer).
+- `GET /api/inputs` returns `{investigation: {datasets, references, expert_docs},
+  global: {datasets, references, sources}, current: <slug>}` — the investigation block
+  is the loaded investigation's owned inputs; `global` is repo-wide; `current` lets the
+  SPA order investigation-first (parallel to `/api/simulations`).
 
 ### Migration (the one decision needing the author)
 - `pbg-migrate-inputs` (new CLI, idempotent): assign each existing repo-level

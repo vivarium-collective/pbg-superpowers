@@ -164,7 +164,7 @@ def investigation_inputs(ws_root: Path, slug: str, *, repo_fallback: bool = Fals
 
 ---
 
-## Task 4: Inputs in the per-investigation sidebar — global tab KEPT (vivarium-dashboard)
+## Task 4: Inputs tab — investigation-first sections (vivarium-dashboard)
 
 **Files:** `templates/index.html.j2` (remove global Inputs rail item ~317-326; the inputs page section ~521), `static/walkthrough.js` (rail render + an inputs panel in the investigation detail).
 
