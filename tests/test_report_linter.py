@@ -788,3 +788,25 @@ def test_viz_stale_error_under_strict(tmp_path):
     _check_viz_stale_vs_latest_run(ctx)
     stale = [f for f in ctx.findings if f.check == "viz_stale_vs_latest_run"]
     assert len(stale) == 1 and stale[0].level == "error"
+def test_finding_without_statement_fires_for_empty_or_missing(tmp_path):
+    """finding_without_statement is error-level for empty/missing statements."""
+    from pathlib import Path
+    from pbg_superpowers.report_linter import (
+        _LintContext,
+        _check_finding_without_statement,
+    )
+    spec = {
+        "findings": [
+            {"id": "F-filled", "statement": "Something concrete happened."},
+            {"id": "F-empty", "statement": "   "},
+            {"id": "F-missing"},
+        ]
+    }
+    ctx = _LintContext(ws_root=Path("."), slug="s1", spec=spec)
+    _check_finding_without_statement(ctx)
+    errs = [f for f in ctx.findings if f.check == "finding_without_statement"]
+    assert len(errs) == 2
+    assert all(f.level == "error" for f in errs)
+    assert any("F-empty" in f.message for f in errs)
+    assert any("F-missing" in f.message for f in errs)
+    assert not any("F-filled" in f.message for f in errs)
