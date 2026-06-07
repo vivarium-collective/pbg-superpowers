@@ -53,3 +53,20 @@ def test_manifest_diff_flags_orphans(tmp_path):
     diff = manifest_diff(d, entries)
     assert "charts/orphan.svg" in diff["untracked"]
     assert "charts/tracked.svg" not in diff["untracked"]
+
+
+def test_freshness_pinned_source_run_fresh(tmp_path):
+    d = _study(tmp_path); chart = d / "charts" / "c.svg"; chart.write_text("x")
+    stamp_meta(chart, source_run_id="runA", generation_id=None,
+               rendered_at=10.0, command="cmd")
+    entry = {"name": "v", "chart": "charts/c.svg", "render": "cmd", "source_run": "runA"}
+    # latest is a DIFFERENT, newer run — the pin wins.
+    assert chart_freshness(d, entry, {"run_id": "runB", "completed_at": 999.0}) == "fresh"
+
+
+def test_freshness_pinned_source_run_stale(tmp_path):
+    d = _study(tmp_path); chart = d / "charts" / "c.svg"; chart.write_text("x")
+    stamp_meta(chart, source_run_id="OTHER", generation_id=None,
+               rendered_at=10.0, command="cmd")
+    entry = {"name": "v", "chart": "charts/c.svg", "render": "cmd", "source_run": "runA"}
+    assert chart_freshness(d, entry, {"run_id": "runA", "completed_at": 1.0}) == "stale"
