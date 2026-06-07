@@ -158,17 +158,17 @@ def investigation_inputs(ws_root: Path, slug: str, *, repo_fallback: bool = Fals
 - [ ] **Step 1:** Vendor `investigation_inputs.py` into `vivarium_dashboard/lib/` (byte-faithful function body) + a drift-guard test like the `viz_freshness` mirror.
 - [ ] **Step 2: Failing test** — a nested investigation with an `inputs:` block; assert `GET /api/iset/<slug>/inputs` (via the pure seam `_iset_inputs_payload(ws_root, slug)`) returns the declared datasets/references/expert_docs.
 - [ ] **Step 3: Run — FAIL.**
-- [ ] **Step 4: Implement** — add `_iset_inputs_payload(ws_root, slug)` delegating to the vendored `investigation_inputs(ws_root, slug, repo_fallback=True)`; add route `GET /api/iset/<slug>/inputs` (mirror the existing `/api/iset/<slug>/report` route added in the restructure). Remove the global `page-workspace-inputs` data route (or have it 410 with a pointer to per-investigation inputs).
+- [ ] **Step 4: Implement** — add `_iset_inputs_payload(ws_root, slug)` delegating to the vendored `investigation_inputs(ws_root, slug, repo_fallback=True)`; add route `GET /api/iset/<slug>/inputs` (mirror the existing `/api/iset/<slug>/report` route added in the restructure). KEEP the global `page-workspace-inputs` data route (reframed: repo-wide/shared sources) and ADD the per-investigation `/api/iset/<slug>/inputs` alongside it. Do NOT remove the global route.
 - [ ] **Step 5: Run — PASS.** Run existing iset tests for regressions.
 - [ ] **Step 6: Commit** `feat(dashboard): per-investigation inputs endpoint (/api/iset/<slug>/inputs)`
 
 ---
 
-## Task 4: Inputs in the per-investigation sidebar (vivarium-dashboard)
+## Task 4: Inputs in the per-investigation sidebar — global tab KEPT (vivarium-dashboard)
 
 **Files:** `templates/index.html.j2` (remove global Inputs rail item ~317-326; the inputs page section ~521), `static/walkthrough.js` (rail render + an inputs panel in the investigation detail).
 
-- [ ] **Step 1:** Remove the global top-rail **Inputs** link (`index.html.j2:317-326`). 
+- [ ] **Step 1:** KEEP the global top-rail **Inputs** link; reframe its page lead to "Repo-wide / shared data sources (imported source packages, shared TSVs/datasets) — investigation-specific inputs live in each investigation's sidebar." 
 - [ ] **Step 2:** In the per-investigation rail group (where the loaded investigation's Studies render — `_renderRailInvestigationGroups`), add an **Inputs** entry that, when clicked, fetches `/api/iset/<slug>/inputs` for the current slug and renders datasets/references/expert-docs (reuse the markup from the old inputs page section). Show a small "migrating: showing repo-level inputs" note when the payload's `_repo_fallback` is true.
 - [ ] **Step 3:** `node --check vivarium_dashboard/static/walkthrough.js`. Manual verify: load an investigation → Inputs appears in its rail → shows its datasets/refs.
 - [ ] **Step 4: Commit** `feat(dashboard): Inputs moves into the per-investigation sidebar`
@@ -179,7 +179,7 @@ def investigation_inputs(ws_root: Path, slug: str, *, repo_fallback: bool = Fals
 
 **Files:** Create `pbg_superpowers/migrate_inputs.py` + `[project.scripts] pbg-migrate-inputs`; Test `tests/test_migrate_inputs.py`; docs `skills/pbg-investigation/SKILL.md`, `docs/concepts/vivarium-dashboard-model.md`.
 
-- [ ] **Step 1: Failing test** — a workspace with repo-level `datasets/d1.csv` used (referenced in study.yaml) by exactly one investigation's study → `plan_inputs_migration(ws_root)` assigns `d1.csv` to that investigation; a dataset referenced by two investigations → reported `ambiguous` (not assigned).
+- [ ] **Step 1: Failing test** — a workspace with repo-level `datasets/d1.csv` used (referenced in study.yaml) by exactly one investigation's study → `plan_inputs_migration(ws_root)` assigns `d1.csv` to that investigation; a dataset referenced by two investigations OR an imported source package → STAYS global (reported, not assigned).
 - [ ] **Step 2: Run — FAIL.**
 - [ ] **Step 3: Implement** `plan_inputs_migration(ws_root) -> {assignments: {slug: [items]}, ambiguous: [items]}` (heuristic: map each repo-level dataset/ref to the investigations whose studies reference it; 1 → assign, >1 → ambiguous) and `migrate_inputs(ws_root, *, apply=False)` that `git mv`s assigned datasets into `investigations/<slug>/inputs/datasets/` + writes the `inputs:` block; ambiguous items are printed, not moved. Idempotent. CLI `main()`.
 - [ ] **Step 4: Run — PASS.**

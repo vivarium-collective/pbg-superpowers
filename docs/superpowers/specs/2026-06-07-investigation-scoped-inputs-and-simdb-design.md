@@ -21,18 +21,22 @@ the two redesign pieces (#3 Inputs, #4 SimulationsDB).
 
 ## Goal
 
-Inputs become **owned by the investigation** and live in the per-investigation
-sidebar section. SimulationsDB stays one **global** table but tags every run by
+Investigation-specific Inputs become **owned by the investigation** (per-investigation
+sidebar); a **global Inputs tab is kept** for repo-wide/shared data sources. SimulationsDB stays one **global** table but tags every run by
 investigation/study, shows its **emitter type**, defaults to the loaded
 investigation, and surfaces SQLite + Parquet + XArray runs.
 
 ## Locked decisions (from brainstorming)
 
-1. **Inputs: per-investigation ownership.** Each investigation owns its inputs under
-   `investigations/<slug>/inputs/`; `investigation.yaml` declares them. No global
-   Inputs page. Cross-investigation references are duplicated or symlinked.
-2. **This reverses** the investigation-centric-restructure decision that kept
-   `references/`+`datasets/` repo-level — accepted, with a one-time migration pass.
+1. **Inputs: HYBRID (global repo-wide + per-investigation).** A global **Inputs** tab
+   REMAINS in the top rail for **repo-wide / shared data sources** — imported source
+   packages (e.g. v2ecoli's `ecoli-sources` TSVs) and datasets/refs not tied to any
+   investigation. **Investigation-specific** datasets/references are owned
+   per-investigation under `investigations/<slug>/inputs/` and shown in the
+   per-investigation sidebar. An input is either *global* (repo-wide) or
+   *investigation-owned*. (Revised 2026-06-07 from pure per-investigation ownership.)
+2. **Repo-wide sources stay repo-level** (the global tab keeps the restructure's pool);
+   only investigation-specific inputs move into the investigation (migration pass).
 3. **SimulationsDB: global table, current-investigation default.** All runs, columns
    investigation · study · run · emitter type · time · status; defaults to filtering
    on the loaded investigation with a toggle to "all"; filters by study/emitter.
@@ -64,7 +68,8 @@ inputs:
 ```
 
 ### Sidebar
-- Remove the global top-rail **Inputs** item (`index.html.j2:317-326`).
+- KEEP the global top-rail **Inputs** item, but reframe its lead to *repo-wide /
+  shared data sources* (imported source packages + shared datasets/refs).
 - Add an **Inputs** entry to the per-investigation lower section (the rail group that
   shows the loaded investigation's Studies). It is visible only when an investigation
   is loaded and shows *that* investigation's inputs.
@@ -78,11 +83,11 @@ inputs:
   `page-workspace-inputs` route is removed (or 410s with a pointer).
 
 ### Migration (the one decision needing the author)
-- `pbg-migrate-inputs` (new CLI, idempotent): for each existing repo-level
-  `datasets/` entry and `references/papers.bib` key, assign it to an investigation.
-  Default assignment heuristic: an item used by exactly one investigation's studies →
-  that investigation; ambiguous/shared items → reported for manual assignment (printed
-  list; not moved). Moves via `git mv` (history preserved); writes the `inputs:` block.
+- `pbg-migrate-inputs` (new CLI, idempotent): assign each existing repo-level
+  `datasets/` entry / `references/papers.bib` key. Heuristic: an item used by exactly
+  one investigation's studies → that investigation; **imported source packages and
+  multi-investigation / unused items → STAY global** (reported, not moved). Moves via
+  `git mv` (history preserved); writes the `inputs:` block.
 - Until migrated, the resolver falls back to repo-level `references/`+`datasets/` so
   nothing 404s mid-migration (transitional read-through, logged).
 
