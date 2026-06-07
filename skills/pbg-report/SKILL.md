@@ -75,6 +75,14 @@ Extract every `chart:` and `companion_charts:` path mentioned anywhere in `$INVE
 - **blocking** if the file doesn't exist. The render would 404.
 - **warning** if the cited chart appears in any study yaml's `companion_charts:` list (= was demoted) but the investigation verdict cites it as the primary `chart:`. The verdict is one revision behind. Print the (verdict line, demoting study) pair.
 
+### A3b. Superseded-run chart hygiene — count the FILES, not the `visualizations:` list
+
+**The report's charts section renders every `*.png`/`*.svg` FILE in a study's `charts/` directory** (via `/api/study-charts` → `discover_static_study_charts`), **NOT** the `visualizations:` list in `study.yaml`. So trimming `visualizations:` does NOT remove a chart from what a reviewer sees — the file is still discovered. To actually drop a chart you must **delete the file** (`git rm charts/<name>.png charts/<name>.svg`).
+
+Check: `ls "$STUDIES_DIR"/<study>/charts/*.png` and count distinct chart basenames. Compare against the canonical/latest run.
+
+- **warning** — a study's `charts/` dir holds figures from **more than one run/seed** (e.g. a `seed0` reproduction + `step2/step3` sixpanels alongside the `seed1` canonical). Reviewers read this as "which run is real?" and routinely ask to "keep only the latest." Recommend deleting the superseded **files** (not just the `visualizations:` entries), and rewriting any prose/`provenance` references that point at the deleted files so the report has no dead paths. When a new canonical run lands, prune the old run's files in the same edit.
+
 ### A4. Numerical-claim consistency
 
 For each chart referenced from the verdict, read its `<basename>.meta.json` sibling (same dir). Extract numeric values + units from the meta's `interpretation:` and `caption:` fields. Grep the verdict text for the same units (g/L, mM, orders, hours, mg/L, etc.). Flag when a verdict number doesn't match its chart-meta within 5% (or isn't an obvious round-number of it).

@@ -583,12 +583,20 @@ def start(workspace: Path, port: int | None = None,
 
     log = _log_file(workspace)
     log.parent.mkdir(parents=True, exist_ok=True)
+    # Force Python UTF-8 mode in the detached server. Without this, a server
+    # launched from a process whose locale resolves to ascii/C makes open()
+    # default to ascii — so any unguarded read of a study.yaml / chart / .meta
+    # containing unicode (τ, →, ⇌, ×, ⁷, …) raises UnicodeDecodeError, e.g.
+    # /api/study-charts returning {error: 'ascii' codec...} → reports with no
+    # figures. PYTHONUTF8=1 makes open() default to utf-8 regardless of locale.
+    server_env = {**os.environ, "PYTHONUTF8": "1"}
     with log.open("ab") as logf:
         proc = subprocess.Popen(
             cmd, cwd=str(workspace),
             stdout=logf, stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
             start_new_session=True,  # detach from caller's process group
+            env=server_env,
         )
 
     info = {
