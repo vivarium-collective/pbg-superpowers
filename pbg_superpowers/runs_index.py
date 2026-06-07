@@ -12,3 +12,52 @@ def emitter_type_of(emitter_path: str | None) -> str:
     if ".parquet" in p:
         return "Parquet"
     return "SQLite"
+
+
+def _all_runs(runs_db: Path) -> list[dict]:
+    runs_db = Path(runs_db)
+    if not runs_db.is_file():
+        return []
+    cols = ("run_id", "started_at", "completed_at", "status", "emitter_path")
+    try:
+        conn = sqlite3.connect(f"file:{runs_db}?mode=ro", uri=True, timeout=1.0)
+        try:
+            have = {r[1] for r in conn.execute("PRAGMA table_info(runs_meta)")}
+            use = [c for c in cols if c in have]
+            rows = conn.execute(
+                f"SELECT {', '.join(use)} FROM runs_meta "
+                "ORDER BY COALESCE(completed_at, started_at) DESC"
+            ).fetchall()
+        finally:
+            conn.close()
+        return [dict(zip(use, r)) for r in rows]
+    except sqlite3.Error:
+        return []
+
+
+def list_all_runs(ws_root: Path) -> list[dict]:
+    """All runs across every study, tagged investigation/study/emitter, newest first."""
+    from .workspace_paths import WorkspacePaths
+    from .backfill_runs import backfill_study_runs
+    wp = WorkspacePaths.load(Path(ws_root))
+    out: list[dict] = []
+    for sd in wp.iter_study_dirs():
+        slug = sd.name
+        owner = wp.study_owner(slug)
+        try:
+            backfill_study_runs(sd, spec_id=slug)
+        except Exception:
+            pass
+        for r in _all_runs(sd / "runs.db"):
+            out.append({
+                "investigation": owner,
+                "study": slug,
+                "run_id": r.get("run_id"),
+                "started_at": r.get("started_at"),
+                "completed_at": r.get("completed_at"),
+                "status": r.get("status"),
+                "emitter_path": r.get("emitter_path"),
+                "emitter_type": emitter_type_of(r.get("emitter_path")),
+            })
+    out.sort(key=lambda x: (x.get("completed_at") or x.get("started_at") or 0), reverse=True)
+    return out
