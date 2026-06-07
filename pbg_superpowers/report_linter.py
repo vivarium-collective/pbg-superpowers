@@ -301,6 +301,9 @@ CHECKS = (
     # Pass 10A findings linter additions
     "decide_phase_missing_findings",
     "finding_without_evidence",
+    # Empty finding statement renders as "(no statement)" + an empty Key-takeaways
+    # bullet (dnaa-replication 2026-06-07). Error: every finding must be filled in.
+    "finding_without_statement",
     "finding_cites_unknown_bib_key",
     "finding_references_unknown_expert_doc",
     # Derive-on-read status drift (v2ecoli round-2 #2)
@@ -736,6 +739,33 @@ def _check_finding_without_evidence(ctx: _LintContext) -> None:
                 "to the run / behavior_test that produced it."
             ),
             check="finding_without_evidence",
+        )
+
+
+def _check_finding_without_statement(ctx: _LintContext) -> None:
+    """A finding with no `statement` renders as '(no statement)' in the report
+    and produces an empty Key-takeaways bullet. Every finding must carry a
+    one-to-two-sentence statement. Error (blocking)."""
+    findings = ctx.spec.get("findings") or []
+    if not isinstance(findings, list):
+        return
+    for idx, f in enumerate(findings):
+        if not isinstance(f, dict):
+            continue
+        stmt = f.get("statement")
+        if isinstance(stmt, str) and stmt.strip():
+            continue
+        fid = f.get("id", f"<index-{idx}>")
+        ctx.add(
+            level="error",
+            field_path=f"findings[{idx}].statement",
+            message=(
+                f"Finding {fid!r} has no statement. It renders as "
+                "'(no statement)' in the report and produces an empty "
+                "Key-takeaways bullet. Add a one-to-two sentence statement "
+                "describing what was found."
+            ),
+            check="finding_without_statement",
         )
 
 
@@ -1829,6 +1859,7 @@ _CHECK_FUNCTIONS = (
     _check_truncated_takeaways,
     _check_decide_phase_missing_findings,
     _check_finding_without_evidence,
+    _check_finding_without_statement,
     _check_finding_cites_unknown_bib_key,
     _check_finding_references_unknown_expert_doc,
     _check_visualization_addresses,
