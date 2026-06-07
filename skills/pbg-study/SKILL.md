@@ -10,6 +10,20 @@ argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|b
 
 The end-to-end interface for **Studies** in the vivarium-dashboard, organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide; see [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md#study-lifecycle)).
 
+## Layout (investigation-centric, nested)
+
+Studies live **nested under their investigation**:
+`investigations/<inv>/studies/<slug>/study.yaml`, each carrying an `investigation: <inv>`
+back-ref. The investigation's publication/report lives at `investigations/<inv>/reports/`
+(per-investigation — there is **no global repo-wide report**).
+
+- **Resolve a study dir** (nested- and flat-aware): `python -m pbg_superpowers.paths --study <slug>`.
+- **Create a new study** under `$INVESTIGATIONS_DIR/<inv>/studies/<slug>/` (write the `investigation:` back-ref).
+- Legacy flat `studies/<slug>/` still resolves (back-compat) until a repo is migrated with `pbg-migrate-nested`.
+
+This block governs the paths below: where older text says `studies/<slug>/` or `$STUDIES_DIR/<slug>/`, prefer the resolver / the nested path.
+
+
 A Study is a self-contained research unit holding one-or-more baseline composites, variants (parameter perturbations), interventions (text-described conditions), runs, and visualizations. The **Build** phase between Design and Simulate doesn't have pbg-study subcommands directly — it's handled by `/pbg-expert` (heavy mode → sibling repo) or `/pbg-expert --lightweight` (in-workspace, single-tool or composite form), or by hand-edited code in `pbg_<workspace>/processes/`.
 
 ## Common prelude
