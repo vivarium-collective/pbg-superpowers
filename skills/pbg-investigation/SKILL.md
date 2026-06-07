@@ -40,6 +40,24 @@ inputs:
 Repo-wide source packages and shared/unused inputs stay global (repo-level `datasets/`, `references/papers.bib`). To migrate existing repo-level datasets, run `pbg-migrate-inputs` (`python -m pbg_superpowers.migrate_inputs --workspace <ws> [--apply]`): it assigns a dataset to an investigation only when exactly ONE investigation's studies reference it (by filename in `study.yaml`); multi-investigation and unused datasets are reported and left global. Default prints the plan; `--apply` performs the `git mv` and updates `investigation.yaml`.
 
 
+## The Investigation graph (discourse graph)
+
+The dashboard reframes the investigation page as an **Investigation graph**: a discourse/knowledge graph whose nodes are its member studies and whose edges are their `parent_studies` dependencies. The framing is **mechanism-centered** — the investigation's primary artifact is an *evolving mechanistic understanding* of the biology; each study is a **knowledge-producing operation** that generates evidence which updates confidence in mechanism elements. Read each node as **Question (Asks) → Evidence (Finds) → Confidence**:
+
+- **Asks** — the study's `question:`.
+- **Finds** — the study's `claim:` (one-line headline of what we now believe), falling back to the top `findings[].summary`.
+- **Confidence** — the study's `confidence:` badge (`Accepted | Investigating | Planned | Refuted`), derived from the 6-axis status when unset.
+- **Display name** — the study's `title:` (slug, prefix-stripped + humanized, when unset).
+
+These are **study-level** fields — author them per member study via `/pbg-study` (see [pbg-study → Investigation-graph fields](../pbg-study/SKILL.md)). At Design, set each study's `title:` and wire `parent_studies` with a `relation:` (`leads-to` default → solid edge; `regulatory` / `refutes` → dashed edge; `supports`). At Evaluate/Decide, set `claim:` and (when the derived value is wrong) `confidence:`.
+
+**Confidence rollup.** The investigation aggregates over its members: the graph badges each node with its study-level confidence, and the investigation's `executive.verdict_status` is the higher-level rollup a reviewer lands on first. Keep the two consistent — a `Refuted` study should be reflected in the investigation verdict.
+
+**State-first opening — `executive` is the single source.** The investigation opening is state-first and is rendered from `executive: {what_is_this, verdict, verdict_status, verdict_detail, decisions_needed:[{question, context}]}`. The **same `executive` block** drives the report's Executive summary — do not maintain a second copy. Update `verdict` / `verdict_status` (`in-progress | passed | complete | blocked | failed | planning`) as member studies pass or fail. The framing + argument come from `question:`, `hypothesis:`, and `scientific_argument: {main_claim, evidence_for[], evidence_against[], key_figures[], caveats[]}`.
+
+**parquet-runs / SimulationsDB convention.** For a member study's run to appear in SimulationsDB tagged to its study + investigation, the run's emitter output must live under the per-study path `studies/<slug>/parquet-runs/<run>/` (ParquetEmitter hive) or `studies/<slug>/runs.db` (SQLite, with `emitter_path` recorded). Bespoke runners (`canonical_runs:` scripts) must write there; the dashboard-managed `run-baseline` / `run-variant` flow already does.
+
+
 ## Investigation ≡ branch ≡ worktree
 
 An Investigation slug is also a **git branch name** and a **worktree directory name**. The three are kept in 1:1 correspondence so that parallel agents can each work on a different Investigation without trampling each other's files, runtime DBs (`.pbg/composite-runs.db`), or dashboard ports.
@@ -105,11 +123,16 @@ status: planning
 #   (3-4 sentence front-of-textbook intro)
 
 # Narrative spine (uncomment + fill as the investigation matures)
-# executive:           # headline panel
+# executive:           # state-first opening AND report Executive summary (single source)
 #   what_is_this: ""
 #   verdict: ""
-#   verdict_status: in-progress
-#   decisions_needed: []
+#   verdict_status: in-progress   # in-progress | passed | complete | blocked | failed | planning
+#   verdict_detail: ""
+#   decisions_needed: []          # [{question, context}]
+# inputs:              # per-investigation owned inputs (Inputs page)
+#   datasets: []       # [{name, path, supports_claims}]
+#   references: []     # bibkeys (joined against the shared papers.bib)
+#   expert_docs: []    # [{name, path}]
 # scientific_argument: # structured claim/evidence
 #   main_claim: ""
 #   evidence_for: []

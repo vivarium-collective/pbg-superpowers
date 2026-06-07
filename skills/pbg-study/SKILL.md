@@ -104,6 +104,50 @@ the cards. Cards show `Depends on:` / `Blocks:` link chips and a
 A parent slug that doesn't resolve to a real study shows up as
 `parent-not-found` in `blocked_by`, so dead references are visible.
 
+## Investigation-graph fields: title · claim · confidence · relation
+
+The dashboard renders the investigation page as an **Investigation graph** (a
+discourse/knowledge graph) where each study is a node framed as **Question
+(Asks) → Evidence (Finds) → Confidence**, with edges showing what a result
+*leads to*. Four study-level fields drive that rendering. **All four are
+optional** — the dashboard derives a fallback when absent — but authoring them
+explicitly makes the graph read correctly instead of guessing from slugs and
+status. They sit alongside the existing fields the graph already reads:
+`question:` is the node's "Asks", `findings:` are the produced Evidence, and the
+6-axis status feeds the derived confidence.
+
+| Field | What it is | Dashboard shows | Derive-when-absent | Authored in |
+|---|---|---|---|---|
+| `title:` | human display name (the slug stays the technical id) | graph node label, study heading, nav | slug with the `<inv>-NN-` ordering prefix stripped + humanized | **Design** |
+| `parent_studies[].relation:` | edge semantics on a dependency | solid edge (`leads-to`) or dashed edge (`regulatory` / `refutes`); `supports` reinforces | `leads-to` | **Design** |
+| `claim:` | one-line headline of the knowledge the study produced (what we now believe) | the node's "Finds" line | top `findings[].summary` | **Evaluate / Decide** |
+| `confidence:` | the study's acceptance/confidence state | node badge | from 6-axis status: completed/ran→`Accepted`, in_progress/running→`Investigating`, planned→`Planned`, failed/invalid→`Refuted` | **Decide** (when the derived value is wrong) |
+
+**Enums.**
+
+- `confidence:` ∈ `Accepted | Investigating | Planned | Refuted`.
+- `parent_studies[].relation:` ∈ `leads-to` (default) `| regulatory | supports | refutes`. Renders solid for `leads-to`, dashed for `regulatory` / `refutes`. Author the relation when declaring a dependency to express the discourse relationship, not just ordering.
+
+```yaml
+# studies/<slug>/study.yaml
+title: "DnaA-ATP hydrolysis"        # Design — keep it short; it appears in narrow graph cards
+claim: |                            # Evaluate/Decide — what we now believe
+  Intrinsic DnaA-ATP hydrolysis alone holds the ATP fraction near 30% at steady growth.
+confidence: Accepted                # Decide — only when the status-derived value is wrong
+parent_studies:
+  - {study: dnaa-01-expression-dynamics, condition: tests-passed, relation: leads-to}
+  - {study: dnaa-03-box-binding,         condition: ran,          relation: regulatory}
+```
+
+**Which subcommand sets each field.** `title:` and `parent_studies` (with
+`relation:`) are naturally authored at **Design** time — `/pbg-study new`
+scaffolds the study, then add the `title:` line and wire `parent_studies` with
+relations as you declare dependencies (these are YAML-direct; no dedicated POST
+endpoint). `claim:` and `confidence:` belong to **Evaluate/Decide** — refresh
+`claim:` once `findings:` exist (after `/pbg-study findings`), and set
+`confidence:` explicitly at Decide (alongside `/pbg-study set-verdicts`) only
+when the value derived from the 6-axis status is wrong.
+
 ## Grouping studies into Investigations
 
 Studies that share a research arc can be grouped into an **Investigation** (a named collection with its own question/hypothesis + acceptance criteria). Studies don't declare investigation membership themselves; the investigation lists them in its `studies:` field. Use `/pbg-investigation` for investigation CRUD and the `scaffold-from-plan` marquee command that auto-generates an investigation + all constituent studies from a plan PDF.

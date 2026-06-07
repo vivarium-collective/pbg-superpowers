@@ -275,6 +275,9 @@ The 8 sections above are the design backbone. The v4 schema (`schema_version: 4`
 The narrative spine is grouped into 4 layers. The 6 fields marked ★ are the ones to author first; they render at the top of the report and let a reviewer land on the study without reading the YAML.
 
 **Executive layer** — what a reviewer sees first.
+- `title:` — the human **display name** shown everywhere the study appears (Investigation-graph node, study heading, nav). When absent the dashboard derives it from the slug (strips the `<inv>-NN-` ordering prefix, humanizes). The slug stays the technical id. Authored at **Design**; keep it short — it appears in narrow graph cards.
+- `claim:` — a **one-line headline of the knowledge the study produced** (what we now believe), shown as the Investigation-graph node's "Finds". When absent the dashboard falls back to the top `findings[].summary`. Authored/refreshed at **Evaluate/Decide** once findings exist.
+- `confidence:` — the study's acceptance/confidence state, shown as the Investigation-graph node badge. Enum: `Accepted | Investigating | Planned | Refuted`. When absent it's derived from the 6-axis status (completed/ran→`Accepted`, in_progress/running→`Investigating`, planned→`Planned`, failed/invalid→`Refuted`). Authored explicitly at **Decide** only when the derived value is wrong.
 - `runtime:` — per-study execution overrides: `{subprocess_timeout_s, default_emitter: sqlite|xarray, max_generations, post_run_scripts}`. Defaults to workspace settings; populate only what differs.
 - **★ `report:`** — the exec summary panel: `{title, verdict, confidence: high|medium|low, evidence_quality: calibrated|literature-matched|aspirational|regression-only, objective, conclusion, main_insight, caveat, key_metrics: [...]}`. `verdict` is free-form (common values: `passing | passing-with-caveats | failing-bio | failing-impl | inconclusive | not-yet-run`).
 - **★ `study_card:`** — one-paragraph dashboard card: `{goal, mechanism, why_before_next, expected_result, main_expert_question}`. Distinct from `report.objective` (multi-sentence). `main_expert_question` surfaces in the expert-review panel.
@@ -302,7 +305,7 @@ The narrative spine is grouped into 4 layers. The 6 fields marked ★ are the on
 
 The investigation schema (`schema_version: 2`) adds a parallel narrative spine that mirrors the per-study spine at a level up. All fields are optional — a v1 spec validates unchanged — but every new investigation scaffolded via `/pbg-investigation new` (or POST `/api/iset-create`) lands with them commented in as TODOs.
 
-- `executive: {what_is_this, verdict, verdict_status, decisions_needed: [...]}` — headline panel rendered at the top of the report.
+- `executive: {what_is_this, verdict, verdict_status, verdict_detail, decisions_needed: [{question, context}]}` — the **state-first opening** AND the report's Executive summary (single source — keep them in sync). `verdict_status` ∈ `in-progress | passed | complete | blocked | failed | planning`. See [The Investigation graph](#the-investigation-graph-discourse-graph).
 - `scientific_argument: {main_claim, evidence_for: [...], evidence_against: [...], key_figures: [...], caveats: [...], interpretation_ref}` — the chain of reasoning, distinct from the bottom-line verdict.
 - `biological_story:` — multi-paragraph mechanism prose. The textbook chapter.
 - `lead:` — 3-4 sentence front-of-textbook intro (first thing a reader sees, above `biological_story`).
@@ -310,6 +313,7 @@ The investigation schema (`schema_version: 2`) adds a parallel narrative spine t
 - `how_to_read:` — evaluator tips ("Read studies in order. Each `report.verdict` is the headline. Open viz only when a primary test fails."). Markdown allowed.
 - `glossary: [{term, definition}]` — investigation-local term definitions.
 - `guidelines: {literature_anchors, parameter_catalog, calibration_targets, naming_conventions, ...}` — investigation-wide rules every member study respects.
+- `inputs: {datasets: [{name, path, supports_claims}], references: [bibkeys], expert_docs: [{name, path}]}` — per-investigation owned inputs, rendered on the Inputs page. `references` bibkeys join the shared `references/papers.bib` for title/link/BibTeX. Dashboard uploads land under `investigations/<slug>/inputs/…` and append here.
 
 The `studies:` list still controls dashboard grouping/visibility; the DAG topology is computed from each member study's `pipeline_gate.prerequisites:` at render time.
 
@@ -416,13 +420,33 @@ An Investigation slug is also a **git branch name** and a **worktree directory n
 
 **Known migration note (v2ecoli).** The `dnaa-replication` investigation in v2ecoli was created before this convention, on a branch named `dnaa-replication-studies` (slug-vs-branch mismatch). To bring it into compliance, run `git branch -m dnaa-replication-studies dnaa-replication` on the relevant worktree's checkout, then `/pbg-investigation open dnaa-replication` to materialize it at the standard worktree location.
 
+### The Investigation graph (discourse graph) {#the-investigation-graph-discourse-graph}
+
+The dashboard renders the investigation page as an **Investigation graph**: a discourse/knowledge graph whose nodes are the member studies and whose edges are their `parent_studies` dependencies (see [Study dependencies](#study-dependencies-dag) for the edge `relation:` semantics).
+
+**Mechanism-centered intent.** The investigation's primary artifact is not any single run or chart — it is the *evolving mechanistic understanding* of the biology. Studies are **knowledge-producing operations**: each one generates evidence that updates confidence in elements of that mechanism. The graph makes this legible by reading every node as **Question (Asks) → Evidence (Finds) → Confidence**:
+
+| Node element | Study field | Fallback |
+|---|---|---|
+| **Asks** | `question:` | — |
+| **Finds** | `claim:` | top `findings[].summary` |
+| **Confidence** (badge) | `confidence:` ∈ `Accepted \| Investigating \| Planned \| Refuted` | derived from 6-axis status (completed/ran→Accepted, in_progress/running→Investigating, planned→Planned, failed/invalid→Refuted) |
+| Display name | `title:` | slug, prefix-stripped + humanized |
+| Edge | `parent_studies[].relation:` ∈ `leads-to \| regulatory \| supports \| refutes` | `leads-to` (solid edge; `regulatory`/`refutes` dashed) |
+
+All five are study-level — authored via `/pbg-study` (`title:` + `relation:` at Design; `claim:` + `confidence:` at Evaluate/Decide). See [pbg-study → Investigation-graph fields](../../skills/pbg-study/SKILL.md).
+
+**State-first opening.** The investigation opening is rendered from the investigation's `executive:` block (`{what_is_this, verdict, verdict_status, verdict_detail, decisions_needed:[{question, context}]}`) — and that **same block** is the single source for the report's Executive summary (do not maintain a second copy). `verdict_status` ∈ `in-progress | passed | complete | blocked | failed | planning`. The per-study `confidence:` badges roll up into the investigation `verdict` / `verdict_status`; keep the two consistent.
+
 ### Study dependencies (DAG)
 
-Studies can declare ordering via the optional `parent_studies:` field. Each entry is either a bare slug (legacy, normalized to `{study, condition: tests-passed}`) or an object `{study: <slug>, condition: tests-passed | ran | complete}`. Conditions:
+Studies can declare ordering via the optional `parent_studies:` field. Each entry is either a bare slug (legacy, normalized to `{study, condition: tests-passed}`) or an object `{study: <slug>, condition: tests-passed | ran | complete, relation?: leads-to | regulatory | supports | refutes}`. Conditions:
 
 - `tests-passed` — parent's `tests.last_results.passed > 0` AND `failed == 0`.
 - `ran` — parent's `status` is one of `{ran, complete}`.
 - `complete` — parent's `status == complete`.
+
+The optional `relation:` carries the **discourse semantics** of the edge in the [Investigation graph](#the-investigation-graph-discourse-graph), independent of the gating `condition`. Enum: `leads-to` (default) `| regulatory | supports | refutes`. The graph renders `leads-to` / `supports` as solid edges and `regulatory` / `refutes` as dashed edges. Author the relation when declaring a dependency to express *why* one study follows another, not just *that* it does.
 
 **API**: `GET /api/investigations` returns each study with computed `parent_studies` (normalized to object form), `blocked: bool`, and `blocked_by: [{study, condition, missing-diagnostic}]`. A parent that doesn't resolve to a known study slug surfaces as `parent-not-found` in `blocked_by`.
 
@@ -439,6 +463,7 @@ A completed execution of a baseline composite or variant. The dashboard records 
 - **Shape:** `{run_id, variant: <name|null>, composite: <baseline-entry-name>, label, status, n_steps}`. `variant: null` indicates a baseline run.
 - **API:** `POST /api/study-run-baseline {study, composite?}`, `POST /api/study-run-variant {study, variant}`, `POST /api/study-run-delete`, `POST /api/study-runs-clear`, `POST /api/study-comparison-add {study, run_ids}`.
 - **Skill:** `/pbg-study run-baseline`, `/pbg-study run-variant`.
+- **SimulationsDB tagging convention.** For a run to surface in SimulationsDB tagged to its study + investigation, its emitter output must live under the per-study path `studies/<slug>/parquet-runs/<run>/` (ParquetEmitter hive) or `studies/<slug>/runs.db` (SQLite, with `emitter_path` recorded). The dashboard-managed baseline/variant flow already writes there; **bespoke `canonical_runs:` runners must write there too** or their runs won't be tagged.
 
 #### Canonical run recipe (bespoke scripts)
 
