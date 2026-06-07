@@ -48,3 +48,8 @@ def test_paths_cli_study_dir(tmp_path, capsys):
     out = capsys.readouterr().out.strip()
     assert rc == 0
     assert out.endswith("investigations/inv-a/studies/s1")
+
+
+def test_inputs_dir_nested(tmp_path):
+    wp = _ws(tmp_path, nested=True)
+    assert wp.inputs_dir("inv-a") == tmp_path / "investigations" / "inv-a" / "inputs"

@@ -167,6 +167,10 @@ class WorkspacePaths:
                     seen.add(s.name)
                     yield s
 
+    def inputs_dir(self, inv_slug: str) -> Path:
+        """investigations/<inv_slug>/inputs (per-investigation owned inputs)."""
+        return self.dir("investigations") / inv_slug / "inputs"
+
     def report_dir(self, inv_slug: str) -> Path:
         """Per-investigation report/publication dir: investigations/<slug>/reports/."""
         return self.dir("investigations") / inv_slug / "reports"
