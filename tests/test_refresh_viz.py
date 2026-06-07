@@ -38,3 +38,12 @@ def test_refresh_reports_entries_without_command(tmp_path):
 def test_refresh_no_visualizations(tmp_path):
     d = _study(tmp_path)
     assert refresh_study_viz(d, {}, {"run_id": "r"}) == []
+
+
+def test_refresh_pinned_stamps_source_run(tmp_path):
+    d = _study(tmp_path)
+    spec = {"visualizations": [{
+        "name": "v", "chart": "charts/c.svg", "source_run": "PINNED",
+        "render": "python -c \"open('charts/c.svg','w').write('<svg/>')\""}]}
+    refresh_study_viz(d, spec, {"run_id": "LATEST", "completed_at": 1.0})
+    assert read_meta(d / "charts" / "c.svg")["source_run_id"] == "PINNED"
