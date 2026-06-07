@@ -168,26 +168,6 @@ def backfill(workspace: Path, *, dry_run: bool = False) -> dict:
     return result
 
 
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--workspace", default=".", help="workspace root")
-    ap.add_argument("--dry-run", action="store_true")
-    args = ap.parse_args(argv)
-    res = backfill(Path(args.workspace), dry_run=args.dry_run)
-    if res.get("error"):
-        print("ERROR:", res["error"])
-        return 1
-    print(f"DB: {res['db']}")
-    print(f"completed stale 'running' rows: {len(res['completed_stale'])} {res['completed_stale']}")
-    print(f"skipped (already in DB): {len(res['skipped'])}")
-    print(f"inserted: {len(res['inserted'])}")
-    for r in res["inserted"]:
-        print(f"  + {r['emitter']:7} {r['run_id']:24} -> {r['study']} / {r['investigation']} (ensemble={r['ensemble_size']})")
-    if args.dry_run:
-        print("(dry-run — no writes)")
-    return 0
-
-
 def backfill_study_runs(study_dir, spec_id: str, *, emitter_subdir: str = "out") -> int:
     """Register any on-disk emitter run directory under
     ``<study_dir>/<emitter_subdir>/<run_id>/`` (containing *.parquet / *.zarr
@@ -232,6 +212,26 @@ def backfill_study_runs(study_dir, spec_id: str, *, emitter_subdir: str = "out")
         return inserted
     finally:
         conn.close()
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--workspace", default=".", help="workspace root")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args(argv)
+    res = backfill(Path(args.workspace), dry_run=args.dry_run)
+    if res.get("error"):
+        print("ERROR:", res["error"])
+        return 1
+    print(f"DB: {res['db']}")
+    print(f"completed stale 'running' rows: {len(res['completed_stale'])} {res['completed_stale']}")
+    print(f"skipped (already in DB): {len(res['skipped'])}")
+    print(f"inserted: {len(res['inserted'])}")
+    for r in res["inserted"]:
+        print(f"  + {r['emitter']:7} {r['run_id']:24} -> {r['study']} / {r['investigation']} (ensemble={r['ensemble_size']})")
+    if args.dry_run:
+        print("(dry-run — no writes)")
+    return 0
 
 
 if __name__ == "__main__":
