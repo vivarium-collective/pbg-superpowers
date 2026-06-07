@@ -42,10 +42,8 @@ in the override file remains an error and blocks publication.
 from __future__ import annotations
 
 import datetime as _dt
-import glob as _glob
 import hashlib
 import json
-import os as _os
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -99,6 +97,7 @@ class _LintContext:
     slug: str
     spec: dict
     findings: list[LintFinding] = field(default_factory=list)
+    strict: bool = False
 
     def add(
         self,
@@ -312,9 +311,10 @@ CHECKS = (
     # Reviewer-facing clarity strip ambiguities (single-sourced from
     # study_status.study_clarity_summary): ran-but-tests-pending, gate↔test drift
     "reviewer_clarity_ambiguity",
-    # Figure shows a previous run's results (dnaa-replication 2026-06-01 —
-    # verdict said PASS but the plots were the prior run's render)
-    "figure_stale_vs_run",
+    # Chart's stamped source run != the study's latest run (or unrendered /
+    # untracked-on-disk). Supersedes the mtime-based figure_stale_vs_run.
+    # warning by default; error under --strict.
+    "viz_stale_vs_latest_run",
     # S3: v4 narrative-spine nudge — info-level reminder of missing dnaa-style sections
     "narrative_spine_completeness",
     # Expert-handoff readiness — every study card in a generated report
@@ -1233,61 +1233,36 @@ def _check_reviewer_clarity_ambiguities(ctx: _LintContext) -> None:
         )
 
 
-def _check_figure_stale_vs_run(ctx: _LintContext) -> None:
-    """Flag a declared visualization whose rendered figure is OLDER than the
-    study's newest run data — i.e. the plot shows a previous run's results.
+def _check_viz_stale_vs_latest_run(ctx: _LintContext) -> None:
+    """Charts whose source run != the study's latest run (or unrendered), and
+    on-disk charts not in visualizations[]. warning by default; error under --strict.
 
-    dnaa-replication 2026-06-01: dnaa-2's verdict/tests were flipped to PASS
-    (DnaA-ATP ~0.45) but the figures were still the prior Step-2 render (~0.997),
-    so the report contradicted itself. This compares each declared
-    ``visualizations[].name`` figure (reports/figures/<slug>/<name>.* or
-    studies/<slug>/charts/<name>.*) against the newest *.pq mtime under the
-    study's ``runs[].parquet`` dirs. Warning-level (re-render from the canonical
-    run to clear it). Silent when there's no on-disk run data to compare (the
-    parquet may live in another checkout).
+    Supersedes the older mtime-based ``figure_stale_vs_run`` check: this uses the
+    chart's stamped ``source_run_id`` provenance (viz_freshness) against the
+    study's latest run in runs.db (run_registry), which is far more precise than
+    comparing file mtimes.
     """
+    from .viz_freshness import chart_freshness, manifest_diff
+    from .run_registry import latest_run
     spec = ctx.spec
-    vizzes = spec.get("visualizations") or []
-    runs = spec.get("runs") or []
-    if not vizzes or not runs:
-        return
-    newest_run = 0.0
-    for r in runs:
-        p = (r or {}).get("parquet")
-        if not p:
-            continue
-        base = ctx.ws_root / p
-        for f in _glob.glob(str(base / "**" / "*.pq"), recursive=True):
-            try:
-                newest_run = max(newest_run, _os.path.getmtime(f))
-            except OSError:
-                pass
-    if newest_run == 0.0:
-        return  # no run data on disk to compare against
-    fig_dirs = [ctx.ws_root / "reports" / "figures" / ctx.slug,
-                ctx.ws_root / "studies" / ctx.slug / "charts"]
-    for v in vizzes:
-        name = (v or {}).get("name")
-        if not name:
-            continue
-        figs = []
-        for d in fig_dirs:
-            for ext in (".html", ".svg", ".png"):
-                figs.extend(_glob.glob(str(d / f"{name}{ext}")))
-        if not figs:
-            continue  # absence handled by missing_visualizations
-        freshest = max(_os.path.getmtime(f) for f in figs)
-        if freshest < newest_run:
-            ctx.add(
-                level="warning",
-                field_path=f"visualizations[{name}]",
-                message=(
-                    f"figure '{name}' was last rendered before the study's "
-                    "newest run data — it likely shows a previous run's "
-                    "results. Re-render it from the canonical run."
-                ),
-                check="figure_stale_vs_run",
-            )
+    study_dir = ctx.ws_root / "studies" / ctx.slug
+    latest = latest_run(study_dir / "runs.db")
+    entries = spec.get("visualizations") or []
+    level = "error" if getattr(ctx, "strict", False) else "warning"
+    for idx, e in enumerate(entries):
+        if not (e or {}).get("chart"):
+            continue  # legacy address-only entries aren't chart-provenance-tracked
+        state = chart_freshness(study_dir, e, latest)
+        if state in ("stale", "unrendered"):
+            ctx.add(level=level, field_path=f"visualizations[{idx}].chart",
+                    message=(f"Visualization {e.get('name')!r} is {state} vs the "
+                             "study's latest run. Run /pbg-study refresh-viz."),
+                    check="viz_stale_vs_latest_run")
+    for orphan in manifest_diff(study_dir, entries)["untracked"]:
+        ctx.add(level=level, field_path=orphan,
+                message=(f"Chart {orphan} is on disk but not in visualizations[]; "
+                         "register it (with a render: command) or remove it."),
+                check="viz_stale_vs_latest_run")
 
 
 def _check_runs_yaml_vs_db_drift(ctx: _LintContext) -> None:
@@ -1863,7 +1838,7 @@ _CHECK_FUNCTIONS = (
     _check_status_out_of_date_vs_runs,
     _check_status_claims_done_but_no_runs_recorded,
     _check_reviewer_clarity_ambiguities,
-    _check_figure_stale_vs_run,
+    _check_viz_stale_vs_latest_run,
     _check_narrative_spine_completeness,
     # Expert-handoff readiness (warning-level — see CHECKS comment block)
     _check_missing_baseline,
@@ -1879,16 +1854,19 @@ _CHECK_FUNCTIONS = (
 )
 
 
-def lint_workspace_report(ws_root: Path) -> list[LintFinding]:
+def lint_workspace_report(ws_root: Path, *, strict: bool = False) -> list[LintFinding]:
     """Run every Pass B check against every study in the workspace.
 
     Returns a flat list of findings. Sort: error before warning before
     info; within each level, sorted by study_slug then field_path so the
     output is stable across runs.
+
+    ``strict`` promotes opt-in warning-level checks (e.g.
+    ``viz_stale_vs_latest_run``) to error level.
     """
     out: list[LintFinding] = []
     for slug, spec in _iter_study_specs(ws_root):
-        ctx = _LintContext(ws_root=ws_root, slug=slug, spec=spec)
+        ctx = _LintContext(ws_root=ws_root, slug=slug, spec=spec, strict=strict)
         for fn in _CHECK_FUNCTIONS:
             try:
                 fn(ctx)
@@ -1970,6 +1948,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Emit findings as JSON instead of plain text.",
     )
+    p.add_argument(
+        "--strict",
+        action="store_true",
+        help="Promote opt-in warning checks (e.g. viz_stale_vs_latest_run) to errors.",
+    )
     args = p.parse_args(argv)
 
     ws_root = Path(args.ws).resolve()
@@ -1977,7 +1960,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: no workspace.yaml under {ws_root}", file=sys.stderr)
         return 2
 
-    findings = lint_workspace_report(ws_root)
+    findings = lint_workspace_report(ws_root, strict=args.strict)
     overrides = load_overrides(ws_root)
     visible = apply_overrides(findings, overrides)
 

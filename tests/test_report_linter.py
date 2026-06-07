@@ -447,47 +447,6 @@ def test_reviewer_clarity_flags_ran_but_tests_pending(tmp_path):
     assert "pending" in f.message
 
 
-def _build_figure_ws(tmp_path, fig_mtime, run_mtime):
-    """Minimal ws: one study with a declared viz, a rendered figure, and a run
-    parquet — with controllable mtimes (figure vs run data)."""
-    import os
-    ws = tmp_path / "ws"
-    (ws / "studies" / "study-x" / "charts").mkdir(parents=True)
-    figdir = ws / "reports" / "figures" / "study-x"; figdir.mkdir(parents=True)
-    pqdir = ws / "studies" / "study-x" / "parquet-runs" / "r1" / "history"
-    pqdir.mkdir(parents=True)
-    (ws / "workspace.yaml").write_text(
-        "schema_version: 2\nname: w\ncreated: '2026-06-01'\n"
-        "plugin_version: 0.8.1\npackage_path: pkg\n")
-    (ws / "studies" / "study-x" / "study.yaml").write_text(
-        "name: study-x\nbaseline:\n  - name: b\n    composite: pkg.x\n"
-        "visualizations:\n  - name: fig_a\n    address: local:V\n"
-        "runs:\n  - name: r1\n    status: completed\n"
-        "    parquet: studies/study-x/parquet-runs/r1\n")
-    fig = figdir / "fig_a.html"; fig.write_text("<html>")
-    pq = pqdir / "0.pq"; pq.write_text("x")
-    os.utime(fig, (fig_mtime, fig_mtime))
-    os.utime(pq, (run_mtime, run_mtime))
-    return ws
-
-
-def test_figure_stale_vs_run_flags_old_figure(tmp_path):
-    """A declared figure older than the study's newest run data is flagged."""
-    ws = _build_figure_ws(tmp_path, fig_mtime=1000, run_mtime=2000)
-    flagged = _findings_by_check(lint_workspace_report(ws)).get("figure_stale_vs_run", [])
-    assert len(flagged) == 1
-    assert flagged[0].level == "warning"
-    assert flagged[0].study_slug == "study-x"
-    assert "fig_a" in flagged[0].message
-
-
-def test_figure_stale_vs_run_silent_when_figure_fresh(tmp_path):
-    """A figure rendered AFTER the run data is not flagged."""
-    ws = _build_figure_ws(tmp_path, fig_mtime=3000, run_mtime=2000)
-    flagged = _findings_by_check(lint_workspace_report(ws)).get("figure_stale_vs_run", [])
-    assert flagged == []
-
-
 def test_status_claims_done_no_runs_fires_when_no_run_provenance(tmp_path):
     """A study declaring completion (gate passed / ran / evaluated) with no
     runs:, simulation_set:, or planned_runs: block fires a warning; a sibling
@@ -789,3 +748,43 @@ def test_speculative_readout_paths_fires_per_entry(tmp_path):
     assert "alpha-real" in by_level["error"].message
     assert by_level["warning"].field_path == "readouts[1].path"
     assert "beta-speculative" in by_level["warning"].message
+
+
+def test_viz_stale_vs_latest_run_fires_on_mismatch(tmp_path):
+    import sqlite3
+    from pbg_superpowers.run_registry import RUNS_META_DDL
+    from pbg_superpowers.viz_freshness import stamp_meta
+    from pbg_superpowers.report_linter import _LintContext, _check_viz_stale_vs_latest_run
+    sd = tmp_path / "studies" / "s1"; (sd / "charts").mkdir(parents=True)
+    (sd / "charts" / "c.svg").write_text("x")
+    stamp_meta(sd / "charts" / "c.svg", source_run_id="OLD",
+               generation_id=None, rendered_at=1.0, command="cmd")
+    db = sd / "runs.db"; conn = sqlite3.connect(db); conn.executescript(RUNS_META_DDL)
+    conn.execute("INSERT INTO runs_meta(run_id,spec_id,started_at,completed_at,status)"
+                 " VALUES('NEW','s1',1,2,'complete')"); conn.commit(); conn.close()
+    spec = {"evaluation_status": "evaluated",
+            "visualizations": [{"name": "v", "chart": "charts/c.svg", "render": "cmd"}]}
+    ctx = _LintContext(ws_root=tmp_path, slug="s1", spec=spec)
+    _check_viz_stale_vs_latest_run(ctx)
+    stale = [f for f in ctx.findings if f.check == "viz_stale_vs_latest_run"]
+    assert len(stale) == 1
+    assert stale[0].level == "warning"
+
+
+def test_viz_stale_error_under_strict(tmp_path):
+    import sqlite3
+    from pbg_superpowers.run_registry import RUNS_META_DDL
+    from pbg_superpowers.viz_freshness import stamp_meta
+    from pbg_superpowers.report_linter import _LintContext, _check_viz_stale_vs_latest_run
+    sd = tmp_path / "studies" / "s1"; (sd / "charts").mkdir(parents=True)
+    (sd / "charts" / "c.svg").write_text("x")
+    stamp_meta(sd / "charts" / "c.svg", source_run_id="OLD",
+               generation_id=None, rendered_at=1.0, command="cmd")
+    db = sd / "runs.db"; conn = sqlite3.connect(db); conn.executescript(RUNS_META_DDL)
+    conn.execute("INSERT INTO runs_meta(run_id,spec_id,started_at,completed_at,status)"
+                 " VALUES('NEW','s1',1,2,'complete')"); conn.commit(); conn.close()
+    spec = {"visualizations": [{"name": "v", "chart": "charts/c.svg", "render": "cmd"}]}
+    ctx = _LintContext(ws_root=tmp_path, slug="s1", spec=spec, strict=True)
+    _check_viz_stale_vs_latest_run(ctx)
+    stale = [f for f in ctx.findings if f.check == "viz_stale_vs_latest_run"]
+    assert len(stale) == 1 and stale[0].level == "error"
