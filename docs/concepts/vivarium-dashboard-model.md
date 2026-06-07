@@ -472,6 +472,49 @@ A named visualization config attached to a study. Renders run output to HTML.
 - **API:** `POST /api/study-viz-add` (alias `/api/investigation-add-viz`), `POST /api/study-viz-render`.
 - **Skill:** `/pbg-viz`.
 
+#### Provenance & freshness {#viz-provenance-freshness}
+
+Every `visualizations[]` entry may declare an optional `render:` command string. When present, `/pbg-study refresh-viz` (and the auto-refresh that fires after a successful `run-baseline` / `run-variant` / `run-script`) uses it to regenerate the chart against the latest run.
+
+**`runs.db` as the authoritative run↔study record.** Each study's `runs.db` (SQLite) holds a `runs_meta` table that is the single source of truth for run provenance: `run_id`, `started_at`, `completed_at`, `composite`, `variant`, `emitter_path`, and `generation_id`. `pbg_superpowers.run_registry.latest_run(runs_db_path)` returns the most-recently-completed row; `refresh-viz` queries it before every invocation.
+
+**`visualizations[].render` contract.** `render:` is a shell command run with `cwd` = the study directory. Two substitutions happen before execution:
+
+- `{chart}` in the command string is replaced with the entry's `chart:` path (relative to the study dir).
+- Two environment variables are injected: `PBG_RUN_DIR` (absolute path to the run's emitter store) and `PBG_RUN_ID` (the run's UUID from `runs_meta`).
+
+Example entry:
+
+```yaml
+visualizations:
+  - name: dnaa3_binding_analysis
+    chart: charts/dnaa3_binding_analysis.svg
+    render: "python scripts/render_dnaa3_binding_analysis.py --out {chart}"
+```
+
+**`<chart>.meta.json` sidecar.** After each successful render, `refresh_study_viz` stamps a JSON sidecar alongside the chart file:
+
+```json
+{
+  "source_run_id": "<uuid from runs_meta>",
+  "generation_id": "<generation counter>",
+  "rendered_at": "<ISO-8601 timestamp>",
+  "command": "<render command after substitution>",
+  "content_hash": "<sha256 of the chart file>"
+}
+```
+
+**Freshness states.** A chart is in one of four states:
+
+| State | Meaning |
+|---|---|
+| `fresh` | On-disk chart exists; sidecar `source_run_id` == latest run id |
+| `stale` | On-disk chart exists; sidecar `source_run_id` != latest run id (run advanced) |
+| `untracked` | On-disk chart file exists but has no matching `visualizations[]` entry |
+| `unrendered` | `visualizations[]` entry exists but no chart file on disk yet |
+
+**`refresh-viz` behavior.** `/pbg-study refresh-viz <slug>` (and `/pbg-investigation refresh-viz <inv-slug>`) re-runs each entry's `render:` command and updates the sidecar. Entries without a `render:` command report `needs_manual_refresh` and are left in place. The `run-baseline`, `run-variant`, and `run-script` subcommands invoke `refresh-viz` automatically after a successful run; pass `--no-refresh-viz` to suppress.
+
 ## The dashboard server (read surface)
 
 Skills that read dashboard state do so via these HTTP endpoints:
