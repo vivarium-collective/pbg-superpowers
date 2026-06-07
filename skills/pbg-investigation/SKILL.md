@@ -27,6 +27,18 @@ back-ref. The investigation's publication/report lives at `investigations/<inv>/
 
 This block governs the paths below: where older text says `studies/<slug>/` or `$STUDIES_DIR/<slug>/`, prefer the resolver / the nested path.
 
+**Investigation-owned inputs.** An investigation owns its datasets/references under `investigations/<inv>/inputs/` (e.g. `inputs/datasets/<file>`), recorded in `investigation.yaml`:
+
+```yaml
+inputs:
+  datasets:
+    - inputs/datasets/beulig.csv
+  references: []
+  expert_docs: []
+```
+
+Repo-wide source packages and shared/unused inputs stay global (repo-level `datasets/`, `references/papers.bib`). To migrate existing repo-level datasets, run `pbg-migrate-inputs` (`python -m pbg_superpowers.migrate_inputs --workspace <ws> [--apply]`): it assigns a dataset to an investigation only when exactly ONE investigation's studies reference it (by filename in `study.yaml`); multi-investigation and unused datasets are reported and left global. Default prints the plan; `--apply` performs the `git mv` and updates `investigation.yaml`.
+
 
 ## Investigation ≡ branch ≡ worktree
 
