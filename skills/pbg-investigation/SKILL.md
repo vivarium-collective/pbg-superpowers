@@ -445,6 +445,41 @@ The orchestrator is intentionally thin — it does not write to `runs.db`, doesn
 
 ---
 
+### `refresh-viz <inv-slug> [--studies a,b,...]`
+
+Re-render registered charts across the investigation's member studies by orchestrating `/pbg-study refresh-viz` on each one. Mirrors how the `run` subcommand iterates members — the same inclusion/exclusion logic applies.
+
+**Arguments:**
+
+- `<inv-slug>` (required) — investigation slug.
+- `--studies a,b,c` (optional) — restrict to this comma-separated subset of member slugs (preserving declaration order). Default: every member of `investigation.yaml.studies`.
+
+**Flow:**
+
+1. Common prelude (find `workspace.yaml`, resolve workspace dirs).
+2. Load `$INVESTIGATIONS_DIR/<inv-slug>/investigation.yaml`. Fail with a clear message if absent.
+3. Resolve the study list (same intersection logic as `run`; fail if any `--studies` slug is absent from the investigation).
+4. For each study slug in order, call `/pbg-study refresh-viz <slug>`.
+5. Collect per-chart result lists from each study and print a per-study summary:
+
+   ```
+   <slug>  rendered: N  needs_manual_refresh: M  error: K
+   ```
+
+6. Final summary: `refreshed <N> studies — <total_rendered> charts rendered, <total_errors> errors, <total_needs_manual> need manual refresh`.
+
+Studies that have no `runs.db` or no `visualizations[]` entries are skipped with a one-line notice; this is not treated as an error.
+
+```bash
+# Refresh all studies in the investigation
+/pbg-investigation refresh-viz dnaa-replication
+
+# Refresh a subset
+/pbg-investigation refresh-viz dnaa-replication --studies dnaa-01-expression-dynamics,dnaa-02-atp-hydrolysis
+```
+
+---
+
 ### `close <slug> [--dry-run] [--no-pr] [--skip-report] [--json]`
 
 Close an investigation: render the workspace report, copy it into `$INVESTIGATIONS_DIR/<slug>/report.html` (so it lands as a git-tracked artifact), stamp the investigation YAML with `status: closed`, `closed_at`, `report_url`, and a populated `contributors[]`, commit on the investigation branch, and open a PR. **Never auto-merges** — stops after `gh pr create`; the user clicks merge in the GitHub UI per the standing no-auto-merge instruction.

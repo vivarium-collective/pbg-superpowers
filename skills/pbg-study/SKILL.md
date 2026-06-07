@@ -3,7 +3,7 @@ name: pbg-study
 description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|run-script|clean|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
+argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|run-script|refresh-viz|clean|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
 ---
 
 # pbg-study
@@ -418,7 +418,7 @@ The dashboard builds a 1-step composite for each viz entry, runs it against the 
 
 ### Simulate subcommands
 
-#### `run-baseline <study-name> [--composite <name>] [--steps N]`
+#### `run-baseline <study-name> [--composite <name>] [--steps N] [--no-refresh-viz]`
 
 Run a baseline composite. POST `/api/study-run-baseline`:
 
@@ -428,13 +428,17 @@ Run a baseline composite. POST `/api/study-run-baseline`:
 
 `composite` is the entry name in `baseline[]`. If omitted, defaults to `baseline[0]`.
 
-#### `run-variant <study-name> --variant <n> [--steps N]`
+After a successful run, automatically invokes `refresh-viz` for the study so registered charts regenerate against the new run. Pass `--no-refresh-viz` to skip.
+
+#### `run-variant <study-name> --variant <n> [--steps N] [--no-refresh-viz]`
 
 Run a variant. The server resolves the variant's `base_composite` against the Study's baseline list and layers `parameter_overrides` on top. POST `/api/study-run-variant`:
 
 ```json
 {"study": "<study-name>", "variant": "<n>", "steps": 5}
 ```
+
+After a successful run, automatically invokes `refresh-viz` for the study so registered charts regenerate against the new run. Pass `--no-refresh-viz` to skip.
 
 > **Clearing stale runs between reruns.** `runs.db` accumulates a fresh
 > row each invocation; the auto-renderer reads the *latest* row, so a
@@ -452,7 +456,7 @@ Run a variant. The server resolves the variant's `base_composite` against the St
 > before re-running a problematic baseline / variant. See
 > mem3dg-readdy friction log #27.
 
-#### `run-script <study-name> [--entry <name>] [--list]`
+#### `run-script <study-name> [--entry <name>] [--list] [--no-refresh-viz]`
 
 Run a study's **bespoke runner script** declared in `study.yaml.canonical_runs[]`. This is the third sibling alongside `run-baseline` / `run-variant`, and serves studies whose runners predate the dashboard's in-process composite executor — division-spanning multi-gen sims, calibration harnesses, parquet rerun wrappers (the v2ecoli `sims/run_dnaa_*.py` family is the canonical example). See `canonical_runs:` in [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md#canonical-run-recipe-bespoke-scripts) for the schema.
 
@@ -478,6 +482,8 @@ Flow:
 
 This is a pure shell-out — no dashboard endpoint involved. The script is expected to own its own composite construction and emitter wiring (and to call `flush_parquet(composite)` itself if it uses the parquet emitter; the context manager can't enforce flush — see v2ecoli friction note 2026-05-27 #3). Future work: a `canonical_runs:` entry could declare its emitter so a wrapper handles flush, but for now the contract is "the script does everything."
 
+After the script exits with code 0, automatically invokes `refresh-viz` for the study so registered charts regenerate against the new run. Pass `--no-refresh-viz` to skip.
+
 > **When NOT to use run-script.** If the study's runner can be expressed as a composite plus `parameter_overrides`, prefer `run-baseline` / `run-variant` — those go through the dashboard, surface the run in `runs.db`, and integrate with the auto-renderer. `run-script` is for runners that genuinely can't fit that mold (multi-gen division, external orchestration, custom emitter pipelines).
 
 > **Gap — declarative sweeps not yet runnable.** The `study.yaml` schema
@@ -489,6 +495,73 @@ This is a pure shell-out — no dashboard endpoint involved. The script is expec
 > single entries. Adding a runner is tracked as Tier-B/B3 from the v2ecoli
 > feedback synthesis; build it when a real workspace needs to execute a
 > declared sweep.
+
+#### `refresh-viz <study-name> [--no-auto]`
+
+Re-render the study's `visualizations[]` charts against the **latest run** so figures never silently go stale. This is the Simulate/Evaluate companion to `preview-viz` (which checks render wiring before a run); `refresh-viz` re-stamps charts with real run output after one.
+
+**Purpose:** resolve the latest run from the study's `runs.db`, invoke each visualization entry's declared `render:` command with the run's emitter store wired in, and stamp a `<chart>.meta.json` sidecar so freshness is auditable.
+
+**Mechanism:**
+
+```bash
+python -c "from pathlib import Path; import yaml, json; \
+  from pbg_superpowers.run_registry import latest_run; \
+  from pbg_superpowers.refresh_viz import refresh_study_viz; \
+  sd=Path('studies/<slug>'); spec=yaml.safe_load((sd/'study.yaml').read_text()); \
+  print(json.dumps(refresh_study_viz(sd, spec, latest_run(sd/'runs.db')), indent=2))"
+```
+
+Or call the helper directly: resolve the study dir with `python -m pbg_superpowers.paths --study <slug>`; load `study.yaml`; compute `latest = pbg_superpowers.run_registry.latest_run(<study_dir>/runs.db)`; call `pbg_superpowers.refresh_viz.refresh_study_viz(<study_dir>, spec, latest)`.
+
+**Output:** the helper returns a list of per-chart result dicts, each with `{name, chart, status}` where `status` is one of:
+
+- `rendered` — the render command ran successfully and the chart + sidecar were restamped.
+- `error` — the render command failed; the old chart is kept in place and the error is surfaced.
+- `needs_manual_refresh` — the entry has no `render:` command declared, or an on-disk chart exists but isn't registered in `visualizations[]` (untracked).
+
+**Arguments:**
+
+- `<study-name>` (required) — study slug under `studies/<slug>/`.
+- `--no-auto` (optional) — reserved; at present `refresh-viz` always runs all entries. Pass to suppress the auto-refresh that `run-baseline` / `run-variant` / `run-script` invoke after a successful run.
+
+**Notes:**
+
+- If `runs.db` is absent or empty (no runs yet), `refresh-viz` exits with a clear message: "No runs recorded for `<slug>` — run a baseline or variant first."
+- Repeated invocations are idempotent — each chart is overwritten in place, sidecar updated.
+- The `--no-auto` flag corresponds to `--no-refresh-viz` on `run-baseline` / `run-variant` / `run-script`.
+
+#### `visualizations[].render` convention
+
+Each entry in `study.yaml.visualizations[]` may declare a `render:` command string — a shell command executed with `cwd` set to the study directory. The placeholder `{chart}` in the command is substituted with the entry's `chart:` path (relative to the study dir). The runner exposes the latest run to the command via two environment variables:
+
+- `PBG_RUN_DIR` — absolute path to the run's emitter store (the zarr/parquet/SQLite directory).
+- `PBG_RUN_ID` — the run's UUID from `runs_meta`.
+
+At render time a `<chart>.meta.json` sidecar is stamped alongside each chart with:
+
+```json
+{
+  "source_run_id": "<uuid>",
+  "generation_id": "<generation-counter>",
+  "rendered_at": "<ISO-8601>",
+  "command": "<the render command string, after substitution>",
+  "content_hash": "<sha256 of the chart file>"
+}
+```
+
+A chart is **fresh** when its `source_run_id` matches the study's latest run id; **stale** when it doesn't; **untracked** when an on-disk chart file has no corresponding `visualizations[]` entry; **unrendered** when a `visualizations[]` entry has no on-disk chart yet.
+
+Example `visualizations[]` entry with a `render:` command:
+
+```yaml
+visualizations:
+  - name: dnaa3_binding_analysis
+    chart: charts/dnaa3_binding_analysis.svg
+    render: "python scripts/render_dnaa3_binding_analysis.py --out {chart}"
+```
+
+When `render:` is absent the entry is still valid (the chart can be produced by other means) but `refresh-viz` will report it as `needs_manual_refresh`.
 
 #### `clean <study-name> [--dry-run] [--include-out-paths]`
 
@@ -1114,6 +1187,7 @@ Usage:
 
   /pbg-study verify              <study-slug> [--strict] [--json] [--quiet]
   /pbg-study preview-viz         <study-slug> [--name <viz-name>]
+  /pbg-study refresh-viz         <study-slug> [--no-auto]
 
   /pbg-study findings            <study-slug> [--auto] [--dry-run]
 
