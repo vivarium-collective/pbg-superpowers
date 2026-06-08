@@ -39,6 +39,24 @@ inputs:
 
 Repo-wide source packages and shared/unused inputs stay global (repo-level `datasets/`, `references/papers.bib`). To migrate existing repo-level datasets, run `pbg-migrate-inputs` (`python -m pbg_superpowers.migrate_inputs --workspace <ws> [--apply]`): it assigns a dataset to an investigation only when exactly ONE investigation's studies reference it (by filename in `study.yaml`); multi-investigation and unused datasets are reported and left global. Default prints the plan; `--apply` performs the `git mv` and updates `investigation.yaml`.
 
+**NEVER silently add an input the expert did not provide.** `inputs.references`, `inputs.datasets`, and `expert_docs` are the *provided* inputs — things the expert supplied or explicitly approved. If, while working, you find yourself wanting to cite a paper, invoke a mechanism, or lean on a parameter the expert did **not** give you, do **not** add it to `inputs.` and do **not** weave it into the prose as fact. Instead record it under `proposed_inputs:` with `status: pending`, plus the `provenance` (which commit / why it came up) and the `rationale` (what you used it for). The expert then Accepts or Declines each item in the report; on Accept the dashboard promotes a `kind: reference` item into `inputs.references` (a `kind: mechanism` is marked accepted for a human to integrate), on Decline it is marked declined and left out. This keeps the agent from quietly importing outside claims as if they were expert-sanctioned.
+
+```yaml
+proposed_inputs:
+  _note: "Why this block exists — agent-suggested inputs the expert did NOT provide."
+  items:
+  - id: <slug>                 # stable id; reference ids double as the bib-key on accept
+    kind: reference            # reference | mechanism
+    citation: "..."            # kind=reference: the citation text
+    summary: "..."             # kind=mechanism: what the mechanism is
+    proposed_by: agent
+    proposed_at: '2026-06-08'
+    related_study: <study-slug>
+    rationale: "what it was used for"
+    provenance: "which commit / why it came up; NOT provided by the expert"
+    status: pending            # pending | accepted | declined  (expert sets via the report)
+```
+
 
 ## The Investigation graph (discourse graph)
 

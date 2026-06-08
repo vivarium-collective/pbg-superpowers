@@ -152,6 +152,10 @@ when the value derived from the 6-axis status is wrong.
 
 Studies that share a research arc can be grouped into an **Investigation** (a named collection with its own question/hypothesis + acceptance criteria). Studies don't declare investigation membership themselves; the investigation lists them in its `studies:` field. Use `/pbg-investigation` for investigation CRUD and the `scaffold-from-plan` marquee command that auto-generates an investigation + all constituent studies from a plan PDF.
 
+## Reference / mechanism discipline: NEVER silently add what the expert did not provide
+
+When you cite a paper (`--cite`, `--source`, `cites:`, `literature_anchors[].source`) or lean on a mechanism, that reference/mechanism must be one the **expert actually provided or explicitly approved**. If, while building or evaluating a study, you reach for a paper, parameter, or mechanism the expert did **not** give you, do **not** quietly fold it into `cites:` / `literature_anchors` / the prose as if it were sanctioned. Record it on the parent **investigation** under `proposed_inputs:` with `status: pending`, a `provenance` (which commit / why it surfaced), and a `rationale` (what you used it for), and let the expert Accept or Decline it in the report. On Accept, a `kind: reference` item is promoted into the investigation's `inputs.references` and becomes a real provided reference (then it is fair to cite); a `kind: mechanism` item is marked accepted for a human to integrate. On Decline it is left out. See the `proposed_inputs:` schema in **pbg-investigation**. This guardrail keeps outside claims from entering the record as expert-sanctioned.
+
 ## Sub-commands
 
 ### Design subcommands
