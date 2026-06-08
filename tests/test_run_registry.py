@@ -1,6 +1,8 @@
 import sqlite3
 from pathlib import Path
-from pbg_superpowers.run_registry import latest_run, RUNS_META_DDL
+from pbg_superpowers.run_registry import (
+    latest_run, register_run, get_run_params, RUNS_META_DDL,
+)
 
 def _db(tmp):
     p = tmp / "runs.db"; conn = sqlite3.connect(p); conn.executescript(RUNS_META_DDL)
@@ -35,3 +37,65 @@ def test_latest_run_tolerates_db_without_emitter_path(tmp_path):
     lr = latest_run(p)
     assert lr["run_id"] == "r"
     assert "emitter_path" not in lr  # column absent → key omitted
+
+
+# --- register_run / get_run_params (run-config provenance slot) ------------
+
+def test_register_run_creates_db_and_records_params(tmp_path):
+    db = tmp_path / "sub" / "runs.db"  # parent dir does not exist yet
+    cfg = {"perturbations": {"TU00259[c]": 1.7e-3}, "seed": 1, "generations": 8}
+    register_run(db, "exp_a", spec_id="dnaa-1", status="complete", params=cfg)
+    assert db.is_file()
+    got = get_run_params(db, "exp_a")
+    assert got == cfg
+    lr = latest_run(db)
+    assert lr["run_id"] == "exp_a"
+    assert lr["status"] == "complete"
+
+
+def test_register_run_spec_defaults_to_run_id(tmp_path):
+    db = tmp_path / "runs.db"
+    register_run(db, "exp_b", params={"seed": 0})
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT spec_id, status FROM runs_meta WHERE run_id=?", ("exp_b",)
+    ).fetchone()
+    conn.close()
+    assert row[0] == "exp_b"      # spec_id defaulted to run_id
+    assert row[1] == "recorded"   # status defaulted
+
+
+def test_register_run_upsert_preserves_params_when_omitted(tmp_path):
+    db = tmp_path / "runs.db"
+    cfg = {"perturbations": {"TU00259[c]": 1.7e-3}, "seed": 2}
+    # up-front: running + full config
+    register_run(db, "exp_c", status="running", params=cfg)
+    # completion: status only, no params — must NOT wipe the config
+    register_run(db, "exp_c", status="complete")
+    assert get_run_params(db, "exp_c") == cfg
+    assert latest_run(db)["status"] == "complete"
+
+
+def test_register_run_params_can_be_replaced(tmp_path):
+    db = tmp_path / "runs.db"
+    register_run(db, "exp_d", params={"seed": 1})
+    register_run(db, "exp_d", params={"seed": 9, "extra": True})
+    assert get_run_params(db, "exp_d") == {"seed": 9, "extra": True}
+
+
+def test_get_run_params_missing_run_or_db(tmp_path):
+    assert get_run_params(tmp_path / "nope.db", "x") is None
+    db = tmp_path / "runs.db"
+    sqlite3.connect(db).executescript(RUNS_META_DDL)
+    assert get_run_params(db, "absent") is None
+
+
+def test_get_run_params_db_without_params_column(tmp_path):
+    p = tmp_path / "legacy.db"
+    conn = sqlite3.connect(p)
+    conn.executescript("CREATE TABLE runs_meta(run_id TEXT PRIMARY KEY,"
+                       " spec_id TEXT NOT NULL, started_at REAL NOT NULL,"
+                       " completed_at REAL, status TEXT NOT NULL);")
+    conn.execute("INSERT INTO runs_meta VALUES('r','s',1.0,5.0,'complete')")
+    conn.commit(); conn.close()
+    assert get_run_params(p, "r") is None  # column absent → None, no crash
