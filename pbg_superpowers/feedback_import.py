@@ -175,7 +175,14 @@ def _validate_payload(payload: dict) -> dict:
     if not isinstance(annotations, dict):
         raise FeedbackImportError(
             "annotations must be a mapping (section_id → list[entry])")
-    return {"meta": meta, "annotations": annotations}
+    out = {"meta": meta, "annotations": annotations}
+    # Preserve offline-action keys so the persisted yaml is a faithful copy
+    # (and so a re-import can re-apply them if needed).
+    for k in ("proposed_input_decisions", "study_seed_requests"):
+        v = payload.get(k)
+        if isinstance(v, list) and v:
+            out[k] = v
+    return out
 
 
 def write_feedback_payload(workspace: Path | str, payload: dict,
@@ -217,6 +224,91 @@ def write_feedback_payload(workspace: Path | str, payload: dict,
     return target
 
 
+def apply_offline_actions(workspace: Path | str, payload: dict) -> dict:
+    """Apply offline Accept/Decline + Add-to-investigation actions on import.
+
+    The inline-feedback widget, when a downloaded report is opened over
+    ``file://`` (no dashboard server to POST to), records the reviewer's
+    button clicks into the feedback yaml under two top-level keys:
+
+      * ``proposed_input_decisions: [{item_id, decision, ts}]`` — the
+        Accept/Decline clicks on ``proposed_inputs.items``.
+      * ``study_seed_requests: [{proposal_id|title, parent, targets, ts}]`` —
+        the "+ Add to investigation" clicks on follow-up study proposals.
+
+    This applies them using the SAME logic the live dashboard endpoints use,
+    so the offline path converges with the online one:
+
+      * decisions → ``vivarium_dashboard.server._decide_proposed_input_for_test``
+        (promotes a ``kind:reference`` into ``inputs.references`` on accept,
+        marks declined otherwise);
+      * seed requests → ``vivarium_dashboard.lib.study_seed.seed_followup_study``
+        (spawns the child study node).
+
+    Returns a report dict ``{decisions:[...], seeds:[...], errors:[...]}``.
+    Requires ``vivarium_dashboard`` to be importable; if it is not, the
+    actions are surfaced (not silently dropped) via ``errors``.
+    """
+    workspace = Path(workspace)
+    inv = (payload.get("meta") or {}).get("investigation")
+    decisions_in = payload.get("proposed_input_decisions") or []
+    seeds_in = payload.get("study_seed_requests") or []
+    report: dict = {"decisions": [], "seeds": [], "errors": []}
+    if not decisions_in and not seeds_in:
+        return report
+
+    try:
+        from vivarium_dashboard.server import _decide_proposed_input_for_test
+        from vivarium_dashboard.lib.study_seed import seed_followup_study
+    except Exception as e:  # pragma: no cover - import-environment dependent
+        msg = (f"vivarium_dashboard not importable ({e}); "
+               f"{len(decisions_in)} decision(s) + {len(seeds_in)} seed "
+               "request(s) parsed but NOT applied — apply them manually.")
+        report["errors"].append(msg)
+        report["decisions"] = list(decisions_in)
+        report["seeds"] = list(seeds_in)
+        return report
+
+    for d in decisions_in:
+        if not isinstance(d, dict):
+            continue
+        item_id = str(d.get("item_id") or "")
+        decision = d.get("decision")
+        try:
+            resp, code = _decide_proposed_input_for_test(
+                workspace, inv, item_id, decision)
+            if code == 200:
+                report["decisions"].append(
+                    {"item_id": item_id, "decision": decision, **{
+                        k: resp[k] for k in ("status", "kind", "added_reference")
+                        if k in resp}})
+            else:
+                report["errors"].append(
+                    f"decision {item_id!r}={decision!r}: {resp.get('error', code)}")
+        except Exception as e:
+            report["errors"].append(f"decision {item_id!r}={decision!r}: {e}")
+
+    for s in seeds_in:
+        if not isinstance(s, dict):
+            continue
+        parent = s.get("parent")
+        proposal_id = s.get("proposal_id") or None
+        title = s.get("title") or proposal_id or "(untitled)"
+        if not parent:
+            report["errors"].append(
+                f"seed request {title!r}: missing 'parent' study — cannot seed.")
+            continue
+        try:
+            new_name = seed_followup_study(
+                workspace, parent, proposal_id=proposal_id)
+            report["seeds"].append(
+                {"title": title, "parent": parent, "new_study_name": new_name})
+        except Exception as e:
+            report["errors"].append(f"seed request {title!r} (parent {parent!r}): {e}")
+
+    return report
+
+
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("source", type=click.Path(path_type=Path, exists=True, dir_okay=False))
 @click.option("--workspace", type=click.Path(path_type=Path, file_okay=False),
@@ -224,12 +316,23 @@ def write_feedback_payload(workspace: Path | str, payload: dict,
               help="Workspace root (contains investigations/). Defaults to CWD.")
 @click.option("--no-create", is_flag=True,
               help="Refuse to create investigations/<inv>/feedback/ if it doesn't exist.")
-def cli(source: Path, workspace: Path, no_create: bool) -> None:
+@click.option("--no-apply", is_flag=True,
+              help="Store the feedback yaml but do NOT apply offline "
+                   "proposed_input_decisions / study_seed_requests.")
+def cli(source: Path, workspace: Path, no_create: bool, no_apply: bool) -> None:
     """Import an inline-feedback yaml into investigations/<inv>/feedback/.
 
-    SOURCE is the yaml file downloaded by the inline-feedback widget.
+    SOURCE is the yaml file downloaded by the inline-feedback widget. Inline
+    annotations are stored; offline Accept/Decline and Add-to-investigation
+    actions (recorded when the report was opened over file://) are applied
+    unless ``--no-apply`` is given.
     """
     payload = _read_feedback_yaml(source)
+    # _read_feedback_yaml only returns {meta, annotations}; re-read the raw
+    # doc so the offline-action keys survive to apply_offline_actions.
+    raw = yaml.safe_load(source.read_text()) or {}
+    payload["proposed_input_decisions"] = raw.get("proposed_input_decisions") or []
+    payload["study_seed_requests"] = raw.get("study_seed_requests") or []
     inv = payload["meta"]["investigation"]
     n_sections = len(payload["annotations"])
     n_entries = sum(len(v or []) for v in payload["annotations"].values())
@@ -241,6 +344,25 @@ def cli(source: Path, workspace: Path, no_create: bool) -> None:
         f"Imported {n_entries} annotation(s) across {n_sections} section(s) "
         f"for investigation {inv!r} → {target.relative_to(workspace)}"
     )
+
+    if no_apply:
+        n_d = len(payload["proposed_input_decisions"])
+        n_s = len(payload["study_seed_requests"])
+        if n_d or n_s:
+            click.echo(f"Skipped applying {n_d} decision(s) + {n_s} seed "
+                       "request(s) (--no-apply).")
+        return
+
+    report = apply_offline_actions(workspace, payload)
+    for d in report["decisions"]:
+        extra = (f" → added reference {d['added_reference']!r}"
+                 if d.get("added_reference") else "")
+        click.echo(f"  {d['decision']}ed proposed input {d['item_id']!r}{extra}")
+    for s in report["seeds"]:
+        click.echo(f"  seeded study {s['new_study_name']!r} from {s['title']!r} "
+                   f"(parent {s['parent']!r})")
+    for err in report["errors"]:
+        click.echo(f"  ! {err}", err=True)
 
 
 if __name__ == "__main__":
