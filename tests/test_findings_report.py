@@ -161,6 +161,56 @@ def test_harvest_findings_handles_missing_studies_dir(tmp_path):
     assert _harvest_findings(ws) == []
 
 
+def _write_nested_study(ws: Path, inv: str, slug: str, *, findings: list[dict]) -> None:
+    """Write a study under the nested investigations/<inv>/studies/<slug>/ layout."""
+    sd = ws / "investigations" / inv / "studies" / slug
+    sd.mkdir(parents=True)
+    spec = {
+        "name": slug,
+        "investigation": inv,
+        "baseline": [{"name": "b1", "composite": "pkg.composites.x"}],
+        "findings": findings,
+    }
+    (sd / "study.yaml").write_text(yaml.safe_dump(spec, sort_keys=False))
+
+
+def test_harvest_findings_discovers_nested_investigation_layout(tmp_path):
+    """P0 regression: studies under investigations/<inv>/studies/<slug>/ must
+    be harvested, not just flat studies/<slug>/."""
+    ws = _make_workspace(tmp_path, with_findings=False)
+    _write_nested_study(ws, "dnaa-replication", "dnaa-01", findings=[
+        {
+            "id": "F-01",
+            "kind": "biological",
+            "status": "confirms",
+            "statement": "Nested-layout finding is discovered by the harvester.",
+            "expected": {"cites": ["Schmidt2016NatBiotechnol"]},
+        },
+    ])
+    rows = _harvest_findings(ws)
+    assert [r["id"] for r in rows] == ["F-01"]
+    assert rows[0]["study_slug"] == "dnaa-01"
+    assert rows[0]["cites"] == ["Schmidt2016NatBiotechnol"]
+
+
+def test_harvest_findings_mixes_nested_and_flat_layouts(tmp_path):
+    """Both nested and flat studies should be harvested in the same workspace."""
+    ws = _make_workspace(tmp_path, with_findings=False)
+    _write_study(ws, "flat-study", findings=[
+        {"id": "F-FLAT", "kind": "computational", "status": "partial",
+         "statement": "Flat-layout finding still works."},
+    ])
+    _write_nested_study(ws, "inv-a", "nested-study", findings=[
+        {"id": "F-NEST", "kind": "biological", "status": "novel",
+         "statement": "Nested-layout finding works too."},
+    ])
+    rows = _harvest_findings(ws)
+    ids = {r["id"] for r in rows}
+    assert ids == {"F-FLAT", "F-NEST"}
+    slugs = {r["study_slug"] for r in rows}
+    assert slugs == {"flat-study", "nested-study"}
+
+
 # ---------------------------------------------------------------------------
 # Render: HTML output assertions
 # ---------------------------------------------------------------------------
