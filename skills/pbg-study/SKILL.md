@@ -532,6 +532,11 @@ This is a pure shell-out — no dashboard endpoint involved. The script is expec
 
 After the script exits with code 0, automatically invokes `refresh-viz` for the study so registered charts regenerate against the new run. Pass `--no-refresh-viz` to skip.
 
+- After a successful run (exit 0), also run:
+      python -m pbg_superpowers.study_outcomes --workspace <ws> --study <slug>
+  to record the run into study.yaml's runs[] (mechanical fields; authored
+  outcomes are preserved). Skip with --no-sync-runs.
+
 > **When NOT to use run-script.** If the study's runner can be expressed as a composite plus `parameter_overrides`, prefer `run-baseline` / `run-variant` — those go through the dashboard, surface the run in `runs.db`, and integrate with the auto-renderer. `run-script` is for runners that genuinely can't fit that mold (multi-gen division, external orchestration, custom emitter pipelines).
 
 > **Gap — declarative sweeps not yet runnable.** The `study.yaml` schema
