@@ -22,6 +22,7 @@ pbg-feedback-import = "pbg_superpowers.feedback_import:cli"
 pbg-migrate-nested = "pbg_superpowers.migrate_nested:main"
 pbg-migrate-inputs = "pbg_superpowers.migrate_inputs:main"
 pbg-backfill-runs = "pbg_superpowers.backfill_runs:main"
+pbg-sync-runs = "pbg_superpowers.study_outcomes:main"
 
 [build-system]
 requires = ["hatchling"]

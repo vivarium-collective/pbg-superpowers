@@ -119,3 +119,32 @@ def record_runs(study_dir) -> dict:
 def sync(study_dir) -> dict:
     """Increment A: reconcile runs. (Increment B will also evaluate outcomes.)"""
     return record_runs(study_dir)
+
+
+def main(argv=None) -> int:
+    import argparse
+    from .workspace_paths import WorkspacePaths
+    ap = argparse.ArgumentParser(description="Reconcile study runs.db into study.yaml")
+    ap.add_argument("--workspace", default=".")
+    grp = ap.add_mutually_exclusive_group(required=True)
+    grp.add_argument("--study", help="study slug")
+    grp.add_argument("--all", action="store_true", help="every study in the workspace")
+    args = ap.parse_args(argv)
+
+    paths = WorkspacePaths.load(Path(args.workspace))
+    if args.all:
+        dirs = list(paths.iter_study_dirs())
+    else:
+        dirs = [paths.study_dir(args.study)]
+
+    total = {"added": 0, "updated": 0}
+    for d in dirs:
+        s = record_runs(d)
+        total["added"] += s["added"]; total["updated"] += s["updated"]
+        print(f"{d.name}: added={s['added']} updated={s['updated']}")
+    print(f"TOTAL added={total['added']} updated={total['updated']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
