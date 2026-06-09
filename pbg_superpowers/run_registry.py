@@ -144,6 +144,29 @@ def register_run(
         conn.close()
 
 
+def list_runs(runs_db) -> list[dict]:
+    """All runs_meta rows, newest first by COALESCE(completed_at, started_at).
+    Returns [] if the DB or table is absent. Tolerant of missing columns."""
+    from pathlib import Path as _Path
+    import sqlite3 as _sqlite3
+    path = _Path(runs_db)
+    if not path.exists():
+        return []
+    conn = _sqlite3.connect(str(path))
+    try:
+        conn.row_factory = _sqlite3.Row
+        try:
+            cur = conn.execute(
+                "SELECT * FROM runs_meta "
+                "ORDER BY COALESCE(completed_at, started_at) DESC, rowid DESC"
+            )
+        except _sqlite3.OperationalError:
+            return []
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 def get_run_params(runs_db: Path, run_id: str) -> dict | None:
     """Return the recorded ``params_json`` for ``run_id`` as a dict, or
     ``None`` if the run / DB / column is absent or the JSON is empty.
