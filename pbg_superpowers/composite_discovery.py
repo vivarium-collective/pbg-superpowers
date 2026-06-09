@@ -6,6 +6,7 @@ an installed package whose distribution declares bigraph-schema as a requirement
 from __future__ import annotations
 import importlib
 import importlib.metadata
+import sys
 from pathlib import Path
 
 from .composite_spec import load_spec, validate_spec
@@ -57,8 +58,7 @@ def discover_composites(extra_search_paths: list[Path] | None = None) -> dict[st
                         specs[spec_id] = spec
                     except Exception as e:
                         # Skip malformed specs; log to stderr
-                        import sys as _sys
-                        print(f"warning: skipping {path}: {e}", file=_sys.stderr)
+                        print(f"warning: skipping {path}: {e}", file=sys.stderr)
 
     # 2. Extra paths (e.g. workspace-local).
     for extra in (extra_search_paths or []):
@@ -72,8 +72,7 @@ def discover_composites(extra_search_paths: list[Path] | None = None) -> dict[st
                     validate_spec(spec)
                     specs[spec_id] = spec
                 except Exception as e:
-                    import sys as _sys
-                    print(f"warning: skipping {path}: {e}", file=_sys.stderr)
+                    print(f"warning: skipping {path}: {e}", file=sys.stderr)
 
     return specs
 

@@ -44,7 +44,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/api/click":
-            length = int(self.headers.get("Content-Length", 0))
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                if length < 0:
+                    raise ValueError("negative Content-Length")
+            except (TypeError, ValueError):
+                self.send_response(400)
+                self.end_headers()
+                return
             body = self.rfile.read(length).decode()
             with LOCK:
                 events = _wp().pbg / "server" / "state" / "events"
