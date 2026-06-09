@@ -150,7 +150,13 @@ def _first_sentence(text: str, *, max_chars: int = 220) -> str:
 
 
 def _harvest_findings(ws_root: Path) -> list[dict]:
-    """Walk ``studies/*/study.yaml`` and return one row per finding.
+    """Walk every ``study.yaml`` and return one row per finding.
+
+    Studies are enumerated layout-aware via
+    :meth:`WorkspacePaths.iter_study_dirs`, so findings are harvested from both
+    the nested investigation-centric layout
+    (``investigations/<inv>/studies/<study>/``) and the legacy flat layout
+    (``studies/<study>/``).
 
     Each row has the keys the template expects:
     ``study_slug``, ``study_link`` (str | None), ``id``, ``kind``, ``status``,
@@ -161,13 +167,10 @@ def _harvest_findings(ws_root: Path) -> list[dict]:
     enum values) are skipped — the linter is the right place to surface
     those, not the rendering pipeline.
     """
-    studies_dir = WorkspacePaths.load(ws_root).studies
-    if not studies_dir.is_dir():
-        return []
     valid_status = {"confirms", "partial", "contradicts", "novel"}
     valid_kind = {"biological", "computational", "methodological"}
     out: list[dict] = []
-    for sd in sorted(p for p in studies_dir.iterdir() if p.is_dir()):
+    for sd in WorkspacePaths.load(ws_root).iter_study_dirs():
         sy = sd / "study.yaml"
         if not sy.is_file():
             continue
