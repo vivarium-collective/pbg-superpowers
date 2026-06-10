@@ -12,6 +12,7 @@ dependencies = [
     "process-bigraph>=0.0.66",
     "pypdf>=4.0",
     "pbg-emitters>=0.1.0",
+    "ruamel.yaml>=0.18",
 ]
 
 [project.optional-dependencies]
@@ -23,6 +24,7 @@ pbg-feedback-import = "pbg_superpowers.feedback_import:cli"
 pbg-migrate-nested = "pbg_superpowers.migrate_nested:main"
 pbg-migrate-inputs = "pbg_superpowers.migrate_inputs:main"
 pbg-backfill-runs = "pbg_superpowers.backfill_runs:main"
+pbg-compute-outcomes = "pbg_superpowers.study_evaluator:compute_outcomes_cli"
 
 [build-system]
 requires = ["hatchling"]
