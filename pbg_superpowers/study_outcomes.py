@@ -82,7 +82,8 @@ def _mechanical_record(db_row: dict) -> dict:
 
 def record_runs(study_dir) -> dict:
     """Merge the study's runs.db rows into study.yaml's runs[] by run name.
-    Updates only mechanical fields; preserves authored outcomes/prose. Idempotent.
+    Updates only mechanical fields; preserves authored outcomes/prose and all
+    YAML comments via ruamel round-trip write. Idempotent.
     Returns {"added": n, "updated": n}."""
     study_dir = Path(study_dir)
     study_yaml = study_dir / "study.yaml"
@@ -94,6 +95,7 @@ def record_runs(study_dir) -> dict:
         runs = []
     by_name = {r["name"]: r for r in runs if isinstance(r, dict) and r.get("name")}
 
+    # Count-only pass on the plain-loaded spec (no mutation here).
     added = updated = 0
     for row in db_rows:
         rec = _mechanical_record(row)
@@ -102,21 +104,57 @@ def record_runs(study_dir) -> dict:
             continue
         if name in by_name:
             target = by_name[name]
-            changed = False
-            for k in _MECHANICAL:
-                if k in rec and target.get(k) != rec[k]:
-                    target[k] = rec[k]
-                    changed = True
-            updated += 1 if changed else 0
+            changed = any(k in rec and target.get(k) != rec[k] for k in _MECHANICAL)
+            if changed:
+                updated += 1
         else:
-            runs.append(rec)
-            by_name[name] = rec
             added += 1
 
     if added or updated:
-        spec["runs"] = runs
-        study_io.save_yaml_atomic(study_yaml, spec)
+        _write_runs_preserving_comments(study_yaml, db_rows)
     return {"added": added, "updated": updated}
+
+
+def _write_runs_preserving_comments(study_yaml: Path, db_rows: list[dict]) -> None:
+    """Apply db_rows into study_yaml using ruamel round-trip so YAML comments
+    and formatting are preserved.  Only mechanical fields are touched on
+    existing entries; new entries are appended as plain dicts."""
+    from io import StringIO
+
+    from ruamel.yaml import YAML
+
+    ryaml = YAML()
+    ryaml.preserve_quotes = True
+    ryaml.width = 4096  # avoid line-wrap reflow on long prose values
+
+    rt_spec = ryaml.load(study_yaml.read_text())
+    if rt_spec is None:
+        rt_spec = {}
+
+    rt_runs = rt_spec.get("runs")
+    if not isinstance(rt_runs, list):
+        rt_runs = []
+        rt_spec["runs"] = rt_runs
+
+    rt_by_name = {r["name"]: r for r in rt_runs if isinstance(r, dict) and r.get("name")}
+
+    for row in db_rows:
+        rec = _mechanical_record(row)
+        name = rec.get("name")
+        if not name:
+            continue
+        if name in rt_by_name:
+            target = rt_by_name[name]
+            for k in _MECHANICAL:
+                if k in rec:
+                    target[k] = rec[k]
+        else:
+            rt_runs.append(rec)
+            rt_by_name[name] = rec
+
+    buf = StringIO()
+    ryaml.dump(rt_spec, buf)
+    study_io.atomic_write(study_yaml, buf.getvalue())
 
 
 def sync(study_dir) -> dict:
