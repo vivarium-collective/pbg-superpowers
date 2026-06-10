@@ -211,13 +211,51 @@ def _extract_observable_tokens(path: str) -> list[str]:
     return tokens
 
 
+def _try_select_fallback(token: str, reader: "RunReader") -> "pl.DataFrame | None":
+    """Try to resolve a failed ``series(token)`` via ``reader.select``.
+
+    Handles two selector types:
+    - Bracket-style bulk IDs (e.g. ``MONOMER0-160[c]``) → ``bulk_id`` selector.
+    - Dotted-path literal-index tokens (not applicable here; handled at the
+      path level in :func:`_resolve_series`).
+
+    Returns the ``[generation, time, abs_time, value]`` DataFrame on success,
+    or ``None`` when the token cannot be mapped to a selector (never-guess
+    preserved: only bulk-id bracket tokens are attempted).
+    """
+    if _BRACKET_ID.fullmatch(token):
+        try:
+            return reader.select({"type": "bulk_id", "value": token})
+        except Exception:  # noqa: BLE001
+            return None
+    return None
+
+
+# Regex for a simple literal-index path: "dotted.path[N]" with no surrounding arithmetic.
+_LITERAL_INDEX_PATH_RE = re.compile(
+    r"^([A-Za-z_]\w*(?:\.\w+)*)\[(\d+)\]$"
+)
+
+
 def _resolve_series(path: str, reader: "RunReader") -> pl.DataFrame:
     """Resolve an observable path or arithmetic expression to a series.
+
+    Falls back to ``reader.select`` when ``reader.series`` fails:
+
+    - Bracket-style bulk IDs (e.g. ``MONOMER0-160[c]``) in expressions →
+      ``select({"type": "bulk_id", "value": token})``.
+    - Simple literal-index path (e.g. ``listeners.monomer_counts[3]``) →
+      ``select({"type": "literal_index", "value": 3, "observable": "..."})``.
+
+    ``ObservableNotFound`` is raised only when BOTH ``series`` and the
+    appropriate ``select`` fallback fail — never-guess is preserved.
 
     Args:
         path:   Observable path (e.g. ``listeners.mass.cell_mass``) or a
                 simple arithmetic expression over observables
-                (e.g. ``a / (b + c)``).  Literal numbers (``* 2``) are allowed.
+                (e.g. ``a / (b + c)``).  Literal numbers (``* 2``) are
+                allowed.  Bulk-id expressions are also supported
+                (e.g. ``MONOMER0-160[c] / (PD03831[c] + MONOMER0-160[c])``).
         reader: RunReader opened on the target run.
 
     Returns:
@@ -225,22 +263,40 @@ def _resolve_series(path: str, reader: "RunReader") -> pl.DataFrame:
 
     Raises:
         ObservableNotFound: If any token in *path* cannot be resolved via
-            the reader (KeyError or any other exception from ``series()``).
+            either ``series()`` or the selector fallback.
     """
+    # Fast path: simple literal-index (e.g. "listeners.monomer_counts[3]")
+    # before general tokenisation to avoid subscript in _eval_expression.
+    m = _LITERAL_INDEX_PATH_RE.match(path.strip())
+    if m:
+        observable = m.group(1)
+        idx = int(m.group(2))
+        try:
+            return reader.select(
+                {"type": "literal_index", "value": idx, "observable": observable}
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise ObservableNotFound(
+                f"literal_index path {path!r} not resolvable: {exc}"
+            ) from exc
+
     tokens = _extract_observable_tokens(path)
     if not tokens:
         raise ObservableNotFound(f"no observable tokens found in path: {path!r}")
 
-    # Resolve each token — fail fast on the first that cannot be fetched
+    # Resolve each token — with selector fallback for bulk-id tokens.
     resolved: dict[str, pl.DataFrame] = {}
     for token in tokens:
         try:
             s = reader.series(token)
             resolved[token] = s
-        except KeyError:
-            raise ObservableNotFound(f"observable {token!r} not resolvable")
-        except Exception as exc:  # noqa: BLE001
-            raise ObservableNotFound(f"observable {token!r} not resolvable: {exc}") from exc
+        except (KeyError, Exception):  # noqa: BLE001 — try fallback before giving up
+            s = _try_select_fallback(token, reader)
+            if s is None:
+                raise ObservableNotFound(
+                    f"observable {token!r} not resolvable"
+                )
+            resolved[token] = s
 
     # If there is exactly one observable AND the path is just that token
     # (no surrounding arithmetic), return the series directly.
@@ -348,6 +404,7 @@ _KNOWN_WINDOWS = frozenset({
     "every_generation",
     "peak_of_each_cycle",
     "gen_steady_state",
+    "per_minute_full_lineage",  # rate window: Δvalue/Δtime_seconds × 60
 })
 
 
@@ -377,6 +434,24 @@ def _apply_window(series: pl.DataFrame, window_spec: str) -> tuple:
     """
     if window_spec == "full_lineage_from_gen_0":
         return ("flat", series)
+
+    if window_spec == "per_minute_full_lineage":
+        # Rate window: per-step Δvalue/Δabs_time × 60 (converts seconds → per-minute).
+        # abs_time is used (cumulative across generations) for a monotonic time axis.
+        # The first row is dropped (no previous step); rows where Δtime=0 are also
+        # dropped (guard against div-by-zero / inf).
+        if len(series) < 2:
+            return ("flat", series.head(0))
+        sorted_s = series.sort("abs_time")
+        with_rate = sorted_s.with_columns(
+            pl.when(pl.col("abs_time").diff() == 0.0)
+            .then(pl.lit(None).cast(pl.Float64))
+            .otherwise(pl.col("value").diff() / pl.col("abs_time").diff() * 60.0)
+            .alias("value")
+        )
+        # Drop the first row (diff gives null) and any zero-dt rows (set to null above)
+        result = with_rate.slice(1).filter(pl.col("value").is_not_null())
+        return ("flat", result)
 
     if window_spec == "every_generation":
         try:

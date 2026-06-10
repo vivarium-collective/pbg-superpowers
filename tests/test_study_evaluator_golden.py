@@ -214,10 +214,18 @@ def test_golden_study_tests_all_agent_bucketed(capsys):
             or "kind" in reason.lower()
         ), f"Unexpected reason for test 2: {reason!r}"
 
-    # Test 4: unsupported window 'per_minute_full_lineage'
+    # Test 4: per_minute_full_lineage window is now SUPPORTED (Task 2), but the
+    # path "listeners.rnap_data.rna_init_event_per_cistron (at dnaA cistron)"
+    # has prose qualifiers — the token fails series() + select() fallback →
+    # agent bucket for "not resolvable", not "unsupported window" any more.
     if "dnaa-mrna-init-rate-near-biological-rate" in outcomes:
         reason = outcomes["dnaa-mrna-init-rate-near-biological-rate"]["reason"]
-        assert "unsupported window" in reason.lower() or "window" in reason.lower(), (
+        assert (
+            "unsupported window" in reason.lower()
+            or "window" in reason.lower()
+            or "not resolvable" in reason.lower()
+            or "resolution error" in reason.lower()
+        ), (
             f"Unexpected reason for test 4: {reason!r}"
         )
 
