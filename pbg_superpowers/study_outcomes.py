@@ -177,6 +177,11 @@ def sync(study_dir) -> dict:
         summary["simulation_set"] = populate_simulation_set(study_dir)
     except Exception as exc:  # noqa: BLE001
         summary["simulation_set"] = {"error": str(exc)}
+    try:
+        from .finding_observations import populate_finding_observations
+        summary["findings"] = populate_finding_observations(study_dir)
+    except Exception as exc:  # noqa: BLE001
+        summary["findings"] = {"error": str(exc)}
     return summary
 
 

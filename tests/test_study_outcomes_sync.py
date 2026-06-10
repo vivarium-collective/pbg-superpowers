@@ -222,6 +222,60 @@ def _raise_runtime(*_args, **_kwargs):
     raise RuntimeError("boom")
 
 
+# ===========================================================================
+# Task 2: sync calls populate_finding_observations as best-effort 4th step
+# ===========================================================================
+
+
+def test_sync_includes_findings_key_in_summary(study_with_store_and_db):
+    """sync summary has a 'findings' key after populate_finding_observations is wired."""
+    study_dir, _store = study_with_store_and_db
+
+    with patch("pbg_emitters.RunReader") as mock_cls:
+        mock_cls.open.return_value = _fake_reader()
+        result = so.sync(study_dir)
+
+    assert "findings" in result, (
+        "sync summary must include 'findings' key (populate_finding_observations result)"
+    )
+    findings = result["findings"]
+    assert isinstance(findings, dict), "findings value must be a dict"
+    assert "filled" in findings
+    assert "skipped" in findings
+
+
+def test_sync_findings_best_effort_on_error(tmp_path: Path, monkeypatch):
+    """If populate_finding_observations raises, sync captures error under 'findings' and does NOT raise."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    study_io.save_yaml_atomic(
+        study_dir / "study.yaml",
+        {"name": "err-study", "runs": []},
+    )
+
+    import pbg_superpowers.finding_observations as fo
+    monkeypatch.setattr(fo, "populate_finding_observations", _raise_runtime)
+
+    result = so.sync(study_dir)
+    assert "findings" in result
+    assert "error" in result["findings"]
+    assert "boom" in result["findings"]["error"]
+
+
+def test_sync_findings_zero_when_no_findings(study_with_store_and_db):
+    """When the study has no findings[], findings={filled:0, skipped:0}."""
+    study_dir, _store = study_with_store_and_db
+
+    with patch("pbg_emitters.RunReader") as mock_cls:
+        mock_cls.open.return_value = _fake_reader()
+        result = so.sync(study_dir)
+
+    findings = result.get("findings", {})
+    # Study fixture has no findings[] section — both counts are 0
+    assert findings.get("filled", -1) == 0
+    assert findings.get("skipped", -1) == 0
+
+
 def test_sync_degradation_on_import_error(tmp_path: Path, monkeypatch):
     """If study_evaluator is unavailable (ImportError), sync returns {"skipped": ...} and does NOT raise."""
     study_dir = tmp_path / "study"

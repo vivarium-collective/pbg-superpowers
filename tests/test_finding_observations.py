@@ -738,6 +738,218 @@ runs:
 
 
 # ---------------------------------------------------------------------------
+# Task 2: sync wiring
+# ---------------------------------------------------------------------------
+
+
+def test_sync_includes_findings_key(tmp_path, monkeypatch):
+    """study_outcomes.sync includes 'findings' key in its summary dict."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    _write_study(study_dir / "study.yaml", "name: sync-test-study\nruns: []\n")
+
+    # Monkeypatch populate_finding_observations to return a known value
+    import pbg_superpowers.finding_observations as fo
+    monkeypatch.setattr(fo, "populate_finding_observations",
+                        lambda *a, **k: {"filled": 2, "skipped": 1})
+
+    from pbg_superpowers import study_outcomes as so
+    result = so.sync(study_dir)
+
+    assert "findings" in result, "sync must include findings key"
+    assert result["findings"] == {"filled": 2, "skipped": 1}
+
+
+def test_sync_findings_best_effort_does_not_raise_on_error(tmp_path, monkeypatch):
+    """populate_finding_observations errors are captured; sync still returns cleanly."""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    _write_study(study_dir / "study.yaml", "name: err-test\nruns: []\n")
+
+    def _boom(*a, **k):
+        raise RuntimeError("boom")
+
+    import pbg_superpowers.finding_observations as fo
+    monkeypatch.setattr(fo, "populate_finding_observations", _boom)
+
+    from pbg_superpowers import study_outcomes as so
+    result = so.sync(study_dir)
+
+    assert "findings" in result
+    assert "error" in result["findings"]
+
+
+# ---------------------------------------------------------------------------
+# Synthetic golden: dnaa-like study with from_test (proves full populate)
+# ---------------------------------------------------------------------------
+
+# Mimics the dnaa-2 nucleotide-balance study band structure, but with from_test
+# links added so populate can fill the slots. This is the synthetic golden
+# because the real dnaa-2 uses from_run (documented in the test below).
+_DNAA_LIKE_STUDY = """\
+# Synthetic golden — mirrors dnaa-2 band structure with from_test links
+name: dnaa-like-synthetic
+
+tests:
+  # Mimics frac-test from dnaa-2 (Boesen 2024 [0.2, 0.5])
+  - name: frac-test
+    measure:
+      kind: generation_average
+      path: obs.fraction
+    pass_if:
+      op: in_range
+      low: 0.2
+      high: 0.5
+    cites:
+      - Boesen2024
+  # Mimics total-dnaa test from dnaa-2 ([300, 800])
+  - name: total-dnaa
+    measure:
+      kind: generation_average
+      path: obs.count
+    pass_if:
+      op: in_range
+      low: 300
+      high: 800
+    calibration_anchor:
+      literature_target: 550
+    cites:
+      - Boesen2024
+
+readouts:
+  - name: DnaA-ATP fraction
+    identifier: obs.fraction
+    units: fraction
+    notes: DnaA-ATP / total, Boesen 2024 [0.2, 0.5] band.
+  - name: total DnaA count
+    identifier: obs.count
+    units: molecules/cell
+    notes: Total DnaA pool, [300, 800] band.
+
+runs:
+  - name: dnaa-like-run-1
+    status: completed
+    timestamp: '2026-06-01T00:00:00Z'
+    # ruamel round-trip must preserve this comment
+    computed_outcomes:
+      frac-test:
+        result: PASS
+        measured_value: 0.268
+        evaluated_by: code
+        operator: in_range
+        detail: 0.268 in [0.2, 0.5]
+      total-dnaa:
+        result: PASS
+        measured_value: 575.0
+        evaluated_by: code
+        operator: in_range
+        detail: 575 in [300, 800]
+
+findings:
+  # authored finding — statement/summary must NOT change
+  - id: F-01
+    kind: computational
+    status: confirms
+    statement: 'The DnaA-ATP fraction is in the biological band with the integrate-dt mechanism.'
+    summary: |
+      Authored mechanism summary. Must survive populate unchanged.
+    evidence:
+      from_test: frac-test
+    expected:
+      summary: 'Boesen 2024 reports [0.2, 0.5] for the DnaA-ATP fraction.'
+  - id: F-02
+    kind: computational
+    status: confirms
+    statement: 'Total DnaA pool is in the biological range.'
+    evidence:
+      from_test: total-dnaa
+    calibration_anchor:
+      literature_target: 550
+"""
+
+
+def test_golden_synthetic_dnaa_like_populate(tmp_path):
+    """Synthetic golden: dnaa-2-like study with from_test links fills all slots.
+
+    Real dnaa-2 uses from_run — documented in test_golden_dnaa2_v2einvest_untouched.
+    This synthetic fixture proves the populate path works end-to-end for studies
+    that DO have from_test links (the intended future state of dnaa-like studies).
+    """
+    study_dir = tmp_path / "dnaa-like"
+    study_dir.mkdir()
+    _write_study(study_dir / "study.yaml", _DNAA_LIKE_STUDY)
+
+    from pbg_superpowers.finding_observations import populate_finding_observations
+    result = populate_finding_observations(study_dir)
+
+    assert result["filled"] == 2, f"both findings should be filled; got {result}"
+    assert result["skipped"] == 0
+
+    doc = _load(study_dir / "study.yaml")
+    findings = {f["id"]: f for f in doc["findings"]}
+
+    # F-01: frac-test (in-band → divergence_factor=0.0)
+    f1 = findings["F-01"]
+    assert f1["evidence"]["observed"] == pytest.approx(0.268)
+    assert f1["evidence"]["units"] == "fraction"
+    assert f1["evidence"]["divergence_factor"] == pytest.approx(0.0)
+    assert f1["expected"]["range"] == [0.2, 0.5]
+    assert f1["expected"]["cites"] == ["Boesen2024"]
+    assert f1["provenance"]["run_ids"] == ["dnaa-like-run-1"]
+    # Authored prose must be preserved
+    assert f1["statement"] == "The DnaA-ATP fraction is in the biological band with the integrate-dt mechanism."
+    assert "Authored mechanism summary" in f1["summary"]
+    assert f1["expected"]["summary"] == "Boesen 2024 reports [0.2, 0.5] for the DnaA-ATP fraction."
+
+    # F-02: total-dnaa (in-band → divergence_factor=0.0) + calibration_anchor
+    f2 = findings["F-02"]
+    assert f2["evidence"]["observed"] == pytest.approx(575.0)
+    assert f2["evidence"]["units"] == "molecules/cell"
+    assert f2["evidence"]["divergence_factor"] == pytest.approx(0.0)
+    assert f2["expected"]["range"] == [300, 800]
+    # calibration_anchor.observed_value + divergence_factor filled
+    anchor = f2["calibration_anchor"]
+    assert anchor["observed_value"] == pytest.approx(575.0)
+    expected_div = (575.0 - 550) / 550
+    assert anchor["divergence_factor"] == pytest.approx(expected_div, abs=1e-5)
+    assert anchor["literature_target"] == 550  # unchanged
+
+
+def test_golden_synthetic_dnaa_like_comments_preserved(tmp_path):
+    """ruamel comment-preserving round-trip: comments survive populate."""
+    study_dir = tmp_path / "dnaa-like"
+    study_dir.mkdir()
+    _write_study(study_dir / "study.yaml", _DNAA_LIKE_STUDY)
+
+    from pbg_superpowers.finding_observations import populate_finding_observations
+    populate_finding_observations(study_dir)
+
+    text = (study_dir / "study.yaml").read_text(encoding="utf-8")
+    assert "# Synthetic golden — mirrors dnaa-2 band structure" in text
+    assert "# Mimics frac-test from dnaa-2 (Boesen 2024 [0.2, 0.5])" in text
+    assert "# authored finding — statement/summary must NOT change" in text
+    assert "# ruamel round-trip must preserve this comment" in text
+
+
+def test_golden_synthetic_dnaa_like_idempotent(tmp_path):
+    """Second populate call on dnaa-like synthetic → filled=0, no file write."""
+    study_dir = tmp_path / "dnaa-like"
+    study_dir.mkdir()
+    _write_study(study_dir / "study.yaml", _DNAA_LIKE_STUDY)
+
+    from pbg_superpowers.finding_observations import populate_finding_observations
+    r1 = populate_finding_observations(study_dir)
+    mtime1 = (study_dir / "study.yaml").stat().st_mtime
+
+    r2 = populate_finding_observations(study_dir)
+    mtime2 = (study_dir / "study.yaml").stat().st_mtime
+
+    assert r1["filled"] == 2
+    assert r2["filled"] == 0
+    assert mtime2 == mtime1, "no write on idempotent second call"
+
+
+# ---------------------------------------------------------------------------
 # Golden test: real dnaa-2 study (read-only, tmp copy)
 # ---------------------------------------------------------------------------
 

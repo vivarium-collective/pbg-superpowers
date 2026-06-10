@@ -31,6 +31,7 @@ pbg-compute-outcomes = "pbg_superpowers.study_evaluator:compute_outcomes_cli"
 pbg-sync-runs = "pbg_superpowers.study_outcomes:main"
 pbg-migrate-readouts = "pbg_superpowers.readout_migration:main"
 pbg-populate-simulation-set = "pbg_superpowers.simulation_set:main"
+pbg-populate-findings = "pbg_superpowers.finding_observations:main"
 
 [build-system]
 requires = ["hatchling"]
