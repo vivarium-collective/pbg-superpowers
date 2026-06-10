@@ -356,6 +356,15 @@ def resolve_study_readouts(
 ) -> dict[str, ResolvedReadout | UnresolvedReadout]:
     """Normalise all readouts in a study spec dict.
 
+    Never-guess policy: readouts that are ambiguous, prose-laden, use the
+    middle-dot (·) multi-id group syntax, or contain comma-separated IDs
+    inside brackets are returned as ``UnresolvedReadout`` with a clear reason.
+    The evaluator (#6) and RunReader (#2) must treat UnresolvedReadout entries
+    as opaque and skip automated evaluation.
+
+    This function is the primary entry point for study-level normalisation;
+    it does NOT rewrite the study.yaml file.
+
     Args:
         spec: Parsed study.yaml dict; reads ``spec["readouts"]`` (list).
 
