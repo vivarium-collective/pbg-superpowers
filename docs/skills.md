@@ -1,6 +1,6 @@
 # Skills catalog
 
-12 user-facing skills (plus `/pbg-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects). v0.9 consolidated the 17-skill v0.8 catalog — see the [migration table](#migration-from-v08) below.
+13 user-facing skills (plus `/pbg-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects). v0.9 consolidated the 17-skill v0.8 catalog — see the [migration table](#migration-from-v08) below.
 
 ## Wrap & compose
 
@@ -33,6 +33,12 @@
 Maintainer-only: to audit an external `pbg-*` repo for discovery- and
 packaging-convention compliance, run `python scripts/audit-pbg-repo.py <repo>`
 from a pbg-superpowers checkout. (Replaces the v0.8 `/pbg-package` skill.)
+
+## Provenance & citations
+
+| Skill | What it does |
+|---|---|
+| [`/pbg-cite-bands <study-slug>`](../skills/pbg-cite-bands/SKILL.md) | Guided band-provenance extraction (spine stage #3b) — surface candidate evidence from expert PDFs for uncited acceptance bands, then write structured `cites`/`calibration_anchor` into `study.yaml` via a deterministic comment-preserving helper. |
 
 ## Run, explore, study
 

@@ -5,6 +5,11 @@ agent skill and the report renderer — it surfaces every acceptance band that
 carries no machine-linked ``cites`` bib_key, so 3b can prompt the author to
 fill them in.
 
+``set_band_provenance(study_dir, test_name, cites, calibration_anchor=None)``
+is the deterministic write helper the /pbg-cite-bands skill calls after the
+agent judges the correct source.  It uses a ruamel comment-preserving
+round-trip (mirrors ``simulation_set._write_simset_preserving_comments``).
+
 Covered entry kinds:
 - ``behavior_tests[]`` — detect via numeric ``pass_if.low``/``high``/``threshold``
   or ``calibration_anchor.literature_target``
@@ -19,6 +24,7 @@ A test/readout is "band-bearing AND missing cites" when:
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 # Regex for prose band notation in readout notes: "[0.2, 0.5]" or "[300, 800]".
@@ -141,3 +147,111 @@ def bands_missing_provenance(spec: dict) -> list[dict]:
             })
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# set_band_provenance — deterministic write helper (stage 3b)
+# ---------------------------------------------------------------------------
+
+
+def set_band_provenance(
+    study_dir: Path | str,
+    test_name: str,
+    cites: list[str],
+    calibration_anchor: dict | None = None,
+) -> bool:
+    """Write ``cites`` (and optionally ``calibration_anchor``) onto a named test entry.
+
+    Finds the entry by ``name`` in ``behavior_tests[]`` then ``tests[]``.  Never
+    fabricates an entry — returns ``False`` immediately if the name is not found.
+
+    Uses a ruamel comment-preserving round-trip (``YAML(); preserve_quotes=True;
+    width=4096``), so comments on untouched entries survive byte-identical.
+    Only the targeted entry is modified; all other entries and the rest of the
+    document are left untouched.
+
+    Idempotent: a second call with identical arguments returns ``False`` and
+    does NOT write the file again.
+
+    Parameters
+    ----------
+    study_dir:
+        Directory containing ``study.yaml``.
+    test_name:
+        The ``name`` field of the behavior_test / test to update.
+    cites:
+        List of bib_keys to set.  Merged (dedup, order-preserved) into any
+        existing ``cites`` list — never clobbers it.
+    calibration_anchor:
+        Optional dict to set as the ``calibration_anchor`` key.  Only written
+        when provided; existing value is compared and only replaced when different.
+
+    Returns
+    -------
+    bool
+        ``True`` if the file was written; ``False`` if the entry was not found
+        or nothing changed (idempotent).
+    """
+    from io import StringIO
+
+    from ruamel.yaml import YAML
+
+    from . import study_io
+
+    study_dir = Path(study_dir)
+    study_yaml = study_dir / "study.yaml"
+
+    ryaml = YAML()
+    ryaml.preserve_quotes = True
+    ryaml.width = 4096  # avoid line-wrap reflow on long prose values
+
+    original_text = study_yaml.read_text()
+    rt_spec = ryaml.load(original_text)
+    if rt_spec is None:
+        return False
+
+    # Find the target entry: behavior_tests first, then tests.
+    target = None
+    for section in ("behavior_tests", "tests"):
+        items = rt_spec.get(section) or []
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if isinstance(item, dict) and item.get("name") == test_name:
+                target = item
+                break
+        if target is not None:
+            break
+
+    if target is None:
+        return False  # Never fabricate an entry.
+
+    changed = False
+
+    # --- Merge cites (dedup, preserve order) ---------------------------------
+    # Convert existing CommentedSeq (if any) to a plain list for comparison.
+    existing_cites: list[str] = list(target.get("cites") or [])
+    merged = list(existing_cites)
+    for key in cites:
+        if key not in merged:
+            merged.append(key)
+
+    if merged != existing_cites:
+        target["cites"] = merged
+        changed = True
+
+    # --- Set calibration_anchor when provided --------------------------------
+    if calibration_anchor is not None:
+        existing_anchor = target.get("calibration_anchor")
+        # CommentedMap inherits from OrderedDict; equality with plain dict works.
+        if existing_anchor != calibration_anchor:
+            target["calibration_anchor"] = calibration_anchor
+            changed = True
+
+    if not changed:
+        return False
+
+    buf = StringIO()
+    ryaml.dump(rt_spec, buf)
+    study_io.atomic_write(study_yaml, buf.getvalue())
+    return True
