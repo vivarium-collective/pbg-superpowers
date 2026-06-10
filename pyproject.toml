@@ -32,6 +32,7 @@ pbg-sync-runs = "pbg_superpowers.study_outcomes:main"
 pbg-migrate-readouts = "pbg_superpowers.readout_migration:main"
 pbg-populate-simulation-set = "pbg_superpowers.simulation_set:main"
 pbg-populate-findings = "pbg_superpowers.finding_observations:main"
+pbg-roll-up = "pbg_superpowers.roll_up:main"
 
 [build-system]
 requires = ["hatchling"]
