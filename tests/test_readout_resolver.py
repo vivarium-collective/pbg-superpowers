@@ -471,3 +471,114 @@ def test_old_dialects_do_not_infer_aggregate():
     result = resolve_readout(ro)
     assert isinstance(result, ResolvedReadout)
     assert result.aggregate is None
+
+
+# ---------------------------------------------------------------------------
+# FIX 1 — to_select_dict() merges observable into index_by for RunReader.select
+# ---------------------------------------------------------------------------
+
+def test_to_select_dict_literal_index():
+    """literal_index element → to_select_dict includes observable key."""
+    ro = {
+        "name": "DnaA monomer total",
+        "identifier": "listeners.monomer_counts[3861]",
+        "units": "count",
+    }
+    result = resolve_readout(ro)
+    assert isinstance(result, ResolvedReadout)
+    assert result.kind == "element"
+    d = result.to_select_dict()
+    assert d == {
+        "type": "literal_index",
+        "value": 3861,
+        "observable": "listeners.monomer_counts",
+    }
+
+
+def test_to_select_dict_bulk_id():
+    """bulk_id element → to_select_dict includes observable (harmless/correct for select)."""
+    ro = {
+        "name": "DnaA-ATP",
+        "identifier": "bulk MONOMER0-160[c]",
+    }
+    result = resolve_readout(ro)
+    assert isinstance(result, ResolvedReadout)
+    assert result.kind == "element"
+    d = result.to_select_dict()
+    assert d == {
+        "type": "bulk_id",
+        "value": "MONOMER0-160[c]",
+        "observable": "bulk",
+    }
+
+
+def test_to_select_dict_canonical_passthrough():
+    """Canonical index_by passthrough → to_select_dict includes observable from store_path."""
+    ro = {
+        "name": "DnaA protein",
+        "store_path": "agents.0.bulk",
+        "index_by": {"type": "bulk_id", "value": "PD03831[c]"},
+        "units": "count",
+    }
+    result = resolve_readout(ro)
+    assert isinstance(result, ResolvedReadout)
+    d = result.to_select_dict()
+    assert d is not None
+    assert d["type"] == "bulk_id"
+    assert d["value"] == "PD03831[c]"
+    assert d["observable"] == "agents.0.bulk"
+
+
+def test_to_select_dict_scalar_returns_none():
+    """scalar kind → to_select_dict returns None (not passable to select)."""
+    ro = {
+        "name": "cell mass",
+        "identifier": "listeners.mass.cell_mass",
+        "units": "fg",
+    }
+    result = resolve_readout(ro)
+    assert isinstance(result, ResolvedReadout)
+    assert result.kind == "scalar"
+    assert result.to_select_dict() is None
+
+
+def test_to_select_dict_expression_returns_none():
+    """expression kind → to_select_dict returns None."""
+    ro = {
+        "name": "DnaA-ATP fraction",
+        "identifier": (
+            "bulk MONOMER0-160[c] / (PD03831[c] + MONOMER0-160[c] + MONOMER0-4565[c])"
+        ),
+        "units": "fraction",
+    }
+    result = resolve_readout(ro)
+    assert isinstance(result, ResolvedReadout)
+    assert result.kind == "expression"
+    assert result.to_select_dict() is None
+
+
+# ---------------------------------------------------------------------------
+# FIX 2 — mixed bulk+listener expression must NOT drop dotted operands
+# ---------------------------------------------------------------------------
+
+def test_bulk_mixed_expression_keeps_dotted_operands():
+    """bulk X[c] / listeners.mass.cell_mass → operand_ids has BOTH operands.
+
+    X[c] → bulk_id; listeners.mass.cell_mass → scalar.
+    Neither is silently dropped.
+    """
+    ro = {
+        "name": "mixed",
+        "identifier": "bulk X[c] / listeners.mass.cell_mass",
+    }
+    result = resolve_readout(ro)
+    assert isinstance(result, ResolvedReadout)
+    assert result.kind == "expression"
+    assert result.operand_ids is not None
+    tokens = {op["token"] for op in result.operand_ids}
+    assert "X[c]" in tokens, "bracket-id X[c] must be an operand"
+    assert "listeners.mass.cell_mass" in tokens, "dotted path must NOT be dropped"
+    # check types
+    by_token = {op["token"]: op for op in result.operand_ids}
+    assert by_token["X[c]"]["index_by"]["type"] == "bulk_id"
+    assert by_token["listeners.mass.cell_mass"]["index_by"]["type"] == "scalar"

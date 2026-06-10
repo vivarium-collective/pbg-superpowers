@@ -52,6 +52,27 @@ class ResolvedReadout:
     source_dialect: str           # "index_by" | "identifier" | "store_path"
     notes: str | None = None      # stripped qualifier text or parse notes
 
+    def to_select_dict(self) -> dict | None:
+        """Return a dict suitable to pass directly to ``RunReader.select(index_by=...)``.
+
+        ``RunReader.select`` requires ``"observable"`` inside *index_by* for
+        ``literal_index`` and ``listener_id`` types (and it is harmless for
+        catalog-backed types like ``bulk_id``).  This method merges
+        ``self.observable`` into a copy of ``self.index_by`` so the caller can
+        pass the result straight to ``select`` without manually composing the
+        dict.
+
+        Returns:
+            ``{**self.index_by, "observable": self.observable}`` when
+            ``kind == "element"`` and ``index_by`` is present; ``None``
+            otherwise (scalar and expression kinds are not element selectors).
+        """
+        if self.kind != "element" or self.index_by is None:
+            return None
+        if self.observable is None:
+            return dict(self.index_by)
+        return {**self.index_by, "observable": self.observable}
+
 
 @dataclass
 class UnresolvedReadout:
@@ -84,17 +105,21 @@ def _has_arithmetic(s: str) -> bool:
 
 
 def _build_bulk_operand_ids(tokens: list[str]) -> list[dict]:
-    """Build operand_ids for a bulk expression (all tokens tagged bulk_id).
+    """Build operand_ids for a bulk expression.
 
-    Only bracket-style IDs (e.g. MONOMER0-160[c]) are included as operands;
-    dotted-path tokens that slipped through are skipped (they indicate a mixed
-    expression that the evaluator would need to look up separately).
+    Bracket-style IDs (e.g. MONOMER0-160[c]) are tagged ``bulk_id``.
+    Dotted-path tokens (e.g. ``listeners.mass.cell_mass``) are tagged
+    ``scalar`` so evaluator #6 resolves them via ``series(token)`` rather
+    than the bulk catalog — matching how the non-bulk expression path tags
+    dotted operands.  Nothing is silently dropped.
     """
-    return [
-        {"token": t, "index_by": {"type": "bulk_id", "value": t}}
-        for t in tokens
-        if _BRACKET_ID.fullmatch(t)
-    ]
+    result = []
+    for t in tokens:
+        if _BRACKET_ID.fullmatch(t):
+            result.append({"token": t, "index_by": {"type": "bulk_id", "value": t}})
+        else:
+            result.append({"token": t, "index_by": {"type": "scalar", "value": t}})
+    return result
 
 
 # ---------------------------------------------------------------------------
