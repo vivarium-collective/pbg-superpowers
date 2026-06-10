@@ -297,9 +297,10 @@ def test_window_peak_of_each_cycle_from_gen_N():
 
 
 def test_unsupported_window_raises():
+    # per_minute_full_lineage is now supported (Task 2); use a truly-unsupported spec.
     series = _make_3gen_series()
     with pytest.raises(se.WindowNotSupported):
-        se._apply_window(series, "per_minute_full_lineage")
+        se._apply_window(series, "per_second_full_lineage_xyz")
 
 
 def test_unsupported_window_routes_to_agent():
@@ -714,11 +715,12 @@ def test_never_guesses_pass_for_non_run_data_kind():
 
 
 def test_never_guesses_pass_for_unsupported_window():
+    # per_minute_full_lineage is now supported (Task 2); use a truly-unsupported spec.
     reader = _basic_reader()
     out = se.evaluate_test(
         {
             "name": "t",
-            "measure": {"kind": "range_check_per_generation", "path": "obs.a", "window": "per_minute_full_lineage"},
+            "measure": {"kind": "range_check_per_generation", "path": "obs.a", "window": "per_second_full_lineage_xyz"},
             "pass_if": {"op": "range", "low": 0, "high": 1000},
         },
         reader=reader,
