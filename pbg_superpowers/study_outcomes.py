@@ -159,10 +159,12 @@ def _write_runs_preserving_comments(study_yaml: Path, db_rows: list[dict]) -> No
 
 def sync(study_dir) -> dict:
     """Reconcile runs (record_runs) AND compute code verdicts (compute_outcomes)
-    AND auto-populate simulation_set (populate_simulation_set).
+    AND auto-populate simulation_set (populate_simulation_set) AND write
+    gate_evaluator (write_gate_evaluator).
 
-    compute_outcomes and populate_simulation_set are both best-effort: errors
-    are captured (never raised) so record_runs always completes.
+    compute_outcomes, populate_simulation_set, and write_gate_evaluator are all
+    best-effort: errors are captured (never raised) so record_runs always
+    completes.
     """
     summary = record_runs(study_dir)
     try:
@@ -177,6 +179,12 @@ def sync(study_dir) -> dict:
         summary["simulation_set"] = populate_simulation_set(study_dir)
     except Exception as exc:  # noqa: BLE001
         summary["simulation_set"] = {"error": str(exc)}
+    try:
+        from .study_verdict import write_gate_evaluator
+        changed = write_gate_evaluator(study_dir)
+        summary["gate"] = {"changed": changed}
+    except Exception as exc:  # noqa: BLE001
+        summary["gate"] = {"error": str(exc)}
     return summary
 
 
