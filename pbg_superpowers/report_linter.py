@@ -306,6 +306,9 @@ CHECKS = (
     "finding_without_statement",
     "finding_cites_unknown_bib_key",
     "finding_references_unknown_expert_doc",
+    # Band provenance (stage 3a): expert-sourced bands should carry structured cites
+    "band_test_missing_cites",
+    "band_cites_unknown_bib_key",
     # Derive-on-read status drift (v2ecoli round-2 #2)
     "status_out_of_date_vs_runs",
     # Forward-drift: declares done/passed but records no runs (dnaa-replication
@@ -832,6 +835,142 @@ def _check_finding_references_unknown_expert_doc(ctx: _LintContext) -> None:
             ),
             check="finding_references_unknown_expert_doc",
         )
+
+
+# ---------------------------------------------------------------------------
+# Pass 10B — band provenance checks (stage 3a)
+# ---------------------------------------------------------------------------
+
+
+def _is_numeric_band(test: dict) -> bool:
+    """Return True if *test* carries a quantitative acceptance band.
+
+    A test "has a band" when its ``pass_if`` block contains numeric
+    ``low`` / ``high`` / ``threshold`` keys OR its ``calibration_anchor``
+    block carries a ``literature_target``.
+    """
+    if not isinstance(test, dict):
+        return False
+    pass_if = test.get("pass_if") or {}
+    if isinstance(pass_if, dict):
+        if isinstance(pass_if.get("low"), (int, float)):
+            return True
+        if isinstance(pass_if.get("high"), (int, float)):
+            return True
+        if isinstance(pass_if.get("threshold"), (int, float)):
+            return True
+    anch = test.get("calibration_anchor") or {}
+    if isinstance(anch, dict) and anch.get("literature_target") is not None:
+        return True
+    return False
+
+
+def _check_band_test_missing_cites(ctx: _LintContext) -> None:
+    """Numeric-band behavior_tests[] / tests[] without cites → warning.
+
+    Expert-sourced acceptance bands (e.g. ``[0.2, 0.5]`` from Boesen 2024)
+    should carry a ``cites: [bib_key]`` so the band's source is machine-
+    linked rather than buried in prose notes.  This is a *warning* (not an
+    error) because it nudges rather than blocks — back-compat with all
+    existing uncited studies.
+    """
+    for section in ("behavior_tests", "tests"):
+        items = ctx.spec.get(section) or []
+        if not isinstance(items, list):
+            continue
+        for idx, test in enumerate(items):
+            if not isinstance(test, dict):
+                continue
+            if not _is_numeric_band(test):
+                continue
+            cites = test.get("cites") or []
+            if cites:  # has at least one cite — silent
+                continue
+            name = test.get("name", f"<index-{idx}>")
+            ctx.add(
+                level="warning",
+                field_path=f"{section}[{idx}]",
+                message=(
+                    f"Test {name!r} has a numeric acceptance band but no cites. "
+                    "Add cites: [bib_key] sourcing the band so its provenance is "
+                    "machine-linked (not just prose). See references/papers.bib."
+                ),
+                check="band_test_missing_cites",
+            )
+
+
+def _check_band_cites_unknown_bib_key(ctx: _LintContext) -> None:
+    """cites on behavior_tests, tests, readouts, and calibration_anchor must
+    resolve against ``references/papers.bib``.
+
+    Mirrors ``_check_finding_cites_unknown_bib_key``: silent when no
+    ``papers.bib`` exists, error otherwise.
+    """
+    known = _bib_keys_for_workspace(ctx.ws_root)
+    if not known:
+        # No bibliography to compare against — silent (same contract as finding check).
+        return
+
+    # behavior_tests[] and tests[]
+    for section in ("behavior_tests", "tests"):
+        items = ctx.spec.get(section) or []
+        if not isinstance(items, list):
+            continue
+        for idx, test in enumerate(items):
+            if not isinstance(test, dict):
+                continue
+            name = test.get("name", f"<index-{idx}>")
+            # Direct cites on the test
+            cites = test.get("cites") or []
+            if isinstance(cites, list):
+                for cidx, key in enumerate(cites):
+                    if isinstance(key, str) and key not in known:
+                        ctx.add(
+                            level="error",
+                            field_path=f"{section}[{idx}].cites[{cidx}]",
+                            message=(
+                                f"Test {name!r} cites unknown bib_key {key!r}. "
+                                "Add it to references/papers.bib first."
+                            ),
+                            check="band_cites_unknown_bib_key",
+                        )
+            # calibration_anchor.cites
+            anch = test.get("calibration_anchor") or {}
+            if isinstance(anch, dict):
+                anch_cites = anch.get("cites") or []
+                if isinstance(anch_cites, list):
+                    for cidx, key in enumerate(anch_cites):
+                        if isinstance(key, str) and key not in known:
+                            ctx.add(
+                                level="error",
+                                field_path=f"{section}[{idx}].calibration_anchor.cites[{cidx}]",
+                                message=(
+                                    f"Test {name!r} calibration_anchor cites unknown bib_key "
+                                    f"{key!r}. Add it to references/papers.bib first."
+                                ),
+                                check="band_cites_unknown_bib_key",
+                            )
+
+    # readouts[]
+    readouts = ctx.spec.get("readouts") or []
+    if isinstance(readouts, list):
+        for idx, ro in enumerate(readouts):
+            if not isinstance(ro, dict):
+                continue
+            name = ro.get("name", f"<index-{idx}>")
+            cites = ro.get("cites") or []
+            if isinstance(cites, list):
+                for cidx, key in enumerate(cites):
+                    if isinstance(key, str) and key not in known:
+                        ctx.add(
+                            level="error",
+                            field_path=f"readouts[{idx}].cites[{cidx}]",
+                            message=(
+                                f"Readout {name!r} cites unknown bib_key {key!r}. "
+                                "Add it to references/papers.bib first."
+                            ),
+                            check="band_cites_unknown_bib_key",
+                        )
 
 
 # ---------------------------------------------------------------------------
@@ -1862,6 +2001,9 @@ _CHECK_FUNCTIONS = (
     _check_finding_without_statement,
     _check_finding_cites_unknown_bib_key,
     _check_finding_references_unknown_expert_doc,
+    # Band provenance (stage 3a)
+    _check_band_test_missing_cites,
+    _check_band_cites_unknown_bib_key,
     _check_visualization_addresses,
     _check_dag_edges_legacy_and_canonical_both_set,
     _check_status_legacy_only,
