@@ -72,10 +72,29 @@ def _has_arithmetic(s: str) -> bool:
     check for +, -, *, / in the remainder.  IDs' internal hyphens (e.g.
     MONOMER0-160) are consumed by _BRACKET_ID so any remaining '-' is
     arithmetic subtraction.
+
+    This uses the same id grammar as study_evaluator (_BRACKET_ID + _DOTTED_IDENT)
+    so that evaluator #6 can process a resolved expression identically to how
+    it processes a behavior_test measure.path — both go through
+    _extract_observable_tokens.
     """
     reduced = _BRACKET_ID.sub("", s)
     reduced = _DOTTED_IDENT.sub("", reduced)
     return bool(re.search(r"[+\-*/]", reduced))
+
+
+def _build_bulk_operand_ids(tokens: list[str]) -> list[dict]:
+    """Build operand_ids for a bulk expression (all tokens tagged bulk_id).
+
+    Only bracket-style IDs (e.g. MONOMER0-160[c]) are included as operands;
+    dotted-path tokens that slipped through are skipped (they indicate a mixed
+    expression that the evaluator would need to look up separately).
+    """
+    return [
+        {"token": t, "index_by": {"type": "bulk_id", "value": t}}
+        for t in tokens
+        if _BRACKET_ID.fullmatch(t)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -173,14 +192,13 @@ def _parse_identifier(
         )
 
     # --- Arithmetic expression? -----------------------------------------
+    # Detected via _has_arithmetic which uses the same id grammar as
+    # study_evaluator, ensuring expression tokens are evaluated identically
+    # by evaluator #6 (via _extract_observable_tokens / _eval_expression).
     if _has_arithmetic(remaining):
         tokens = _extract_observable_tokens(remaining)
         if is_bulk:
-            operand_ids = [
-                {"token": t, "index_by": {"type": "bulk_id", "value": t}}
-                for t in tokens
-                if _BRACKET_ID.fullmatch(t)
-            ]
+            operand_ids = _build_bulk_operand_ids(tokens)
         else:
             # Non-bulk expression: tag bracket-IDs as bulk_id, dotted paths as scalar
             operand_ids = []
