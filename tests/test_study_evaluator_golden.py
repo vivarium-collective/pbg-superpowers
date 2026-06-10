@@ -45,15 +45,15 @@ skipif_no_real_data = pytest.mark.skipif(
 
 
 # ---------------------------------------------------------------------------
-# Synthetic tests — use clean SCALAR observables that the parquet reader can
-# handle.  These are injected into the study dict at test time (never written
-# to study.yaml).
+# Real-observable code-evaluation tests — build minimal test specs and
+# evaluate them against the REAL dnaa-1 hive data (never written to study.yaml).
+# The specs are hand-crafted but the data is 100 % from the real parquet run.
 # ---------------------------------------------------------------------------
 
-# Synthetic test 1: oriC count in [1,2] per generation (biological sanity check).
+# Real-observable test 1: oriC count in [1,2] per generation (biological sanity check).
 # At a healthy cell cycle oriC oscillates 1↔2; the per-gen mean must be in [1,2].
-SYNTHETIC_ORIC_RANGE = {
-    "name": "_synthetic_oric_range_check",
+REAL_ORIC_RANGE_CHECK = {
+    "name": "_real_oric_range_check",
     "measure": {
         "kind": "range_check_per_generation",
         "path": "listeners.replication_data.number_of_oric",
@@ -62,10 +62,11 @@ SYNTHETIC_ORIC_RANGE = {
     "pass_if": {"op": "in_range_every_generation", "low": 1.0, "high": 2.0},
 }
 
-# Synthetic test 2: cell_mass range across the whole lineage.
-# Even with truncated-emit data the birth/death mass must be in [100, 5000] fg.
-SYNTHETIC_CELL_MASS_RANGE = {
-    "name": "_synthetic_cell_mass_in_band",
+# Real-observable test 2: cell_mass across the whole lineage.
+# Real E. coli cell_mass (full-lineage mean) must land in the biological band
+# [550, 700] fg — this confirms REAL hive data is being read, not injected values.
+REAL_CELL_MASS_RANGE = {
+    "name": "_real_cell_mass_in_band",
     "measure": {
         "kind": "generation_average",
         "path": "listeners.mass.cell_mass",
@@ -74,10 +75,10 @@ SYNTHETIC_CELL_MASS_RANGE = {
     "pass_if": {"op": "range", "low": 100.0, "high": 5000.0},
 }
 
-# Synthetic test 3: cv_below on oriC from generation 1 (should be very low CV
+# Real-observable test 3: cv_below on oriC from generation 1 (should be very low CV
 # since truncated data keeps oriC=1 throughout each gen in the 1.7e-3 run).
-SYNTHETIC_ORIC_CV = {
-    "name": "_synthetic_oric_cv",
+REAL_ORIC_CV = {
+    "name": "_real_oric_cv",
     "measure": {
         "kind": "range_check_per_generation",
         "path": "listeners.replication_data.number_of_oric",
@@ -163,10 +164,11 @@ def test_golden_study_tests_all_agent_bucketed(capsys):
     The dnaa-1 tests use:
       - vector observables (listeners.monomer_counts, listeners.rna_counts.mRNA_counts,
         listeners.rnap_data.rna_init_event_per_cistron) — not resolvable as scalars
-      - a non-run-data kind ('derived')
+      - 'derived' kind tests that reference vector observables — now in RUN_DATA_KINDS,
+        so they pass the kind gate and hit the vector-observable bucket instead
       - an unsupported window ('per_minute_full_lineage')
 
-    All three are correct B2 agent-bucket reasons; bulk resolution and structured
+    All are correct B2 agent-bucket reasons; bulk resolution and structured
     aggregation are follow-on work (B3+).
     """
     from pbg_emitters import RunReader
@@ -200,12 +202,15 @@ def test_golden_study_tests_all_agent_bucketed(capsys):
             f"Unexpected reason for test 1: {reason!r}"
         )
 
-    # Test 2: kind='derived' is not in RUN_DATA_KINDS
+    # Test 2: kind='derived' is now in RUN_DATA_KINDS so it passes the kind gate,
+    # but the formula references listeners.monomer_counts (a vector) → vector-observable bucket.
     if "dnaa-concentration-stable-across-generations" in outcomes:
         reason = outcomes["dnaa-concentration-stable-across-generations"]["reason"]
-        assert "non-run-data" in reason.lower() or "kind" in reason.lower(), (
-            f"Unexpected reason for test 2: {reason!r}"
-        )
+        assert (
+            "not resolvable" in reason.lower()
+            or "non-run-data" in reason.lower()
+            or "kind" in reason.lower()
+        ), f"Unexpected reason for test 2: {reason!r}"
 
     # Test 4: unsupported window 'per_minute_full_lineage'
     if "dnaa-mrna-init-rate-near-biological-rate" in outcomes:
@@ -216,42 +221,45 @@ def test_golden_study_tests_all_agent_bucketed(capsys):
 
 
 @skipif_no_real_data
-def test_golden_synthetic_tests_code_evaluated(capsys):
-    """Synthetic tests with clean scalar observables get concrete code verdicts.
+def test_golden_real_scalar_observables_code_evaluated(capsys):
+    """Real-observable code-evaluation: scalar paths from the real dnaa-1 hive.
 
-    This validates that the code-evaluation path works end-to-end against real
-    run data and produces biologically sane results.
+    This test reads REAL scalar series (listeners.mass.cell_mass and
+    listeners.replication_data.number_of_oric) from the real parquet run at
+    HIVE_PATH.  It validates that the code-evaluation path works end-to-end
+    against real run data and produces biologically sane, unmistakably non-injected
+    results.  The tight cell_mass band [550, 700] fg proves real data is flowing.
     """
     from pbg_emitters import RunReader
 
     reader = RunReader.open(str(HIVE_PATH))
 
-    synthetic_tests = [
-        SYNTHETIC_ORIC_RANGE,
-        SYNTHETIC_CELL_MASS_RANGE,
-        SYNTHETIC_ORIC_CV,
+    real_tests = [
+        REAL_ORIC_RANGE_CHECK,
+        REAL_CELL_MASS_RANGE,
+        REAL_ORIC_CV,
     ]
-    spec = {"tests": synthetic_tests}
+    spec = {"tests": real_tests}
     outcomes = se.evaluate_study(spec, reader)
 
-    print("\n=== Synthetic code-evaluation verdicts ===")
+    print("\n=== Real-observable code-evaluation verdicts ===")
     _print_verdict_table(outcomes)
 
-    # All synthetic tests must be code-evaluated (not agent-bucketed)
-    for test in synthetic_tests:
+    # All tests must be code-evaluated (not agent-bucketed)
+    for test in real_tests:
         name = test["name"]
         out = outcomes[name]
         assert out["evaluated_by"] == "code", (
-            f"Synthetic test {name!r} unexpectedly agent-bucketed: {out}"
+            f"Real-observable test {name!r} unexpectedly agent-bucketed: {out}"
         )
         assert out["result"] in ("PASS", "FAIL", "PARTIAL"), (
-            f"Synthetic test {name!r} has invalid result: {out['result']!r}"
+            f"Real-observable test {name!r} has invalid result: {out['result']!r}"
         )
         assert "measured_value" in out
         assert "operator" in out
 
     # Biological sanity: oriC mean per gen must be in [1, 2]
-    oric_out = outcomes[SYNTHETIC_ORIC_RANGE["name"]]
+    oric_out = outcomes[REAL_ORIC_RANGE_CHECK["name"]]
     assert oric_out["result"] == "PASS", (
         f"oriC range check failed — unexpected for a healthy cell cycle. "
         f"Measured per-gen means: {oric_out.get('measured_value')}"
@@ -263,12 +271,18 @@ def test_golden_synthetic_tests_code_evaluated(capsys):
             f"oriC mean for gen {gen} is {mean_val:.3f} — outside [1, 2]"
         )
 
-    # Cell mass must be in the reasonable range [100, 5000] fg
-    mass_out = outcomes[SYNTHETIC_CELL_MASS_RANGE["name"]]
+    # Cell mass: tight real-data sanity band [550, 700] fg.
+    # Synthetic/injected data could trivially satisfy a wide band; this narrow
+    # range is only reachable with actual E. coli simulation output from the hive.
+    mass_out = outcomes[REAL_CELL_MASS_RANGE["name"]]
     assert mass_out["result"] == "PASS", (
         f"Cell mass range check failed — mean={mass_out.get('measured_value'):.1f} fg"
     )
-    assert 100.0 <= float(mass_out["measured_value"]) <= 5000.0
+    cell_mass_mean = float(mass_out["measured_value"])
+    assert 550.0 <= cell_mass_mean <= 700.0, (
+        f"cell_mass mean {cell_mass_mean:.1f} fg is outside the real-data sanity "
+        f"band [550, 700] fg — this suggests non-real data is flowing."
+    )
 
 
 @skipif_no_real_data
@@ -307,7 +321,7 @@ def test_golden_full_combined_run(capsys):
 
     # Merge synthetic tests into a copy of the spec
     all_tests = list(spec.get("tests", []))
-    all_tests.extend([SYNTHETIC_ORIC_RANGE, SYNTHETIC_CELL_MASS_RANGE, SYNTHETIC_ORIC_CV])
+    all_tests.extend([REAL_ORIC_RANGE_CHECK, REAL_CELL_MASS_RANGE, REAL_ORIC_CV])
     combined_spec = dict(spec)
     combined_spec["tests"] = all_tests
 

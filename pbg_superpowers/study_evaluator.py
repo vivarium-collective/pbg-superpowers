@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 RUN_DATA_KINDS: frozenset[str] = frozenset({
     "range_check_per_generation",
     "generation_average",
+    "derived",         # authored spelling in study.yaml; "derived_scalar" is the alias
     "derived_scalar",
     "per_generation_mass_ratio",
     "oric_initiations_per_generation",
@@ -458,6 +459,13 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str) -> dict:
     """Apply a pass_if predicate to windowed data.
 
     Returns a code outcome dict or an agent/needs_rerun dict.
+
+    Note: reduction logic is keyed by *op*, not *kind*.  The measure ``kind``
+    field is used upstream (RUN_DATA_KINDS gate) to decide whether the
+    observable is run-data-evaluable at all, but it does NOT select the
+    reduction branch here.  Per-generation ops (e.g. ``in_range_every_generation``)
+    are what trigger per-gen reduction — so a future reader must not assume
+    ``kind`` drives the branching below.
     """
     window_kind, data = windowed
     label = f"{kind}/{op}"
