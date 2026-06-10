@@ -1,11 +1,14 @@
-"""study_evaluator.py — pure run-data evaluator (B2 increment).
+"""study_evaluator.py — pure run-data evaluator + computed-outcomes write-back (B2).
 
 Evaluates study behavior_tests against a RunReader: closed measure/pass_if
-DSL → per-test PASS/FAIL/PARTIAL + provenance.  Never writes to study.yaml.
+DSL → per-test PASS/FAIL/PARTIAL + provenance.  B2b adds write-back of a
+parallel ``computed_outcomes`` block per run — never touching ``outcomes``.
 
 Public API:
     evaluate_study(spec, reader) -> dict[str, dict]
     evaluate_test(test, reader) -> dict
+    compute_outcomes(study_dir, ws_root=None) -> summary_dict
+    _resolve_run_store(run, study_dir, ws_root=None) -> str | None
 
 Outcome shapes:
     code path:  {"result": "PASS"|"FAIL", "measured_value": ...,
@@ -670,3 +673,352 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str) -> dict:
 
     # Should never reach here — _op_supported guards above
     return _agent(f"unhandled op: {op!r}")
+
+
+# ---------------------------------------------------------------------------
+# B2b: per-run store resolution
+# ---------------------------------------------------------------------------
+
+def _to_plain(obj: Any) -> Any:
+    """Recursively convert ruamel.yaml objects to plain Python types."""
+    if hasattr(obj, "items"):
+        return {k: _to_plain(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_plain(v) for v in obj]
+    return obj
+
+
+def _resolve_run_store(
+    run: dict,
+    study_dir: Any,
+    ws_root: Any = None,
+) -> "str | None":
+    """Resolve a run entry to a RunReader-openable path.
+
+    Priority: ``emitter.store`` → ``run_dir`` → ``parquet``.
+    Relative paths are resolved against *study_dir*, then *ws_root*, then cwd.
+    For ``parquet`` candidates: if the resolved path lacks a ``history/``
+    subdirectory, descend to the first child directory that has one (the
+    experiment dir that RunReader can open).
+
+    Args:
+        run:       Run dict from study.yaml ``runs[]``.
+        study_dir: Directory containing the study.yaml.
+        ws_root:   Workspace root for resolving relative paths.
+
+    Returns:
+        Resolved absolute path string, or ``None`` if unresolvable.
+    """
+    import os
+    from pathlib import Path as _Path
+
+    study_dir = _Path(study_dir)
+    ws_root = _Path(ws_root) if ws_root else None
+
+    # Build (raw_path, is_parquet) candidates in priority order
+    candidates: list[tuple[str, bool]] = []
+    emitter = run.get("emitter") or {}
+    if isinstance(emitter, dict) and emitter.get("store"):
+        candidates.append((str(emitter["store"]), False))
+    if run.get("run_dir"):
+        candidates.append((str(run["run_dir"]), False))
+    if run.get("parquet"):
+        candidates.append((str(run["parquet"]), True))
+
+    if not candidates:
+        return None
+
+    # Bases for relative-path resolution (tried in order)
+    bases: list[_Path | None] = [None]  # None = treat path as absolute/cwd-relative
+    bases.append(study_dir)
+    if ws_root:
+        bases.append(ws_root)
+    bases.append(_Path(os.getcwd()))
+
+    for raw_path, is_parquet in candidates:
+        raw = _Path(raw_path)
+
+        # Find an existing path
+        resolved: _Path | None = None
+        for base in bases:
+            candidate = raw if base is None else base / raw
+            if candidate.exists():
+                resolved = candidate
+                break
+
+        if resolved is None:
+            continue
+
+        if is_parquet:
+            # If the resolved dir already has history/, use it directly
+            if (resolved / "history").exists():
+                return str(resolved)
+            # Descend to the first subdirectory that contains history/
+            try:
+                children = sorted(
+                    c for c in resolved.iterdir() if c.is_dir()
+                )
+                for child in children:
+                    if (child / "history").exists():
+                        return str(child)
+            except PermissionError:
+                pass
+            # No descendant with history/ found — skip this candidate
+            continue
+        else:
+            return str(resolved)
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# B2b: compute_outcomes — write parallel computed_outcomes block per run
+# ---------------------------------------------------------------------------
+
+def compute_outcomes(
+    study_dir: Any,
+    ws_root: Any = None,
+) -> dict:
+    """Evaluate all study runs and write a parallel ``computed_outcomes`` block.
+
+    Non-destructive: ``run["outcomes"]`` (authored) is **never** modified.
+    Writes ``run["computed_outcomes"]`` per run using a ruamel.yaml round-trip
+    to preserve comments.  Idempotent: writes the file only when content changed.
+
+    For each test in ``computed_outcomes``, attaches a ``reconcile`` flag:
+      - ``agree``       — code result matches authored result.
+      - ``divergent``   — code result differs from authored result.
+      - ``no_authored`` — no authored entry, or code produced no result
+                          (agent / needs_rerun bucket).
+
+    If a run's store cannot be resolved, writes
+    ``computed_outcomes = {_status: store_unresolved}`` and never fabricates
+    verdicts.
+
+    Args:
+        study_dir: Path to the directory containing ``study.yaml``.
+        ws_root:   Workspace root for resolving relative paths in run entries.
+
+    Returns:
+        Summary dict: ``{"runs_evaluated": int, "tests_code": int, "tests_agent": int}``
+    """
+    import io
+    import os
+    from pathlib import Path as _Path
+
+    import ruamel.yaml
+    import yaml as _yaml
+
+    study_dir = _Path(study_dir)
+    ws_root = _Path(ws_root) if ws_root else None
+    study_yaml_path = study_dir / "study.yaml"
+
+    # Plain load for evaluate_study (reads tests / behavior_tests)
+    spec = _yaml.safe_load(study_yaml_path.read_text(encoding="utf-8"))
+
+    # ruamel round-trip load: preserves comments + block style
+    ryaml = ruamel.yaml.YAML()
+    ryaml.preserve_quotes = True
+    ryaml.width = 4096  # prevent unwanted line-wrapping
+    with open(study_yaml_path, encoding="utf-8") as fh:
+        doc = ryaml.load(fh)
+
+    # Capture original serialised form for change detection
+    _orig_sio = io.StringIO()
+    ryaml.dump(doc, _orig_sio)
+    original_serialised = _orig_sio.getvalue()
+
+    runs_evaluated = 0
+    tests_code = 0
+    tests_agent = 0
+
+    for run in doc.get("runs") or []:
+        store_path = _resolve_run_store(run, study_dir, ws_root)
+
+        if store_path is None:
+            # Never guess — mark unresolved without fabricating verdicts
+            run["computed_outcomes"] = ruamel.yaml.CommentedMap(
+                {"_status": "store_unresolved"}
+            )
+            continue
+
+        # Open reader and evaluate
+        try:
+            from pbg_emitters import RunReader  # noqa: PLC0415
+            reader = RunReader.open(store_path)
+            outcomes = evaluate_study(spec, reader)
+        except Exception as exc:  # noqa: BLE001
+            run["computed_outcomes"] = ruamel.yaml.CommentedMap(
+                {"_status": f"evaluation_error: {exc}"}
+            )
+            continue
+
+        # Build computed_outcomes with reconcile flags
+        authored = run.get("outcomes") or {}
+        new_co = ruamel.yaml.CommentedMap()
+        for test_name, outcome in outcomes.items():
+            entry = ruamel.yaml.CommentedMap(outcome)
+
+            authored_entry = authored.get(test_name) if isinstance(authored, dict) else None
+            authored_result = (
+                authored_entry.get("result")
+                if isinstance(authored_entry, dict)
+                else None
+            )
+            code_result = outcome.get("result")  # None for agent / needs_rerun
+
+            if code_result is not None and authored_result is not None:
+                reconcile = "agree" if code_result == authored_result else "divergent"
+            else:
+                reconcile = "no_authored"
+
+            entry["reconcile"] = reconcile
+            new_co[test_name] = entry
+
+            by = outcome.get("evaluated_by", "")
+            if by == "code":
+                tests_code += 1
+            else:
+                tests_agent += 1
+
+        run["computed_outcomes"] = new_co
+        runs_evaluated += 1
+
+    # Write only when something changed (idempotency)
+    _new_sio = io.StringIO()
+    ryaml.dump(doc, _new_sio)
+    new_serialised = _new_sio.getvalue()
+
+    if new_serialised != original_serialised:
+        tmp_path = study_yaml_path.with_suffix(".yaml.tmp")
+        tmp_path.write_text(new_serialised, encoding="utf-8")
+        os.replace(str(tmp_path), str(study_yaml_path))
+
+    return {
+        "runs_evaluated": runs_evaluated,
+        "tests_code": tests_code,
+        "tests_agent": tests_agent,
+    }
+
+
+# ---------------------------------------------------------------------------
+# B2b: CLI — pbg-compute-outcomes
+# ---------------------------------------------------------------------------
+
+def _find_workspace_root(start: Any) -> "Any | None":
+    """Walk up from *start* looking for a workspace.yaml sentinel file."""
+    from pathlib import Path as _Path
+
+    cur = _Path(start).resolve()
+    for _ in range(12):
+        if (cur / "workspace.yaml").exists():
+            return cur
+        parent = cur.parent
+        if parent == cur:
+            break
+        cur = parent
+    return None
+
+
+import click as _click  # noqa: E402 — imported here to keep it optional at module top
+
+
+@_click.command("pbg-compute-outcomes")
+@_click.option(
+    "--workspace", "-w",
+    type=_click.Path(file_okay=False),
+    default=None,
+    help="Workspace root (for resolving relative paths in run entries).",
+)
+@_click.option(
+    "--study", "-s", "study_slug",
+    default=None,
+    help="Study name/slug to evaluate (looked up under workspace investigations/ or studies/).",
+)
+@_click.option(
+    "--study-dir",
+    "study_dir_arg",
+    type=_click.Path(exists=True, file_okay=False),
+    default=None,
+    help="Explicit path to a study directory containing study.yaml.",
+)
+@_click.option(
+    "--all", "all_studies",
+    is_flag=True,
+    default=False,
+    help="Evaluate all studies in the workspace.",
+)
+def compute_outcomes_cli(
+    workspace: "str | None",
+    study_slug: "str | None",
+    study_dir_arg: "str | None",
+    all_studies: bool,
+) -> None:
+    """Evaluate behavior tests against run data and write computed_outcomes blocks."""
+    import sys
+    from pathlib import Path as _Path
+
+    ws_root: "_Path | None" = (
+        _Path(workspace) if workspace else _find_workspace_root(_Path.cwd())
+    )
+
+    targets: list[_Path] = []
+
+    if study_dir_arg:
+        targets.append(_Path(study_dir_arg))
+    elif study_slug:
+        if ws_root is None:
+            _click.echo("Cannot find workspace root — pass --workspace.", err=True)
+            sys.exit(1)
+        for sub in ("investigations", "studies"):
+            candidate = ws_root / sub / study_slug
+            if (candidate / "study.yaml").exists():
+                targets.append(candidate)
+                break
+        else:
+            _click.echo(
+                f"Study {study_slug!r} not found under {ws_root}", err=True
+            )
+            sys.exit(1)
+    elif all_studies:
+        if ws_root is None:
+            _click.echo("Cannot find workspace root — pass --workspace.", err=True)
+            sys.exit(1)
+        for sub in ("investigations", "studies"):
+            base = ws_root / sub
+            if base.exists():
+                for p in sorted(base.iterdir()):
+                    if (p / "study.yaml").exists():
+                        targets.append(p)
+    else:
+        _click.echo(
+            "Specify --study-dir, --study <slug>, or --all (with --workspace).",
+            err=True,
+        )
+        sys.exit(1)
+
+    if not targets:
+        _click.echo("No studies found.", err=True)
+        sys.exit(1)
+
+    total_runs = total_code = total_agent = 0
+    for target in targets:
+        try:
+            summary = compute_outcomes(target, ws_root=ws_root)
+            r = summary["runs_evaluated"]
+            c = summary["tests_code"]
+            a = summary["tests_agent"]
+            _click.echo(
+                f"  {target.name}: {r} runs evaluated, "
+                f"{c} tests code, {a} tests agent"
+            )
+            total_runs += r
+            total_code += c
+            total_agent += a
+        except Exception as exc:  # noqa: BLE001
+            _click.echo(f"  {target.name}: ERROR — {exc}", err=True)
+
+    _click.echo(
+        f"\nTotal: {total_runs} runs evaluated, "
+        f"{total_code} code, {total_agent} agent"
+    )
