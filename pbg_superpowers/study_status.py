@@ -30,6 +30,7 @@ param-enforcement banner surfaces declared-vs-applied drift.
 from __future__ import annotations
 
 from typing import Any
+from .study_outcomes import canonical_run
 
 
 # runs_meta.status vocabulary → our coarse buckets. "ran" is the v2/legacy
@@ -150,8 +151,8 @@ def count_test_outcomes(spec: dict, runs: list[dict] | None) -> dict:
     ``{total, pass, fail, skip, pending}``.
     """
     tests = _study_tests(spec)
-    latest = _latest_run(runs if runs is not None else spec.get("runs"))
-    outcomes = (latest or {}).get("outcomes") or {}
+    chosen = canonical_run(runs if runs is not None else spec.get("runs"))
+    outcomes = (chosen or {}).get("outcomes") or {}
     counts = {"total": len(tests), "pass": 0, "fail": 0, "skip": 0, "pending": 0}
     for t in tests:
         out = outcomes.get(t.get("name"))

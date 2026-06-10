@@ -379,7 +379,13 @@ def _apply_window(series: pl.DataFrame, window_spec: str) -> tuple:
         return ("flat", series)
 
     if window_spec == "every_generation":
-        from pbg_emitters import by_generation
+        try:
+            from pbg_emitters import by_generation  # noqa: PLC0415
+        except ImportError as _ie:
+            raise ImportError(
+                "by_generation requires the evaluator extra: "
+                "pip install 'pbg-superpowers[evaluator]'"
+            ) from _ie
         return ("per_gen_all", by_generation(series))
 
     m = _FROM_GEN_RE.match(window_spec)
@@ -607,7 +613,13 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str) -> dict:
         if window_kind == "per_gen_all":
             gen_data: dict[int, pl.DataFrame] = data
         elif window_kind == "flat":
-            from pbg_emitters import by_generation
+            try:
+                from pbg_emitters import by_generation  # noqa: PLC0415
+            except ImportError as _ie:
+                raise ImportError(
+                    "by_generation requires the evaluator extra: "
+                    "pip install 'pbg-superpowers[evaluator]'"
+                ) from _ie
             gen_data = by_generation(data)
         else:
             return _agent(f"periodic_doubling requires per-gen data, got: {window_kind!r}")
@@ -649,7 +661,13 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str) -> dict:
         if window_kind == "per_gen_all":
             gen_data_2: dict[int, pl.DataFrame] = data
         elif window_kind == "flat":
-            from pbg_emitters import by_generation
+            try:
+                from pbg_emitters import by_generation  # noqa: PLC0415
+            except ImportError as _ie:
+                raise ImportError(
+                    "by_generation requires the evaluator extra: "
+                    "pip install 'pbg-superpowers[evaluator]'"
+                ) from _ie
             gen_data_2 = by_generation(data)
         else:
             return _agent(f"exactly_one_initiation requires per-gen data, got: {window_kind!r}")
@@ -844,7 +862,13 @@ def compute_outcomes(
 
         # Open reader and evaluate
         try:
-            from pbg_emitters import RunReader  # noqa: PLC0415
+            try:
+                from pbg_emitters import RunReader  # noqa: PLC0415
+            except ImportError as _ie:
+                raise ImportError(
+                    "RunReader requires the evaluator extra: "
+                    "pip install 'pbg-superpowers[evaluator]'"
+                ) from _ie
             reader = RunReader.open(store_path)
             outcomes = evaluate_study(spec, reader)
         except Exception as exc:  # noqa: BLE001

@@ -24,6 +24,8 @@ import polars as pl
 import pytest
 import yaml
 
+pytest.importorskip("pbg_emitters")
+
 from pbg_superpowers import study_evaluator as se
 
 # ---------------------------------------------------------------------------
