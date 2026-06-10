@@ -66,6 +66,16 @@ def test_record_adds_missing_run_and_preserves_authored(tmp_path: Path):
     assert by["r2"]["emitter"]["kind"] in {"sqlite", "parquet", "xarray", "unknown"}
 
 
+def test_canonical_missing_timestamp_not_preferred(tmp_path: Path):
+    """Regression: a completed run with no/null timestamp must not beat a real ISO date."""
+    spec = {"runs": [
+        {"name": "dated", "status": "completed", "timestamp": "2026-02-01T00:00:00Z"},
+        {"name": "no_key", "status": "completed"},            # no timestamp key
+        {"name": "null_ts", "status": "completed", "timestamp": None},  # explicit null
+    ]}
+    assert so.canonical_run(spec)["name"] == "dated"
+
+
 def test_record_is_idempotent(tmp_path: Path):
     d = _study(tmp_path, {"name": "s1", "runs": []})
     db = d / "runs.db"

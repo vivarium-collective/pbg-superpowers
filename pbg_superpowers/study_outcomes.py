@@ -30,7 +30,7 @@ def canonical_run(spec_or_runs) -> dict | None:
         return flagged[-1]
     completed = [r for r in runs if str(r.get("status", "")).lower() in _COMPLETE]
     if completed:
-        return max(completed, key=lambda r: str(r.get("timestamp", "")))
+        return max(completed, key=lambda r: r.get("timestamp") or "")
     return runs[-1]
 
 
@@ -62,12 +62,15 @@ def _emitter_kind(emitter_path: str | None) -> str:
 
 
 def _mechanical_record(db_row: dict) -> dict:
+    emitter_path = db_row.get("emitter_path")
+    emitter: dict = {"kind": _emitter_kind(emitter_path)}
+    if emitter_path is not None:
+        emitter["store"] = emitter_path
     rec = {
         "name": db_row.get("run_id"),
         "status": db_row.get("status"),
         "timestamp": db_row.get("completed_at") or db_row.get("started_at"),
-        "emitter": {"kind": _emitter_kind(db_row.get("emitter_path")),
-                    "store": db_row.get("emitter_path")},
+        "emitter": emitter,
     }
     if db_row.get("generation_id") is not None:
         rec["generation_id"] = db_row.get("generation_id")
