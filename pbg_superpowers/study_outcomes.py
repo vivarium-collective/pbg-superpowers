@@ -158,8 +158,21 @@ def _write_runs_preserving_comments(study_yaml: Path, db_rows: list[dict]) -> No
 
 
 def sync(study_dir) -> dict:
-    """Increment A: reconcile runs. (Increment B will also evaluate outcomes.)"""
-    return record_runs(study_dir)
+    """Reconcile runs (record_runs) AND compute code verdicts (compute_outcomes).
+
+    compute_outcomes is best-effort: it needs the [evaluator] extra
+    (RunReader/polars) and resolvable run stores, so ImportError or any
+    evaluation error is captured (never raised) — record_runs always completes.
+    """
+    summary = record_runs(study_dir)
+    try:
+        from .study_evaluator import compute_outcomes
+        summary["computed"] = compute_outcomes(study_dir)
+    except ImportError as exc:
+        summary["computed"] = {"skipped": f"evaluator extra unavailable: {exc}"}
+    except Exception as exc:  # noqa: BLE001
+        summary["computed"] = {"error": str(exc)}
+    return summary
 
 
 def main(argv=None) -> int:
