@@ -1007,3 +1007,57 @@ def test_golden_dnaa2_v2einvest_untouched(tmp_path):
     assert r.stdout.strip() == "", (
         f"v2e-invest git working tree is dirty:\n{r.stdout}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 3: pbg-biology-forward skill tests
+# ---------------------------------------------------------------------------
+
+
+def test_skill_file_exists():
+    """skills/pbg-biology-forward/SKILL.md exists."""
+    skill_path = Path(__file__).resolve().parents[1] / "skills" / "pbg-biology-forward" / "SKILL.md"
+    assert skill_path.is_file(), f"SKILL.md not found at {skill_path}"
+
+
+def test_skill_has_required_frontmatter():
+    """SKILL.md has valid front-matter with required fields."""
+    import yaml as _yaml
+    skill_path = Path(__file__).resolve().parents[1] / "skills" / "pbg-biology-forward" / "SKILL.md"
+    text = skill_path.read_text(encoding="utf-8")
+    assert text.startswith("---\n"), "SKILL.md must start with YAML frontmatter"
+    end = text.find("\n---\n", 4)
+    assert end != -1, "SKILL.md frontmatter not closed"
+    fm = _yaml.safe_load(text[4:end]) or {}
+    assert fm.get("name") == "pbg-biology-forward"
+    assert fm.get("user-invocable") is True
+    assert "Bash" in (fm.get("allowed-tools") or "")
+    assert fm.get("argument-hint") == "<study-slug>"
+    assert "description" in fm
+
+
+def test_skill_references_populate_finding_observations():
+    """SKILL.md references the populate_finding_observations helper by name."""
+    skill_path = Path(__file__).resolve().parents[1] / "skills" / "pbg-biology-forward" / "SKILL.md"
+    text = skill_path.read_text(encoding="utf-8")
+    assert "populate_finding_observations" in text
+
+
+def test_skill_references_search_expert_docs():
+    """SKILL.md references search_expert_docs for expert PDF search."""
+    skill_path = Path(__file__).resolve().parents[1] / "skills" / "pbg-biology-forward" / "SKILL.md"
+    text = skill_path.read_text(encoding="utf-8")
+    assert "search_expert_docs" in text
+
+
+def test_skill_referenced_symbols_importable():
+    """All Python symbols referenced by the skill are importable."""
+    from pbg_superpowers.finding_observations import populate_finding_observations  # noqa: F401
+    from pbg_superpowers.expert_search import search_expert_docs  # noqa: F401
+
+
+def test_skill_registered_in_docs_skills_md():
+    """docs/skills.md includes an entry for pbg-biology-forward."""
+    skills_md = Path(__file__).resolve().parents[1] / "docs" / "skills.md"
+    text = skills_md.read_text(encoding="utf-8")
+    assert "pbg-biology-forward" in text, "docs/skills.md must list pbg-biology-forward"
