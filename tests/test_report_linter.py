@@ -803,8 +803,26 @@ def test_viz_stale_vs_latest_run_fires_on_mismatch(tmp_path):
     ctx = _LintContext(ws_root=tmp_path, slug="s1", spec=spec)
     _check_viz_stale_vs_latest_run(ctx)
     stale = [f for f in ctx.findings if f.check == "viz_stale_vs_latest_run"]
+    # Folded + demoted: a single per-study INFO finding (not a warning gap).
     assert len(stale) == 1
-    assert stale[0].level == "warning"
+    assert stale[0].level == "info"
+
+
+def test_viz_stale_folds_untracked_into_one_info(tmp_path):
+    """N unregistered on-disk charts produce ONE info finding, not N warnings,
+    so the viz_stale noise stops counting as a gap (gaps = error+warning)."""
+    from pbg_superpowers.report_linter import _LintContext, _check_viz_stale_vs_latest_run
+    sd = tmp_path / "studies" / "s1"; (sd / "charts").mkdir(parents=True)
+    for n in ("a", "b", "c"):
+        (sd / "charts" / f"{n}.svg").write_text("x")
+    # No visualizations[] registered → all three charts are untracked orphans.
+    spec = {"evaluation_status": "evaluated", "visualizations": []}
+    ctx = _LintContext(ws_root=tmp_path, slug="s1", spec=spec)
+    _check_viz_stale_vs_latest_run(ctx)
+    stale = [f for f in ctx.findings if f.check == "viz_stale_vs_latest_run"]
+    assert len(stale) == 1
+    assert stale[0].level == "info"
+    assert "3 chart(s)" in stale[0].message
 
 
 def test_viz_stale_error_under_strict(tmp_path):
