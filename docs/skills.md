@@ -1,6 +1,6 @@
 # Skills catalog
 
-14 user-facing skills (plus `/pbg-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects). v0.9 consolidated the 17-skill v0.8 catalog — see the [migration table](#migration-from-v08) below.
+15 user-facing skills (plus `/pbg-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects). v0.9 consolidated the 17-skill v0.8 catalog — see the [migration table](#migration-from-v08) below.
 
 ## Wrap & compose
 
@@ -51,6 +51,7 @@ from a pbg-superpowers checkout. (Replaces the v0.8 `/pbg-package` skill.)
 | [`/pbg-investigation <subcmd> …`](../skills/pbg-investigation/SKILL.md) | Manage **Investigations** — named collections of Studies grouped under a shared research question, with a cross-study dependency DAG. |
 | [`/pbg-viz <study> <viz-name> '<description>'`](../skills/pbg-viz/SKILL.md) | Generate a `Visualization` subclass from a natural-language description and attach it to a Study. |
 | [`/pbg-report [model\|--all]`](../skills/pbg-report/SKILL.md) | Regenerate `reports/index.html` after manual state changes. |
+| [`/pbg-navigate <ac-gaps\|source\|finding-by-observable\|dag> …`](../skills/pbg-navigate/SKILL.md) | **Read-only** query of the workspace linkage index (SP4a) — the AC→study gating matrix + unlinked-AC gaps, source↔study, finding-by-observable, study-DAG. Pure deterministic derive (`linkage_index` / `/api/linkage-index`), no writes, no AI. |
 
 For the read/write surface each skill touches (which API endpoints, which on-disk files), see the [Skill ↔ concept map](concepts/vivarium-dashboard-model.md#skill--concept-map).
 
