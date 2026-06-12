@@ -17,6 +17,7 @@ the heuristic:
 """
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -463,3 +464,257 @@ def test_cli_unknown_finding_exits_2(tmp_path):
     )
     assert cp.returncode == 2
     assert "F-99" in cp.stderr
+
+
+# ---------------------------------------------------------------------------
+# resolve_seed_source — the unifying resolver across the 4 followup families
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_seed_source_synthesizes_proposal_from_finding(tmp_path):
+    """A finding with a next_action seeds STANDALONE — no pre-existing
+    followup_proposals[] row. resolve_seed_source synthesizes an inline
+    proposal stub stamped with the finding id."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    # Drop the followup_proposals so the finding has to seed standalone.
+    parent.pop("followup_proposals", None)
+    src = sff.resolve_seed_source(parent, finding_id="F-03")
+    assert src.finding_id == "F-03"
+    assert src.synthesized is True
+    assert src.proposal  # a stub dict with an id
+    assert src.proposal["id"]
+    assert src.proposal.get("linked_finding") == "F-03"
+    # The stub's title/motivation are derived from the finding.
+    assert src.proposal.get("title")
+
+
+def test_resolve_seed_source_standalone_finding_builds_seed(tmp_path):
+    """resolve_seed_source + build_child_seed_from_finding yields a child
+    seed stamped seeded_from.finding with a derived purpose.question — with
+    NO pre-existing proposal."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    parent.pop("followup_proposals", None)
+    src = sff.resolve_seed_source(parent, finding_id="F-03")
+    seed = sff.build_child_seed_from_finding(
+        parent, "dnaa-01", src.proposal["id"], src.finding_id,
+    )
+    assert seed.seeded_from.get("finding") == "F-03"
+    assert seed.purpose.get("question")  # derived from next_action/statement
+
+
+def test_resolve_seed_source_prefers_existing_proposal(tmp_path):
+    """When a finding already has a resolvable proposal_id, resolve uses it
+    (not a synthesized stub)."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(
+        parent, finding_id="F-03", proposal_id="calibrate-dars",
+    )
+    assert src.synthesized is False
+    assert src.proposal["id"] == "calibrate-dars"
+    assert src.finding_id == "F-03"
+
+
+def test_resolve_seed_source_by_proposal_id(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(parent, proposal_id="calibrate-dars")
+    assert src.proposal["id"] == "calibrate-dars"
+    assert src.finding_id is None
+    assert src.synthesized is False
+
+
+def test_resolve_seed_source_legacy_follow_up_studies_idx(tmp_path):
+    """The legacy follow_up_studies[] family resolves by index into a
+    proposal-shaped SeedSource."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    parent["follow_up_studies"] = [
+        {"title": "Probe DARS reactivation", "why": "Because F-03.",
+         "kind": "calibration"},
+    ]
+    src = sff.resolve_seed_source(parent, followup_idx=0)
+    assert src.proposal["title"] == "Probe DARS reactivation"
+    assert src.family == "follow_up_studies"
+    assert src.finding_id is None
+
+
+def test_resolve_seed_source_discovery_implications_proposal(tmp_path):
+    """The discovery_implications.followup_study_proposals[] family resolves
+    by proposal_id."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    parent["discovery_implications"] = {
+        "followup_study_proposals": [
+            {"id": "di-1", "title": "DI follow-up", "study_type": "mechanism"},
+        ]
+    }
+    src = sff.resolve_seed_source(parent, proposal_id="di-1")
+    assert src.proposal["id"] == "di-1"
+    assert src.family == "discovery_implications.followup_study_proposals"
+
+
+def test_resolve_seed_source_requires_a_selector(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    with pytest.raises(ValueError):
+        sff.resolve_seed_source(parent)
+
+
+def test_resolve_seed_source_unknown_finding_raises(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    with pytest.raises(ValueError, match="F-99"):
+        sff.resolve_seed_source(parent, finding_id="F-99")
+
+
+# ---------------------------------------------------------------------------
+# write_child_study — the callable atomic writer + parent stamp
+# ---------------------------------------------------------------------------
+
+
+def test_write_child_study_creates_child_and_stamps_parent_finding(tmp_path):
+    """A STANDALONE finding seed (no pre-existing proposal) creates the child
+    study.yaml and stamps the parent finding's seeded_study."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    parent.pop("followup_proposals", None)  # standalone
+    parent_yaml.write_text(yaml.safe_dump(parent, sort_keys=False))
+
+    src = sff.resolve_seed_source(parent, finding_id="F-03")
+    res = sff.write_child_study(tmp_path, "dnaa-01", src, new_slug="dnaa-02")
+
+    child_yaml = tmp_path / "studies" / "dnaa-02" / "study.yaml"
+    assert child_yaml.is_file()
+    assert res["new_slug"] == "dnaa-02"
+
+    child = yaml.safe_load(child_yaml.read_text())
+    assert child["name"] == "dnaa-02"
+    assert child["seeded_from"]["finding"] == "F-03"
+    assert child["seeded_from"]["study"] == "dnaa-01"
+    assert child["purpose"]["question"]
+    # pipeline_gate points back at the parent so the DAG draws the edge.
+    assert "dnaa-01" in child["pipeline_gate"]["prerequisites"]
+
+    # Parent finding stamped with seeded_study.
+    parent_after = yaml.safe_load(parent_yaml.read_text())
+    f = next(f for f in parent_after["findings"] if f["id"] == "F-03")
+    assert f["seeded_study"] == "dnaa-02"
+
+
+def test_write_child_study_stamps_existing_proposal_status(tmp_path):
+    """When seeding from a real followup_proposals[] entry, that proposal's
+    status flips to seeded + seeded_study is recorded."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(
+        parent, finding_id="F-03", proposal_id="calibrate-dars",
+    )
+    res = sff.write_child_study(tmp_path, "dnaa-01", src, new_slug="dnaa-02")
+    assert res["new_slug"] == "dnaa-02"
+
+    parent_after = yaml.safe_load(parent_yaml.read_text())
+    prop = next(p for p in parent_after["followup_proposals"]
+                if p["id"] == "calibrate-dars")
+    assert prop["status"] == "seeded"
+    assert prop["seeded_study"] == "dnaa-02"
+    # finding also stamped
+    f = next(f for f in parent_after["findings"] if f["id"] == "F-03")
+    assert f["seeded_study"] == "dnaa-02"
+
+
+def test_write_child_study_default_slug_from_proposal(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(parent, proposal_id="calibrate-dars")
+    res = sff.write_child_study(tmp_path, "dnaa-01", src)
+    assert res["new_slug"]
+    assert (tmp_path / "studies" / res["new_slug"] / "study.yaml").is_file()
+
+
+def test_write_child_study_idempotent_parent_stamp(tmp_path):
+    """Re-stamping a parent finding that already has seeded_study leaves the
+    existing value (fill-absent), and a second write to a fresh slug still
+    succeeds."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(parent, finding_id="F-03")
+    sff.write_child_study(tmp_path, "dnaa-01", src, new_slug="dnaa-02")
+
+    parent_after = yaml.safe_load(parent_yaml.read_text())
+    f = next(f for f in parent_after["findings"] if f["id"] == "F-03")
+    assert f["seeded_study"] == "dnaa-02"
+    # Second seed of the SAME finding -> fill-absent keeps the first stamp.
+    src2 = sff.resolve_seed_source(parent_after, finding_id="F-03")
+    sff.write_child_study(tmp_path, "dnaa-01", src2, new_slug="dnaa-03")
+    parent_after2 = yaml.safe_load(parent_yaml.read_text())
+    f2 = next(f for f in parent_after2["findings"] if f["id"] == "F-03")
+    assert f2["seeded_study"] == "dnaa-02"  # unchanged
+
+
+def test_write_child_study_refuses_existing_slug(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(parent, finding_id="F-03")
+    sff.write_child_study(tmp_path, "dnaa-01", src, new_slug="dnaa-02")
+    with pytest.raises((FileExistsError, ValueError)):
+        src2 = sff.resolve_seed_source(parent, finding_id="F-03")
+        sff.write_child_study(tmp_path, "dnaa-01", src2, new_slug="dnaa-02")
+
+
+# ---------------------------------------------------------------------------
+# Golden — a real v2e-invest study with a finding next_action seeds to a
+# TMP COPY (the real workspace is READ-ONLY and must stay untouched).
+# ---------------------------------------------------------------------------
+
+_V2E_INVEST = Path("/Users/eranagmon/code/v2e-invest")
+_GOLDEN_PARENT = "dnaa-00-stage1-baseline"
+_GOLDEN_FINDING = "F-S4"
+
+
+@pytest.mark.skipif(
+    not (_V2E_INVEST / "studies" / _GOLDEN_PARENT / "study.yaml").is_file(),
+    reason="v2e-invest workspace not present",
+)
+def test_golden_real_study_finding_seeds_to_tmp_copy(tmp_path):
+    """A real v2e-invest study with a finding next_action seeds a child +
+    stamps the parent — operating entirely on a TMP COPY so the real
+    workspace stays byte-for-byte untouched."""
+    real_parent_yaml = _V2E_INVEST / "studies" / _GOLDEN_PARENT / "study.yaml"
+    real_before = real_parent_yaml.read_bytes()
+
+    # Build a minimal tmp workspace: workspace.yaml (no studies-layout
+    # override) + a copy of the parent study.
+    ws = tmp_path / "ws"
+    (ws / "studies" / _GOLDEN_PARENT).mkdir(parents=True)
+    # A flat-layout workspace.yaml (studies/ at root) is enough for the writer.
+    (ws / "workspace.yaml").write_text(
+        "schema_version: 2\nname: v2ecoli\ncreated: \"2026-05-16\"\n"
+        "plugin_version: 0.6.1\npackage_path: v2ecoli\n"
+    )
+    shutil.copy(real_parent_yaml,
+                ws / "studies" / _GOLDEN_PARENT / "study.yaml")
+
+    parent_spec = yaml.safe_load(real_parent_yaml.read_text())
+    src = sff.resolve_seed_source(parent_spec, finding_id=_GOLDEN_FINDING)
+    res = sff.write_child_study(ws, _GOLDEN_PARENT, src, new_slug="dnaa-00f-seed")
+
+    # Child created with the finding lineage.
+    child_yaml = ws / "studies" / "dnaa-00f-seed" / "study.yaml"
+    assert child_yaml.is_file()
+    child = yaml.safe_load(child_yaml.read_text())
+    assert child["seeded_from"]["finding"] == _GOLDEN_FINDING
+    assert child["seeded_from"]["study"] == _GOLDEN_PARENT
+    assert child["purpose"]["question"]
+
+    # Parent (the TMP COPY) stamped.
+    tmp_parent = yaml.safe_load(
+        (ws / "studies" / _GOLDEN_PARENT / "study.yaml").read_text())
+    f = next(f for f in tmp_parent["findings"] if f.get("id") == _GOLDEN_FINDING)
+    assert f["seeded_study"] == "dnaa-00f-seed"
+    assert res["new_slug"] == "dnaa-00f-seed"
+
+    # The REAL workspace is byte-for-byte untouched.
+    assert real_parent_yaml.read_bytes() == real_before

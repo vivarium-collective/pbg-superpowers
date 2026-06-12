@@ -66,7 +66,9 @@ from typing import Any
 
 import yaml
 
+from pbg_superpowers import study_io
 from pbg_superpowers.text_utils import first_sentence
+from pbg_superpowers.workspace_paths import WorkspacePaths
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +159,31 @@ class ChildSeed:
         return out
 
 
+@dataclass
+class SeedSource:
+    """A normalized seed origin, unifying the four followup field families.
+
+    Whatever the source family (``finding.next_action``,
+    ``followup_proposals[]``, legacy ``follow_up_studies[]``, or
+    ``discovery_implications.followup_study_proposals[]``), the resolver
+    returns one of these — a proposal-shaped dict (always carrying an
+    ``id``) plus an optional ``finding_id`` so the downstream writer can
+    stamp the finding's lineage.
+
+    - ``proposal`` — the proposal entry (real or synthesized) with an ``id``.
+    - ``finding_id`` — the originating finding id, if any.
+    - ``synthesized`` — True when ``proposal`` was synthesized from a
+      finding (no pre-existing ``followup_proposals[]`` row to stamp).
+    - ``family`` — the source family the proposal came from (for the
+      parent stamp + provenance header).
+    """
+
+    proposal: dict
+    finding_id: str | None = None
+    synthesized: bool = False
+    family: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Lookups
 # ---------------------------------------------------------------------------
@@ -174,6 +201,23 @@ def find_proposal(study: dict, proposal_id: str) -> dict | None:
     """Return the followup_proposals entry with ``id == proposal_id``, or None."""
     for p in (study.get("followup_proposals") or []):
         if isinstance(p, dict) and p.get("id") == proposal_id:
+            return p
+    return None
+
+
+def _discovery_proposals(study: dict) -> list[dict]:
+    """The ``discovery_implications.followup_study_proposals`` list, if any."""
+    disc = study.get("discovery_implications")
+    if not isinstance(disc, dict):
+        return []
+    out = disc.get("followup_study_proposals")
+    return out if isinstance(out, list) else []
+
+
+def find_discovery_proposal(study: dict, proposal_id: str) -> dict | None:
+    """Return the discovery_implications proposal with ``id == proposal_id``."""
+    for p in _discovery_proposals(study):
+        if isinstance(p, dict) and str(p.get("id")) == str(proposal_id):
             return p
     return None
 
@@ -403,6 +447,318 @@ def build_parent_proposal_patch(
     if finding_id and out.get("linked_finding") != finding_id:
         out["linked_finding"] = finding_id
     return out
+
+
+# ---------------------------------------------------------------------------
+# The unifying resolver — normalize the 4 followup families into a SeedSource
+# ---------------------------------------------------------------------------
+
+
+def _slug_fragment(text: str, max_len: int = 48) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return s[:max_len].rstrip("-")
+
+
+def _synthesize_proposal_from_finding(finding: dict, finding_id: str) -> dict:
+    """Build an inline proposal stub from a finding so it can seed STANDALONE.
+
+    A finding's ``next_action`` is the natural "what next" signal but there
+    may be no ``followup_proposals[]`` row to seed from. This synthesizes a
+    minimal proposal-shaped dict (id derived from the finding, title +
+    motivation derived from the finding's next_action / statement) so the
+    standard finding→child path runs without a pre-existing proposal. The
+    stub is NOT written to the parent's ``followup_proposals`` — only the
+    finding's ``seeded_study`` lineage is stamped downstream.
+    """
+    statement = finding.get("statement", "") or ""
+    next_action = finding.get("next_action")
+    title_src = (next_action or first_sentence(statement) or finding_id).strip()
+    frag = _slug_fragment(title_src) or _slug_fragment(finding_id) or "finding"
+    return {
+        "id": f"from-{finding_id.lower()}-{frag}".rstrip("-"),
+        "title": first_sentence(title_src) or title_src,
+        "motivation": (
+            first_sentence(statement)
+            or f"Follow up on finding {finding_id}."
+        ),
+        "status": "proposed",
+        "linked_finding": finding_id,
+        "synthesized": True,
+    }
+
+
+def resolve_seed_source(
+    study_spec: dict,
+    *,
+    finding_id: str | None = None,
+    proposal_id: str | None = None,
+    followup_idx: int | None = None,
+) -> SeedSource:
+    """Normalize any of the four followup field families into one SeedSource.
+
+    Resolution precedence:
+
+    1. ``proposal_id`` — looked up first in ``followup_proposals[]`` then in
+       ``discovery_implications.followup_study_proposals[]``.
+    2. ``followup_idx`` — indexes into the legacy ``follow_up_studies[]``.
+    3. ``finding_id`` alone — SYNTHESIZE an inline proposal stub so the
+       finding seeds STANDALONE (no pre-existing ``followup_proposals[]``
+       row required).
+
+    ``finding_id`` may be combined with ``proposal_id`` to seed from an
+    existing proposal while still stamping the finding's lineage.
+
+    Raises ``ValueError`` when no selector is given or the selector doesn't
+    resolve.
+    """
+    # Validate finding_id early (so an unknown finding fails fast regardless
+    # of which other selectors are present).
+    finding = None
+    if finding_id is not None:
+        finding = find_finding(study_spec, finding_id)
+        if finding is None:
+            avail = [
+                (f.get("id") or "<no-id>")
+                for f in (study_spec.get("findings") or [])
+                if isinstance(f, dict)
+            ]
+            raise ValueError(
+                f"finding {finding_id!r} not in findings (available: {sorted(avail)})"
+            )
+
+    # 1. proposal_id — followup_proposals[] preferred, discovery_implications next.
+    if proposal_id is not None and str(proposal_id) != "":
+        prop = find_proposal(study_spec, proposal_id)
+        if prop is not None:
+            return SeedSource(
+                proposal=prop, finding_id=finding_id,
+                synthesized=False, family="followup_proposals",
+            )
+        prop = find_discovery_proposal(study_spec, proposal_id)
+        if prop is not None:
+            return SeedSource(
+                proposal=prop, finding_id=finding_id, synthesized=False,
+                family="discovery_implications.followup_study_proposals",
+            )
+        raise ValueError(
+            f"proposal {proposal_id!r} not in followup_proposals or "
+            "discovery_implications.followup_study_proposals"
+        )
+
+    # 2. followup_idx — legacy follow_up_studies[].
+    if followup_idx is not None:
+        fus = study_spec.get("follow_up_studies") or []
+        if not isinstance(fus, list) or followup_idx < 0 or followup_idx >= len(fus):
+            raise ValueError(
+                f"followup_idx {followup_idx} out of range "
+                f"(parent has {len(fus) if isinstance(fus, list) else 0} follow_up_studies)"
+            )
+        fu = dict(fus[followup_idx])
+        if not fu.get("id"):
+            fu["id"] = _slug_fragment(fu.get("title") or "") or f"followup-{followup_idx}"
+        return SeedSource(
+            proposal=fu, finding_id=finding_id,
+            synthesized=False, family="follow_up_studies",
+        )
+
+    # 3. finding_id alone — synthesize an inline proposal stub.
+    if finding_id is not None:
+        stub = _synthesize_proposal_from_finding(finding, finding_id)
+        return SeedSource(
+            proposal=stub, finding_id=finding_id,
+            synthesized=True, family="finding.next_action",
+        )
+
+    raise ValueError(
+        "resolve_seed_source requires one of: finding_id, proposal_id, followup_idx"
+    )
+
+
+# ---------------------------------------------------------------------------
+# write_child_study — a callable atomic writer (lifts the SKILL prose-flow
+# file writes into Python so the dashboard + CLI share one implementation)
+# ---------------------------------------------------------------------------
+
+
+def _child_scaffold(parent_slug: str, parent_study: dict, new_slug: str) -> dict:
+    """A minimal, valid child study.yaml dict pre-wired back to the parent.
+
+    The ChildSeed (purpose / key_assumptions / seeded_from / pipeline_gate /
+    behavior_tests / model_change) is merged onto this scaffold. Empty
+    purpose / pipeline_gate.proceed_condition are left for the seed (or the
+    skill prose flow) to fill — ``merge_into`` is fill-absent.
+    """
+    import datetime
+
+    today = datetime.date.today().isoformat()
+    return {
+        "schema_version": 4,
+        "name": new_slug,
+        "created": today,
+        "status": "planned",
+        "phase": "Design",
+        "baseline": [{
+            "name": "baseline-placeholder",
+            "composite": "v2ecoli.composites.baseline.baseline",
+            "params": {"seed": 0, "cache_dir": "out/cache"},
+        }],
+        "purpose": {},
+        "pipeline_gate": {
+            "prerequisites": [parent_slug],
+            "enables": [],
+        },
+        "key_assumptions": [],
+        "readouts": [],
+        "behavior_tests": [],
+        "model_change": {},
+        "limitations": ["TBD — fill before Decide phase."],
+        "conclusion": None,
+    }
+
+
+def _stamp_parent(parent_yaml: Path, seed_source: "SeedSource", new_slug: str) -> bool:
+    """Stamp the parent study.yaml in place (ruamel round-trip, fill-absent).
+
+    - The originating finding (if any) gets ``seeded_study: <new_slug>`` —
+      only when absent (idempotent).
+    - A REAL ``followup_proposals[]`` entry (not a synthesized stub) gets
+      ``status: seeded`` + ``seeded_study`` + ``linked_finding`` (when a
+      finding drove the seed).
+
+    Returns True when anything was written.
+    """
+    from io import StringIO
+
+    from ruamel.yaml import YAML
+
+    ryaml = YAML()
+    ryaml.preserve_quotes = True
+    ryaml.width = 4096
+
+    rt_spec = ryaml.load(parent_yaml.read_text())
+    if rt_spec is None:
+        rt_spec = {}
+
+    changed = False
+
+    # 1. Stamp the originating finding (fill-absent).
+    fid = seed_source.finding_id
+    if fid:
+        for f in (rt_spec.get("findings") or []):
+            if isinstance(f, dict) and f.get("id") == fid:
+                if not f.get("seeded_study"):
+                    f["seeded_study"] = new_slug
+                    changed = True
+                break
+
+    # 2. Stamp a REAL followup_proposals[] entry (skip synthesized stubs —
+    #    they were never written to the parent).
+    if not seed_source.synthesized:
+        pid = seed_source.proposal.get("id")
+        for p in (rt_spec.get("followup_proposals") or []):
+            if isinstance(p, dict) and p.get("id") == pid:
+                if p.get("status") != "seeded":
+                    p["status"] = "seeded"
+                    changed = True
+                if not p.get("seeded_study"):
+                    p["seeded_study"] = new_slug
+                    changed = True
+                if fid and p.get("linked_finding") != fid:
+                    p["linked_finding"] = fid
+                    changed = True
+                break
+
+    if changed:
+        buf = StringIO()
+        ryaml.dump(rt_spec, buf)
+        study_io.atomic_write(parent_yaml, buf.getvalue())
+    return changed
+
+
+def write_child_study(
+    ws_root: Path | str,
+    parent_slug: str,
+    seed_source: "SeedSource",
+    *,
+    new_slug: str | None = None,
+) -> dict:
+    """Create ``studies/<new_slug>/study.yaml`` + stamp the parent, atomically.
+
+    The single callable writer behind the seed flow (the file writes the
+    SKILL prose flow used to do by hand). Reuses
+    :func:`build_child_seed_from_finding` for the finding path and the
+    proposal fields for the legacy / proposal paths; writes the child via
+    the atomic :mod:`study_io` writer and stamps the parent finding /
+    proposal via a ruamel round-trip (comment-preserving, fill-absent).
+
+    Returns ``{new_slug, child_path, parent_stamped, family}``.
+    """
+    studies_root = WorkspacePaths.load(ws_root).studies
+    parent_yaml = studies_root / parent_slug / "study.yaml"
+    if not parent_yaml.is_file():
+        raise FileNotFoundError(parent_yaml)
+    parent_study = study_io.load_yaml(parent_yaml)
+
+    proposal = seed_source.proposal or {}
+    proposal_id = proposal.get("id")
+    new_slug = (
+        new_slug
+        or _slug_fragment(str(proposal_id or ""))
+        or _slug_fragment(proposal.get("title") or "")
+        or "followup"
+    )
+    new_dir = studies_root / new_slug
+    if new_dir.exists():
+        raise FileExistsError(f"study {new_slug!r} already exists at {new_dir}")
+
+    child = _child_scaffold(parent_slug, parent_study, new_slug)
+
+    if seed_source.finding_id:
+        seed = build_child_seed_from_finding(
+            parent_study, parent_slug, proposal_id, seed_source.finding_id,
+        )
+        child = seed.merge_into(child)
+    else:
+        # Proposal / legacy path — no finding to derive from. Seed the
+        # purpose from the proposal's prose and record the lineage.
+        purpose = dict(child.get("purpose") or {})
+        title = (proposal.get("title") or "").strip()
+        question = (
+            proposal.get("proposed_experiment")
+            or proposal.get("why")
+            or title
+        )
+        if question and not purpose.get("question"):
+            purpose["question"] = question.strip()
+        if proposal.get("hypothesized_mechanism") and not purpose.get("mechanism"):
+            purpose["mechanism"] = proposal["hypothesized_mechanism"].strip()
+        child["purpose"] = purpose
+        child["seeded_from"] = {
+            "study": parent_slug,
+            "proposal_id": proposal_id,
+            "source": seed_source.family,
+        }
+
+    new_dir.mkdir(parents=True, exist_ok=False)
+    try:
+        study_io.save_yaml_atomic(new_dir / "study.yaml", child)
+    except Exception:
+        # Roll back the partially-created child dir so a failed write doesn't
+        # leave an empty study behind.
+        try:
+            (new_dir / "study.yaml").unlink(missing_ok=True)
+            new_dir.rmdir()
+        except OSError:
+            pass
+        raise
+
+    parent_stamped = _stamp_parent(parent_yaml, seed_source, new_slug)
+    return {
+        "new_slug": new_slug,
+        "child_path": str(new_dir / "study.yaml"),
+        "parent_stamped": parent_stamped,
+        "family": seed_source.family,
+    }
 
 
 # ---------------------------------------------------------------------------
