@@ -398,3 +398,44 @@ def test_e2e_migrate_real_dnaa_study_on_tmp_copy(tmp_path):
         assert isinstance(r, (ResolvedReadout, UnresolvedReadout))
     # the real file was never touched
     assert real.is_file()
+
+
+@pytest.mark.skipif(
+    _find_real_dnaa_study() is None,
+    reason="v2e-invest / a real dnaa study.yaml not present on this machine",
+)
+def test_status_golden_real_dnaa_study_read_only():
+    """READ-ONLY golden: readout_migration_status on a real v2e-invest dnaa
+    study returns the three buckets with the prose/`derived` readouts in
+    `needs_human` (matching SP2b-i's `unresolved` set), and is byte-for-byte
+    PURE — the real study.yaml is never written."""
+    from pbg_superpowers import study_io
+
+    real = _find_real_dnaa_study()  # the real file, NOT a copy
+    before = real.read_bytes()
+
+    status = readout_migration_status(real.parent)
+
+    # three buckets, each a list
+    assert isinstance(status["canonical"], list)
+    assert isinstance(status["migratable"], list)
+    assert isinstance(status["needs_human"], list)
+
+    # the real dnaa studies carry prose/`derived` readouts that the migration
+    # refuses to guess — they must surface in needs_human with a reason.
+    assert status["needs_human"], "expected un-parseable (derived/prose) readouts"
+    assert all(h.get("name") and h.get("reason") for h in status["needs_human"])
+    # at least one needs_human is the canonical 'derived'/un-parseable signature
+    reasons = " ".join(h["reason"] for h in status["needs_human"])
+    assert "derived" in reasons or "could not parse" in reasons
+
+    # the three buckets partition the study's readouts (no double-counting).
+    spec = study_io.load_yaml_mapping(real)
+    n_total = len(spec.get("readouts") or [])
+    n_buckets = (
+        len(status["canonical"]) + len(status["migratable"]) + len(status["needs_human"])
+    )
+    assert n_buckets == n_total
+
+    # PURE: the real study.yaml is byte-identical (no write).
+    assert real.read_bytes() == before
