@@ -315,6 +315,42 @@ def test_visualization_address_missing_fires_per_entry(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# readout migration status — surface migratable + needs_human (SP2b-ii)
+# ---------------------------------------------------------------------------
+
+
+def test_linter_surfaces_readout_migration_status(tmp_path):
+    """A study with migratable + needs_human readouts produces a lint finding
+    naming both surfaces: the migratable ones (suggestion to canonicalize) and
+    the needs_human ones (higher-severity, re-author against /api/observables)."""
+    ws = _copy_fixture("readout-migration-status", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    rm = by_check.get("readout_migration_status", [])
+    assert rm, "expected a readout_migration_status finding"
+    msgs = " ".join(f.message for f in rm)
+    # the 37-unresolved surface — needs_human re-authoring
+    assert "needs_human" in msgs or "re-author" in msgs
+    # the safe canonicalize surface — migratable
+    assert "migratable" in msgs or "canonicaliz" in msgs
+    # needs_human is the higher-severity surface (warning), migratable is info
+    levels = {f.level for f in rm}
+    assert "warning" in levels  # needs_human
+    # the re-authoring path points at the SP2b-i observables endpoint
+    assert "/api/observables" in msgs or "check-observables" in msgs
+    # the canonicalize path names the explicit migrate subcommand
+    assert "migrate-readouts" in msgs
+
+
+def test_linter_readout_migration_status_silent_when_all_canonical(tmp_path):
+    """A clean study with no readouts (or all-canonical) must not fire."""
+    ws = _copy_fixture("clean-baseline", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    assert by_check.get("readout_migration_status", []) == []
+
+
+# ---------------------------------------------------------------------------
 # 12. dag_edges_* — F3 (canonical pipeline_gate.prerequisites)
 # ---------------------------------------------------------------------------
 

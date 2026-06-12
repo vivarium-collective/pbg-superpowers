@@ -344,6 +344,8 @@ CHECKS = (
     # `baseline:` + `variants:` + `planned_runs:` are populated.
     "missing_conditions_block",
     "missing_simulation_set",
+    # SP2b-ii: readout migration status — migratable (info) + needs_human (warning)
+    "readout_migration_status",
 )
 
 
@@ -1910,6 +1912,71 @@ def _check_machine_projected_tests(ctx: _LintContext) -> None:
     )
 
 
+def _check_readout_migration_status(ctx: _LintContext) -> None:
+    """Surface each study's readout migration status (SP2b-ii).
+
+    Calls the pure ``readout_migration_status`` (a dry-run — no write) and
+    emits findings when readouts are not yet canonical:
+
+    - ``migratable`` (resolvable, canonical form differs) → INFO suggestion to
+      run ``/pbg-study migrate-readouts <slug>`` (the safe auto-canonicalize).
+    - ``needs_human`` (unresolvable prose/derived) → WARNING: these can't be
+      parsed and must be re-authored against the composite's real observables
+      (``/pbg-study check-observables`` + ``GET /api/observables``). This is
+      the surface for the 37 ``unresolved`` readouts SP2b-i flagged.
+
+    Silent when both buckets are empty (every readout already canonical).
+    The WRITE happens only via the skills; this check is read-only.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    study_dir = WorkspacePaths.load(ctx.ws_root).studies / ctx.slug
+    if not (study_dir / "study.yaml").is_file():
+        return  # legacy investigations/<slug>/spec.yaml — no study.yaml to migrate
+    from pbg_superpowers.readout_migration import readout_migration_status
+    status = readout_migration_status(study_dir)
+    migratable = status.get("migratable") or []
+    # The migration surface is mis-dialect readouts (prose ·-groups, derived,
+    # ambiguous identifiers). A readout with NO selector field at all is a
+    # plain authoring gap (descriptive-only), not a migration target — that's
+    # covered by the missing-readouts nudge, so exclude it here.
+    needs_human = [
+        h for h in (status.get("needs_human") or [])
+        if "no identifier, store_path, or index_by field found" not in (h.get("reason") or "")
+    ]
+
+    if migratable:
+        names = ", ".join(r.get("name", "<unnamed>") for r in migratable)
+        ctx.add(
+            level="info",
+            field_path="readouts",
+            message=(
+                f"{len(migratable)} readout(s) can be safely canonicalized "
+                f"({names}). Run `/pbg-study migrate-readouts {ctx.slug}` to "
+                "rewrite them to the canonical index_by form (meaning-"
+                "preserving, comment-safe). /pbg-report also canonicalizes "
+                "migratable readouts before rendering."
+            ),
+            check="readout_migration_status",
+        )
+
+    if needs_human:
+        names = ", ".join(h.get("name", "<unnamed>") for h in needs_human)
+        ctx.add(
+            level="warning",
+            field_path="readouts",
+            message=(
+                f"{len(needs_human)} readout(s) can't be parsed into a canonical "
+                f"selector (needs_human: {names}). These are never auto-guessed — "
+                "re-author each against the composite's real observables via "
+                "`/pbg-study check-observables` + `GET /api/observables` "
+                "(`/pbg-study migrate-readouts` drives this). Until then they "
+                "stay unresolved and can't be evaluated."
+            ),
+            check="readout_migration_status",
+        )
+
+
 def _check_speculative_readout_paths(ctx: _LintContext) -> None:
     """Warning when a readout claims `path:` that doesn't resolve on disk.
 
@@ -2024,6 +2091,8 @@ _CHECK_FUNCTIONS = (
     # Anti-slop & honesty checks (added 2026-05-25 after pdmp-* feedback)
     _check_machine_projected_tests,
     _check_speculative_readout_paths,
+    # SP2b-ii: readout migration status (migratable + needs_human)
+    _check_readout_migration_status,
 )
 
 
