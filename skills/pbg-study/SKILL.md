@@ -464,6 +464,40 @@ The dashboard builds a 1-step composite for each viz entry, runs it against the 
 - This is the build-phase counterpart of `verify`. `verify` catches static spec errors; `preview-viz` catches dynamic render errors (missing observables in the composite, wrong registry address for the Visualization class, bad config kwargs).
 - Repeated invocations are idempotent — each viz HTML is overwritten in place.
 
+#### `check-observables <slug>`
+
+The **never-fabricate observable guard.** Validates every readout the study declares against the *actual* emittable structure of its baseline composite, so the agent never authors a phantom observable — a selector that points at something the composite does not expose. This is the readout-authoring counterpart of `verify`: it answers "can this composite actually emit what the study claims to read out?" before a single simulation step is spent.
+
+Run this whenever you add or edit `readouts[]` (Design/Build phase), and always before `run-baseline`.
+
+**Behavior:**
+
+1. Walk up from cwd to find `workspace.yaml`; ensure the dashboard server is up (read `.pbg/server/server-info` for the base URL).
+2. `GET /api/study-observable-check?study=<slug>`. The response is deterministic — the dashboard builds the study's baseline composite and validates each readout against it:
+
+   ```json
+   {"composite": "<baseline-composite-ref>",
+    "readouts": [{"name": "...", "status": "ok|unresolved|not_in_structure|aspirational", "detail": "..."}]}
+   ```
+
+3. Report the per-readout statuses to the user grouped by status. Act on each status as follows:
+
+   - **`ok`** — the selector resolves to a real emittable leaf (or a catalog entry). Nothing to do.
+   - **`not_in_structure`** — **the never-fabricate flag.** This readout references an observable the composite does **not** emit. Do NOT leave it. `GET /api/observables?ref=<composite>` to get the composite's real emittable set (`leaves` = dotted paths, `catalogs` = `{observable: [labels]}`), then either (a) re-author the selector to point at an actual `leaf`/`catalog` entry from that set, or (b) remove the readout. **NEVER invent an observable** — only select from the composite's actual `leaves`/`catalogs`. If the intended quantity genuinely isn't emitted, that's a Build-phase gap: the composite must expose it first (raise a `add-requirement`), not the readout pretending it does.
+   - **`aspirational`** — the selector is resolved but only verifiable at run time (e.g. `bulk.<id>` ids live in the run-time `bulk__id` column, never in the static structure). Acceptable, but flag it as unverifiable-at-author-time so the user knows it can still fail when the run happens.
+   - **`unresolved`** — the readout dialect can't be parsed (e.g. `derived`, an ambiguous multi-id `·` group). Re-author it into a recognized dialect (`store_path`, `identifier`, or canonical `index_by`), or convert it to a bespoke derived computation.
+
+4. If the composite can't be built (response code 422 with all readouts marked `aspirational` + a `note`), surface the build error — the readouts can't be validated until the composite builds. Fix the composite first.
+
+**Arguments:**
+
+- `<slug>` (required) — study under `studies/<slug>/`.
+
+**Notes:**
+
+- Deterministic and AI-free on the server side: the endpoints (`/api/study-observable-check` + `/api/observables`) just build the composite and run the pure validator; the re-authoring judgment lives here in the skill. Headless callers can call `pbg_superpowers.readout_validation.validate_readouts(spec, available=available_observables(core, state, schema))` directly.
+- The composite build is cached (TTL), so repeated `check-observables` / `/api/observables` calls on the same baseline are fast.
+
 ### Simulate subcommands
 
 #### `run-baseline <study-name> [--composite <name>] [--steps N] [--no-refresh-viz]`
