@@ -567,3 +567,97 @@ def test_resolve_seed_source_unknown_finding_raises(tmp_path):
     parent = yaml.safe_load(parent_yaml.read_text())
     with pytest.raises(ValueError, match="F-99"):
         sff.resolve_seed_source(parent, finding_id="F-99")
+
+
+# ---------------------------------------------------------------------------
+# write_child_study — the callable atomic writer + parent stamp
+# ---------------------------------------------------------------------------
+
+
+def test_write_child_study_creates_child_and_stamps_parent_finding(tmp_path):
+    """A STANDALONE finding seed (no pre-existing proposal) creates the child
+    study.yaml and stamps the parent finding's seeded_study."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    parent.pop("followup_proposals", None)  # standalone
+    parent_yaml.write_text(yaml.safe_dump(parent, sort_keys=False))
+
+    src = sff.resolve_seed_source(parent, finding_id="F-03")
+    res = sff.write_child_study(tmp_path, "dnaa-01", src, new_slug="dnaa-02")
+
+    child_yaml = tmp_path / "studies" / "dnaa-02" / "study.yaml"
+    assert child_yaml.is_file()
+    assert res["new_slug"] == "dnaa-02"
+
+    child = yaml.safe_load(child_yaml.read_text())
+    assert child["name"] == "dnaa-02"
+    assert child["seeded_from"]["finding"] == "F-03"
+    assert child["seeded_from"]["study"] == "dnaa-01"
+    assert child["purpose"]["question"]
+    # pipeline_gate points back at the parent so the DAG draws the edge.
+    assert "dnaa-01" in child["pipeline_gate"]["prerequisites"]
+
+    # Parent finding stamped with seeded_study.
+    parent_after = yaml.safe_load(parent_yaml.read_text())
+    f = next(f for f in parent_after["findings"] if f["id"] == "F-03")
+    assert f["seeded_study"] == "dnaa-02"
+
+
+def test_write_child_study_stamps_existing_proposal_status(tmp_path):
+    """When seeding from a real followup_proposals[] entry, that proposal's
+    status flips to seeded + seeded_study is recorded."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(
+        parent, finding_id="F-03", proposal_id="calibrate-dars",
+    )
+    res = sff.write_child_study(tmp_path, "dnaa-01", src, new_slug="dnaa-02")
+    assert res["new_slug"] == "dnaa-02"
+
+    parent_after = yaml.safe_load(parent_yaml.read_text())
+    prop = next(p for p in parent_after["followup_proposals"]
+                if p["id"] == "calibrate-dars")
+    assert prop["status"] == "seeded"
+    assert prop["seeded_study"] == "dnaa-02"
+    # finding also stamped
+    f = next(f for f in parent_after["findings"] if f["id"] == "F-03")
+    assert f["seeded_study"] == "dnaa-02"
+
+
+def test_write_child_study_default_slug_from_proposal(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(parent, proposal_id="calibrate-dars")
+    res = sff.write_child_study(tmp_path, "dnaa-01", src)
+    assert res["new_slug"]
+    assert (tmp_path / "studies" / res["new_slug"] / "study.yaml").is_file()
+
+
+def test_write_child_study_idempotent_parent_stamp(tmp_path):
+    """Re-stamping a parent finding that already has seeded_study leaves the
+    existing value (fill-absent), and a second write to a fresh slug still
+    succeeds."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(parent, finding_id="F-03")
+    sff.write_child_study(tmp_path, "dnaa-01", src, new_slug="dnaa-02")
+
+    parent_after = yaml.safe_load(parent_yaml.read_text())
+    f = next(f for f in parent_after["findings"] if f["id"] == "F-03")
+    assert f["seeded_study"] == "dnaa-02"
+    # Second seed of the SAME finding -> fill-absent keeps the first stamp.
+    src2 = sff.resolve_seed_source(parent_after, finding_id="F-03")
+    sff.write_child_study(tmp_path, "dnaa-01", src2, new_slug="dnaa-03")
+    parent_after2 = yaml.safe_load(parent_yaml.read_text())
+    f2 = next(f for f in parent_after2["findings"] if f["id"] == "F-03")
+    assert f2["seeded_study"] == "dnaa-02"  # unchanged
+
+
+def test_write_child_study_refuses_existing_slug(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(parent, finding_id="F-03")
+    sff.write_child_study(tmp_path, "dnaa-01", src, new_slug="dnaa-02")
+    with pytest.raises((FileExistsError, ValueError)):
+        src2 = sff.resolve_seed_source(parent, finding_id="F-03")
+        sff.write_child_study(tmp_path, "dnaa-01", src2, new_slug="dnaa-02")

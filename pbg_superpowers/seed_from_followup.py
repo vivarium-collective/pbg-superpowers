@@ -66,7 +66,9 @@ from typing import Any
 
 import yaml
 
+from pbg_superpowers import study_io
 from pbg_superpowers.text_utils import first_sentence
+from pbg_superpowers.workspace_paths import WorkspacePaths
 
 
 # ---------------------------------------------------------------------------
@@ -570,6 +572,193 @@ def resolve_seed_source(
     raise ValueError(
         "resolve_seed_source requires one of: finding_id, proposal_id, followup_idx"
     )
+
+
+# ---------------------------------------------------------------------------
+# write_child_study — a callable atomic writer (lifts the SKILL prose-flow
+# file writes into Python so the dashboard + CLI share one implementation)
+# ---------------------------------------------------------------------------
+
+
+def _child_scaffold(parent_slug: str, parent_study: dict, new_slug: str) -> dict:
+    """A minimal, valid child study.yaml dict pre-wired back to the parent.
+
+    The ChildSeed (purpose / key_assumptions / seeded_from / pipeline_gate /
+    behavior_tests / model_change) is merged onto this scaffold. Empty
+    purpose / pipeline_gate.proceed_condition are left for the seed (or the
+    skill prose flow) to fill — ``merge_into`` is fill-absent.
+    """
+    import datetime
+
+    today = datetime.date.today().isoformat()
+    return {
+        "schema_version": 4,
+        "name": new_slug,
+        "created": today,
+        "status": "planned",
+        "phase": "Design",
+        "baseline": [{
+            "name": "baseline-placeholder",
+            "composite": "v2ecoli.composites.baseline.baseline",
+            "params": {"seed": 0, "cache_dir": "out/cache"},
+        }],
+        "purpose": {},
+        "pipeline_gate": {
+            "prerequisites": [parent_slug],
+            "enables": [],
+        },
+        "key_assumptions": [],
+        "readouts": [],
+        "behavior_tests": [],
+        "model_change": {},
+        "limitations": ["TBD — fill before Decide phase."],
+        "conclusion": None,
+    }
+
+
+def _stamp_parent(parent_yaml: Path, seed_source: "SeedSource", new_slug: str) -> bool:
+    """Stamp the parent study.yaml in place (ruamel round-trip, fill-absent).
+
+    - The originating finding (if any) gets ``seeded_study: <new_slug>`` —
+      only when absent (idempotent).
+    - A REAL ``followup_proposals[]`` entry (not a synthesized stub) gets
+      ``status: seeded`` + ``seeded_study`` + ``linked_finding`` (when a
+      finding drove the seed).
+
+    Returns True when anything was written.
+    """
+    from io import StringIO
+
+    from ruamel.yaml import YAML
+
+    ryaml = YAML()
+    ryaml.preserve_quotes = True
+    ryaml.width = 4096
+
+    rt_spec = ryaml.load(parent_yaml.read_text())
+    if rt_spec is None:
+        rt_spec = {}
+
+    changed = False
+
+    # 1. Stamp the originating finding (fill-absent).
+    fid = seed_source.finding_id
+    if fid:
+        for f in (rt_spec.get("findings") or []):
+            if isinstance(f, dict) and f.get("id") == fid:
+                if not f.get("seeded_study"):
+                    f["seeded_study"] = new_slug
+                    changed = True
+                break
+
+    # 2. Stamp a REAL followup_proposals[] entry (skip synthesized stubs —
+    #    they were never written to the parent).
+    if not seed_source.synthesized:
+        pid = seed_source.proposal.get("id")
+        for p in (rt_spec.get("followup_proposals") or []):
+            if isinstance(p, dict) and p.get("id") == pid:
+                if p.get("status") != "seeded":
+                    p["status"] = "seeded"
+                    changed = True
+                if not p.get("seeded_study"):
+                    p["seeded_study"] = new_slug
+                    changed = True
+                if fid and p.get("linked_finding") != fid:
+                    p["linked_finding"] = fid
+                    changed = True
+                break
+
+    if changed:
+        buf = StringIO()
+        ryaml.dump(rt_spec, buf)
+        study_io.atomic_write(parent_yaml, buf.getvalue())
+    return changed
+
+
+def write_child_study(
+    ws_root: Path | str,
+    parent_slug: str,
+    seed_source: "SeedSource",
+    *,
+    new_slug: str | None = None,
+) -> dict:
+    """Create ``studies/<new_slug>/study.yaml`` + stamp the parent, atomically.
+
+    The single callable writer behind the seed flow (the file writes the
+    SKILL prose flow used to do by hand). Reuses
+    :func:`build_child_seed_from_finding` for the finding path and the
+    proposal fields for the legacy / proposal paths; writes the child via
+    the atomic :mod:`study_io` writer and stamps the parent finding /
+    proposal via a ruamel round-trip (comment-preserving, fill-absent).
+
+    Returns ``{new_slug, child_path, parent_stamped, family}``.
+    """
+    studies_root = WorkspacePaths.load(ws_root).studies
+    parent_yaml = studies_root / parent_slug / "study.yaml"
+    if not parent_yaml.is_file():
+        raise FileNotFoundError(parent_yaml)
+    parent_study = study_io.load_yaml(parent_yaml)
+
+    proposal = seed_source.proposal or {}
+    proposal_id = proposal.get("id")
+    new_slug = (
+        new_slug
+        or _slug_fragment(str(proposal_id or ""))
+        or _slug_fragment(proposal.get("title") or "")
+        or "followup"
+    )
+    new_dir = studies_root / new_slug
+    if new_dir.exists():
+        raise FileExistsError(f"study {new_slug!r} already exists at {new_dir}")
+
+    child = _child_scaffold(parent_slug, parent_study, new_slug)
+
+    if seed_source.finding_id:
+        seed = build_child_seed_from_finding(
+            parent_study, parent_slug, proposal_id, seed_source.finding_id,
+        )
+        child = seed.merge_into(child)
+    else:
+        # Proposal / legacy path — no finding to derive from. Seed the
+        # purpose from the proposal's prose and record the lineage.
+        purpose = dict(child.get("purpose") or {})
+        title = (proposal.get("title") or "").strip()
+        question = (
+            proposal.get("proposed_experiment")
+            or proposal.get("why")
+            or title
+        )
+        if question and not purpose.get("question"):
+            purpose["question"] = question.strip()
+        if proposal.get("hypothesized_mechanism") and not purpose.get("mechanism"):
+            purpose["mechanism"] = proposal["hypothesized_mechanism"].strip()
+        child["purpose"] = purpose
+        child["seeded_from"] = {
+            "study": parent_slug,
+            "proposal_id": proposal_id,
+            "source": seed_source.family,
+        }
+
+    new_dir.mkdir(parents=True, exist_ok=False)
+    try:
+        study_io.save_yaml_atomic(new_dir / "study.yaml", child)
+    except Exception:
+        # Roll back the partially-created child dir so a failed write doesn't
+        # leave an empty study behind.
+        try:
+            (new_dir / "study.yaml").unlink(missing_ok=True)
+            new_dir.rmdir()
+        except OSError:
+            pass
+        raise
+
+    parent_stamped = _stamp_parent(parent_yaml, seed_source, new_slug)
+    return {
+        "new_slug": new_slug,
+        "child_path": str(new_dir / "study.yaml"),
+        "parent_stamped": parent_stamped,
+        "family": seed_source.family,
+    }
 
 
 # ---------------------------------------------------------------------------
