@@ -17,6 +17,7 @@ the heuristic:
 """
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -661,3 +662,59 @@ def test_write_child_study_refuses_existing_slug(tmp_path):
     with pytest.raises((FileExistsError, ValueError)):
         src2 = sff.resolve_seed_source(parent, finding_id="F-03")
         sff.write_child_study(tmp_path, "dnaa-01", src2, new_slug="dnaa-02")
+
+
+# ---------------------------------------------------------------------------
+# Golden — a real v2e-invest study with a finding next_action seeds to a
+# TMP COPY (the real workspace is READ-ONLY and must stay untouched).
+# ---------------------------------------------------------------------------
+
+_V2E_INVEST = Path("/Users/eranagmon/code/v2e-invest")
+_GOLDEN_PARENT = "dnaa-00-stage1-baseline"
+_GOLDEN_FINDING = "F-S4"
+
+
+@pytest.mark.skipif(
+    not (_V2E_INVEST / "studies" / _GOLDEN_PARENT / "study.yaml").is_file(),
+    reason="v2e-invest workspace not present",
+)
+def test_golden_real_study_finding_seeds_to_tmp_copy(tmp_path):
+    """A real v2e-invest study with a finding next_action seeds a child +
+    stamps the parent — operating entirely on a TMP COPY so the real
+    workspace stays byte-for-byte untouched."""
+    real_parent_yaml = _V2E_INVEST / "studies" / _GOLDEN_PARENT / "study.yaml"
+    real_before = real_parent_yaml.read_bytes()
+
+    # Build a minimal tmp workspace: workspace.yaml (no studies-layout
+    # override) + a copy of the parent study.
+    ws = tmp_path / "ws"
+    (ws / "studies" / _GOLDEN_PARENT).mkdir(parents=True)
+    # A flat-layout workspace.yaml (studies/ at root) is enough for the writer.
+    (ws / "workspace.yaml").write_text(
+        "schema_version: 2\nname: v2ecoli\ncreated: \"2026-05-16\"\n"
+        "plugin_version: 0.6.1\npackage_path: v2ecoli\n"
+    )
+    shutil.copy(real_parent_yaml,
+                ws / "studies" / _GOLDEN_PARENT / "study.yaml")
+
+    parent_spec = yaml.safe_load(real_parent_yaml.read_text())
+    src = sff.resolve_seed_source(parent_spec, finding_id=_GOLDEN_FINDING)
+    res = sff.write_child_study(ws, _GOLDEN_PARENT, src, new_slug="dnaa-00f-seed")
+
+    # Child created with the finding lineage.
+    child_yaml = ws / "studies" / "dnaa-00f-seed" / "study.yaml"
+    assert child_yaml.is_file()
+    child = yaml.safe_load(child_yaml.read_text())
+    assert child["seeded_from"]["finding"] == _GOLDEN_FINDING
+    assert child["seeded_from"]["study"] == _GOLDEN_PARENT
+    assert child["purpose"]["question"]
+
+    # Parent (the TMP COPY) stamped.
+    tmp_parent = yaml.safe_load(
+        (ws / "studies" / _GOLDEN_PARENT / "study.yaml").read_text())
+    f = next(f for f in tmp_parent["findings"] if f.get("id") == _GOLDEN_FINDING)
+    assert f["seeded_study"] == "dnaa-00f-seed"
+    assert res["new_slug"] == "dnaa-00f-seed"
+
+    # The REAL workspace is byte-for-byte untouched.
+    assert real_parent_yaml.read_bytes() == real_before
