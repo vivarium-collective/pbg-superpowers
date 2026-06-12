@@ -258,3 +258,47 @@ def test_summary_ranks_by_severity(tmp_inv_mixed):
 def test_investigation_slug_echoed(tmp_inv_with_unlinked_ac):
     res = scan_investigation(tmp_inv_with_unlinked_ac, "inv")
     assert res["investigation"] == "inv"
+
+
+# ---------------------------------------------------------------------------
+# Golden — read-only scan over the real v2e-invest workspace (skips if absent).
+# ---------------------------------------------------------------------------
+
+_V2E_INVEST = Path("/Users/eranagmon/code/v2e-invest")
+
+
+def _real_investigation_slugs() -> list[str]:
+    inv_root = _V2E_INVEST / "investigations"
+    if not inv_root.is_dir():
+        return []
+    return sorted(
+        p.name for p in inv_root.iterdir()
+        if p.is_dir() and (p / "investigation.yaml").is_file()
+    )
+
+
+@pytest.mark.skipif(not _V2E_INVEST.is_dir(),
+                    reason="v2e-invest workspace not present")
+def test_golden_scan_real_investigation_read_only():
+    slugs = _real_investigation_slugs()
+    if not slugs:
+        pytest.skip("no real investigations under v2e-invest")
+
+    # Prefer the chromosome-cycle-calibration investigation (the known SP4a
+    # live gap — 5 unlinked ACs) when present, else any real slug.
+    slug = ("chromosome-cycle-calibration"
+            if "chromosome-cycle-calibration" in slugs else slugs[0])
+
+    before = _snapshot(_V2E_INVEST)
+    res = scan_investigation(_V2E_INVEST, slug)
+    assert _snapshot(_V2E_INVEST) == before, "scan must not write to v2e-invest"
+
+    assert res["investigation"] == slug
+    assert "items" in res and "summary" in res
+    assert res["summary"]["total"] == len(res["items"])
+
+    if slug == "chromosome-cycle-calibration":
+        # The known SP4a live gap: its acceptance criteria have no study link.
+        acs = [i for i in res["items"]
+               if i["kind"] == "uncovered_ac" and i["severity"] == "high"]
+        assert acs, "expected uncovered-AC high items for the SP4a live gap"
