@@ -22,7 +22,7 @@ def test_skill_file_exists():
 
 
 def test_subcommands_documented(skill_text):
-    for sub in ("ac-gaps", "source", "finding-by-observable", "dag",
+    for sub in ("decisions", "ac-gaps", "source", "finding-by-observable", "dag",
                 "observable", "composite"):
         assert sub in skill_text, f"subcommand {sub!r} not documented"
 
@@ -30,6 +30,12 @@ def test_subcommands_documented(skill_text):
 def test_references_linkage_backend(skill_text):
     assert "linkage_index" in skill_text
     assert "/api/linkage-index" in skill_text
+
+
+def test_references_needs_attention_backend(skill_text):
+    # SP5 decisions-needed scan: the navigator LEADS with it.
+    assert "scan_investigation" in skill_text
+    assert "/api/needs-attention" in skill_text
 
 
 def test_read_only_no_ai(skill_text):
