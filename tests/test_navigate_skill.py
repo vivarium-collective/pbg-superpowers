@@ -22,7 +22,8 @@ def test_skill_file_exists():
 
 
 def test_subcommands_documented(skill_text):
-    for sub in ("ac-gaps", "source", "finding-by-observable", "dag"):
+    for sub in ("ac-gaps", "source", "finding-by-observable", "dag",
+                "observable", "composite"):
         assert sub in skill_text, f"subcommand {sub!r} not documented"
 
 
@@ -34,5 +35,6 @@ def test_references_linkage_backend(skill_text):
 def test_read_only_no_ai(skill_text):
     # The skill must call the deterministic query helpers.
     for fn in ("ac_gating_matrix", "studies_for_source",
-               "findings_for_observable", "study_dag"):
+               "findings_for_observable", "study_dag",
+               "studies_for_observable", "composite_emits"):
         assert fn in skill_text, f"helper {fn!r} not referenced"
