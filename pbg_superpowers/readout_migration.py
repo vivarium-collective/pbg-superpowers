@@ -155,6 +155,62 @@ def _study_yaml_path(study_dir: Path | str) -> Path:
     return p if p.name == "study.yaml" else p / "study.yaml"
 
 
+# ---------------------------------------------------------------------------
+# Pure status classification (dry-run; never writes)
+# ---------------------------------------------------------------------------
+
+def readout_migration_status(study_dir: Path | str) -> dict:
+    """Classify a study's readouts into migration buckets (PURE read).
+
+    Loads the study spec, runs the **pure** ``migrate_readouts`` (a dry-run —
+    no file is ever touched), and sorts every readout into one of three
+    buckets:
+
+      * ``needs_human``  — unresolvable (prose ``·`` groups, ``derived``,
+        ambiguous). The migration keeps these untouched; a human must
+        re-author them against the composite's real observables. Carried
+        straight from the report as ``[{name, reason}, ...]``.
+      * ``migratable``   — resolvable AND the canonical form DIFFERS from the
+        original. A ``migrate_study_file(write=True)`` would safely rewrite
+        these (meaning-preserving). Returned as the *original* readout dicts.
+      * ``canonical``    — resolvable AND already canonical (a dry-run migrate
+        leaves them byte-identical). Nothing to do.
+
+    This function performs NO writes — it only reads ``study.yaml``. The actual
+    rewrite is ``migrate_study_file(write=True)``, invoked only by the skills.
+
+    Args:
+        study_dir: the study directory (or the ``study.yaml`` path itself).
+
+    Returns:
+        ``{"canonical": [readout, ...], "migratable": [readout, ...],
+           "needs_human": [{"name": ..., "reason": ...}, ...]}``
+    """
+    from pbg_superpowers import study_io
+
+    study_yaml = _study_yaml_path(study_dir)
+    spec = study_io.load_yaml_mapping(study_yaml)
+
+    originals: list[dict] = spec.get("readouts") or []
+    new_readouts, report = migrate_readouts(spec)
+
+    canonical: list[dict] = []
+    migratable: list[dict] = []
+    for original, new, entry in zip(originals, new_readouts, report["entries"]):
+        if entry.get("status") == "needs_human":
+            continue  # already accounted for in report["needs_human"]
+        if new == original:
+            canonical.append(original)
+        else:
+            migratable.append(original)
+
+    return {
+        "canonical": canonical,
+        "migratable": migratable,
+        "needs_human": list(report["needs_human"]),
+    }
+
+
 def migrate_study_file(study_dir: Path | str, write: bool = False) -> dict:
     """Migrate a study.yaml's readouts in place (default: dry-run).
 

@@ -14,6 +14,7 @@ import pytest
 from pbg_superpowers.readout_migration import (
     migrate_readouts,
     migrate_study_file,
+    readout_migration_status,
 )
 from pbg_superpowers.readout_resolver import (
     ResolvedReadout,
@@ -252,6 +253,88 @@ def test_migrate_study_file_write_preserves_comments_and_other_content(tmp_path)
     r = resolve_readout(_by_name(spec2["readouts"], "DnaA monomer total"))
     assert isinstance(r, ResolvedReadout)
     assert r.index_by == {"type": "literal_index", "value": 3861}
+
+
+# ---------------------------------------------------------------------------
+# readout_migration_status — pure classify into canonical/migratable/needs_human
+# ---------------------------------------------------------------------------
+
+# Already in canonical form (index_by + store_path) — a dry-run migrate leaves
+# it byte-identical, so it lands in `canonical`.
+RO_ALREADY_CANONICAL = {
+    "name": "DnaA monomer total",
+    "index_by": {"type": "literal_index", "value": 3861},
+    "store_path": "listeners.monomer_counts",
+    "units": "molecules/cell",
+    "status": "primary",
+}
+
+# Clean legacy `identifier:` magic-index dialect — resolvable, but its canonical
+# form DIFFERS from the original, so it lands in `migratable`.
+RO_CLEAN_MIGRATABLE = {
+    "name": "Cell mass",
+    "status": "primary",
+    "identifier": "listeners.mass.cell_mass[2]",
+    "units": "fg",
+}
+
+
+STUDY_YAML_MIXED = """\
+# Mixed-dialect study: one canonical, one migratable, one prose needs_human.
+name: dnaa-mixed
+objective: |
+  Exercise all three migration-status buckets.
+readouts:
+  - name: DnaA monomer total
+    index_by:
+      type: literal_index
+      value: 3861
+    store_path: listeners.monomer_counts
+    units: molecules/cell
+    status: primary
+  - name: Cell mass
+    status: primary
+    identifier: listeners.mass.cell_mass[2]
+    units: fg
+  - name: DnaA-form counts
+    status: measured
+    identifier: "bulk PD03831[c] (apo) · MONOMER0-160[c] (DnaA-ATP)"
+    units: molecules/cell
+baselines: []
+"""
+
+
+@pytest.fixture
+def tmp_study_mixed_readouts(tmp_path):
+    study_dir = tmp_path / "dnaa-mixed"
+    study_dir.mkdir()
+    (study_dir / "study.yaml").write_text(STUDY_YAML_MIXED)
+    return study_dir
+
+
+def test_status_classifies_canonical_migratable_needs_human(tmp_study_mixed_readouts):
+    s = readout_migration_status(tmp_study_mixed_readouts)
+    # the prose ·-group is unresolvable → needs_human
+    assert {r["name"] for r in s["needs_human"]} == {"DnaA-form counts"}
+    # the clean legacy identifier dialect → migratable
+    assert {r["name"] for r in s["migratable"]} == {"Cell mass"}
+    # the already-canonical readout is unchanged by a dry-run migrate → canonical
+    assert {r["name"] for r in s["canonical"]} == {"DnaA monomer total"}
+    assert isinstance(s["canonical"], list)
+    # needs_human entries carry a reason
+    assert all(h.get("reason") for h in s["needs_human"])
+
+
+def test_status_pure_read(tmp_study_mixed_readouts):
+    before = (tmp_study_mixed_readouts / "study.yaml").read_bytes()
+    readout_migration_status(tmp_study_mixed_readouts)
+    after = (tmp_study_mixed_readouts / "study.yaml").read_bytes()
+    assert after == before  # dry-run, no write
+
+
+def test_status_accepts_study_yaml_path_directly(tmp_study_mixed_readouts):
+    s = readout_migration_status(tmp_study_mixed_readouts / "study.yaml")
+    assert {r["name"] for r in s["migratable"]} == {"Cell mass"}
 
 
 # ---------------------------------------------------------------------------
