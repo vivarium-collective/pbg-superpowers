@@ -231,12 +231,6 @@ def _try_select_fallback(token: str, reader: "RunReader") -> "pl.DataFrame | Non
     return None
 
 
-# Regex for a simple literal-index path: "dotted.path[N]" with no surrounding arithmetic.
-_LITERAL_INDEX_PATH_RE = re.compile(
-    r"^([A-Za-z_]\w*(?:\.\w+)*)\[(\d+)\]$"
-)
-
-
 def _resolve_series(path: str, reader: "RunReader") -> pl.DataFrame:
     """Resolve an observable path or arithmetic expression to a series.
 
@@ -249,6 +243,18 @@ def _resolve_series(path: str, reader: "RunReader") -> pl.DataFrame:
 
     ``ObservableNotFound`` is raised only when BOTH ``series`` and the
     appropriate ``select`` fallback fail — never-guess is preserved.
+
+    Verdict-safe element-only resolver hybrid (SP2b-iii): only **element-kind**
+    readouts are routed through the canonical ``readout_resolver`` (folding the
+    literal-index regex into a single source — see the fast path below). The
+    ``scalar``, ``expression``, bare bracket **bulk-id**, and trailing-**prose**
+    dialects are deliberately handled by this function's local body, NOT the
+    resolver, because the resolver (a) returns ``UnresolvedReadout`` for a bare
+    bracket bulk id such as ``MONOMER0-160[c]`` — which the tokenize/``select``
+    body here resolves — and (b) strips a trailing parenthetical to a bare
+    ``scalar`` — which the evaluator correctly rejects. Routing either through
+    the resolver would change verdicts; only the literal-index dedup is safe.
+    Grounding: docs/plans/2026-06-12-sp2b-iii-evaluator-hybrid-plan.md.
 
     Args:
         path:   Observable path (e.g. ``listeners.mass.cell_mass``) or a
@@ -265,19 +271,31 @@ def _resolve_series(path: str, reader: "RunReader") -> pl.DataFrame:
         ObservableNotFound: If any token in *path* cannot be resolved via
             either ``series()`` or the selector fallback.
     """
-    # Fast path: simple literal-index (e.g. "listeners.monomer_counts[3]")
-    # before general tokenisation to avoid subscript in _eval_expression.
-    m = _LITERAL_INDEX_PATH_RE.match(path.strip())
-    if m:
-        observable = m.group(1)
-        idx = int(m.group(2))
+    # Fast path: element-kind readouts (e.g. literal-index
+    # "listeners.monomer_counts[3]") are routed through the canonical
+    # readout_resolver so the literal-index regex is single-sourced — before
+    # general tokenisation to avoid subscript in _eval_expression. The
+    # resolver's ResolvedReadout.to_select_dict() for a literal-index element
+    # is byte-identical to the dict the old in-evaluator fast path produced
+    # ({"type": "literal_index", "value": N, "observable": "..."}).
+    #
+    # SP2b-iii hybrid (verdict-safe): ONLY element-kind is routed here.
+    # scalar/expression/bare-bulk/prose deliberately stay on the local body
+    # below because the resolver (a) returns UnresolvedReadout for bare bracket
+    # bulk ids like MONOMER0-160[c] (which the tokenize/select body resolves)
+    # and (b) strips trailing prose to a scalar (which the evaluator correctly
+    # rejects) — routing either through the resolver would change verdicts.
+    # See docs/plans/2026-06-12-sp2b-iii-evaluator-hybrid-plan.md.
+    from pbg_superpowers.readout_resolver import ResolvedReadout, resolve_readout
+
+    r = resolve_readout({"identifier": path.strip()})
+    if isinstance(r, ResolvedReadout) and r.kind == "element":
+        select_dict = r.to_select_dict()
         try:
-            return reader.select(
-                {"type": "literal_index", "value": idx, "observable": observable}
-            )
+            return reader.select(select_dict)
         except Exception as exc:  # noqa: BLE001
             raise ObservableNotFound(
-                f"literal_index path {path!r} not resolvable: {exc}"
+                f"element readout {path!r} not resolvable: {exc}"
             ) from exc
 
     tokens = _extract_observable_tokens(path)
