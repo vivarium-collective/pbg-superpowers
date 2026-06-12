@@ -21,6 +21,9 @@ Reuses (does not reimplement):
 """
 from __future__ import annotations
 
+import argparse
+import json
+import sys
 from pathlib import Path
 
 import yaml
@@ -118,3 +121,22 @@ def investigation_citation_gaps(ws_root: Path | str, inv_slug: str) -> dict:
         }
 
     return gaps
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI: print the citation gaps as JSON. ``pbg-citation-gaps`` console script."""
+    parser = argparse.ArgumentParser(
+        prog="pbg-citation-gaps",
+        description="Surface uncited member-study bands x investigation references.",
+    )
+    parser.add_argument("--workspace", "-w", default=".", help="Workspace root.")
+    parser.add_argument("--investigation", "-i", required=True, help="Investigation slug.")
+    args = parser.parse_args(argv)
+
+    gaps = investigation_citation_gaps(args.workspace, args.investigation)
+    print(json.dumps(gaps, indent=2))
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    sys.exit(main())

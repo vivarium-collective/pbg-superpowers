@@ -4,7 +4,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pbg_superpowers.citation_gaps import investigation_citation_gaps
+import json
+
+from pbg_superpowers.citation_gaps import investigation_citation_gaps, main
 
 
 # --------------------------------------------------------------------------- #
@@ -95,6 +97,20 @@ def test_best_effort_skips_bad_study_yaml(tmp_path):
     gaps = investigation_citation_gaps(ws, "the-inv")
     assert "good" in gaps
     assert "missing-on-disk" not in gaps
+
+
+def test_main_prints_json_gaps(tmp_path, capsys):
+    ws = _make_ws(
+        tmp_path,
+        studies={"the-study": {"behavior_tests": [_band_test("the-uncited-band")]}},
+        references=["ref-a", "ref-b"],
+    )
+    rc = main(["--workspace", str(ws), "--investigation", "the-inv"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert "the-study" in out
+    assert set(out["the-study"]["available_references"]) == {"ref-a", "ref-b"}
+    assert any(b["test"] == "the-uncited-band" for b in out["the-study"]["uncited_bands"])
 
 
 def test_pure_read_writes_nothing(tmp_path):
