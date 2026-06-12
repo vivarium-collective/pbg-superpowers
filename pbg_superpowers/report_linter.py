@@ -1419,21 +1419,39 @@ def _check_viz_stale_vs_latest_run(ctx: _LintContext) -> None:
     study_dir = ctx.ws_root / "studies" / ctx.slug
     latest = latest_run(study_dir / "runs.db")
     entries = spec.get("visualizations") or []
-    level = "error" if getattr(ctx, "strict", False) else "warning"
-    for idx, e in enumerate(entries):
+
+    stale = []
+    for e in entries:
         if not (e or {}).get("chart"):
             continue  # legacy address-only entries aren't chart-provenance-tracked
         state = chart_freshness(study_dir, e, latest)
         if state in ("stale", "unrendered"):
-            ctx.add(level=level, field_path=f"visualizations[{idx}].chart",
-                    message=(f"Visualization {e.get('name')!r} is {state} vs the "
-                             "study's latest run. Run /pbg-study refresh-viz."),
-                    check="viz_stale_vs_latest_run")
-    for orphan in manifest_diff(study_dir, entries)["untracked"]:
-        ctx.add(level=level, field_path=orphan,
-                message=(f"Chart {orphan} is on disk but not in visualizations[]; "
-                         "register it (with a render: command) or remove it."),
-                check="viz_stale_vs_latest_run")
+            stale.append((e.get("name"), state))
+    untracked = list(manifest_diff(study_dir, entries)["untracked"])
+    if not stale and not untracked:
+        return
+
+    # Fold the per-chart findings into ONE per-study finding so viz hygiene
+    # stops dominating the gap count (gaps = error + warning) and the readiness
+    # panel leads with substantive findings (needs_human readouts, uncited
+    # bands). Demoted to INFO by default — a nudge, not a publication gap — but
+    # still promoted to ERROR under --strict so the publish gate is preserved.
+    level = "error" if getattr(ctx, "strict", False) else "info"
+    parts = []
+    if untracked:
+        parts.append(
+            f"{len(untracked)} chart(s) on disk not registered in visualizations[] "
+            "(register with a render: command or remove)"
+        )
+    if stale:
+        names = ", ".join(f"{n!r} ({s})" for n, s in stale)
+        parts.append(
+            f"{len(stale)} registered visualization(s) stale/unrendered vs the "
+            f"study's latest run — {names} (run /pbg-study refresh-viz)"
+        )
+    ctx.add(level=level, field_path="visualizations",
+            message="; ".join(parts) + ".",
+            check="viz_stale_vs_latest_run")
 
 
 def _check_runs_yaml_vs_db_drift(ctx: _LintContext) -> None:
