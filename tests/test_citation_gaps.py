@@ -113,6 +113,39 @@ def test_main_prints_json_gaps(tmp_path, capsys):
     assert any(b["test"] == "the-uncited-band" for b in out["the-study"]["uncited_bands"])
 
 
+V2E_INVEST = Path("/Users/eranagmon/code/v2e-invest")
+
+
+@pytest.mark.skipif(not V2E_INVEST.is_dir(), reason="v2e-invest workspace absent")
+def test_golden_v2e_invest_dnaa_replication():
+    """READ-ONLY golden against the real dnaa-replication investigation."""
+    inv_dir = V2E_INVEST / "workspace" / "investigations" / "dnaa-replication"
+    study_yamls = list((inv_dir / "studies").glob("*/study.yaml"))
+    before = {p: p.read_bytes() for p in study_yamls}
+
+    gaps = investigation_citation_gaps(V2E_INVEST, "dnaa-replication")
+
+    # Dict keyed by real member studies.
+    assert isinstance(gaps, dict) and gaps
+    assert "dnaa-1-expression" in gaps
+
+    # available_references include the investigation's real bib_keys.
+    refs = gaps["dnaa-1-expression"]["available_references"]
+    assert "dnaa-abundance-jb-1991" in refs
+
+    # Valid structure throughout.
+    for slug, g in gaps.items():
+        assert isinstance(slug, str)
+        assert set(g) == {"uncited_bands", "available_references"}
+        assert isinstance(g["available_references"], list)
+        for band in g["uncited_bands"]:
+            assert "test" in band and isinstance(band["test"], str)
+
+    # No writes to v2e-invest.
+    after = {p: p.read_bytes() for p in study_yamls}
+    assert after == before
+
+
 def test_pure_read_writes_nothing(tmp_path):
     ws = _make_ws(
         tmp_path,
