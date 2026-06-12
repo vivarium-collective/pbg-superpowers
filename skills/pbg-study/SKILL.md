@@ -3,7 +3,7 @@ name: pbg-study
 description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|run-script|refresh-viz|clean|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|open [args]
+argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|run-script|refresh-viz|clean|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|feedback-respond <slug> [--apply]|open [args]
 ---
 
 # pbg-study
@@ -912,6 +912,51 @@ Lift a parent's `followup_proposals[id == <proposal-id>]` entry into a brand-new
 
 - This is a YAML-direct subcommand; no dashboard API endpoint exists yet (mirrors `/pbg-investigation`'s YAML-direct write pattern).
 - After seeding, the child appears in the dashboard's Studies tab on the next workspace refresh; the parent's proposal entry's `seeded_study:` makes the lineage visible in the Decide panel.
+
+#### `feedback-respond <slug> [--apply] [--dry-run]`
+
+Turn **open expert feedback** into tracked, applied actions — the closing half
+of the reflexive loop (SP3b). Imported feedback (via `pbg-feedback-import`)
+dead-ends at a free-text status today; this subcommand maps each open feedback
+item to a concrete action and persists it as a tracked artifact in the feedback
+yaml's `actions:` block (parallel to `responses:`), keyed by a deterministic
+`feedback_item_id`. This is the persisted form of the "map each point to an
+action" step in [`docs/conventions/handling-investigation-feedback.md`](../../docs/conventions/handling-investigation-feedback.md).
+
+**AI-free split.** The *aggregation* (`study_feedback_actions`), the *recording*
+helper (`record_feedback_action`), and the *apply* primitive
+(`apply_feedback_action`) are deterministic Python in
+[`pbg_superpowers/feedback_actions.py`](../../pbg_superpowers/feedback_actions.py).
+The **judgment** — which action `kind` best addresses a feedback item and what
+its `proposed_text` should be — is the agent's, performed here in the skill.
+The skill never silently mutates design: it proposes + records, and applies
+only the explicit target of an action.
+
+**Arguments:**
+
+- `<slug>` (required) — study under `studies/<slug>/`. Abort if `study.yaml` is missing.
+- `--apply` (optional) — after recording each action, immediately call `apply_feedback_action` for it. Without `--apply`, the actions are recorded as `open` and left for the user (or the dashboard's Apply button) to apply.
+- `--dry-run` (optional) — print the proposed `kind` + `proposed_text` per open item; record nothing.
+
+**The four action kinds (the agent picks one per item):**
+
+- `next_action` — the feedback points at a finding that should drive follow-up. The agent picks the `target_finding` (an `F-NN` id in `study.yaml.findings[]`) and writes the imperative `proposed_text`; applying it sets `findings[<target_finding>].next_action = proposed_text`. **This is the SP3a join** — a finding with a `next_action` is then seedable into a child study via `seed-from-followup --from-finding`.
+- `finding` — the feedback surfaces a result worth recording as its own finding; applying drafts a finding stub (`status: draft`, `from_feedback: <item_id>`) in the target study.
+- `design-edit` — the feedback proposes a model/design change; applying records a tracked note only (NO silent design mutation — the human makes the edit).
+- `study-seed` — the feedback calls for a whole new study; applying seeds a child via SP3a's `resolve_seed_source` + `write_child_study`.
+
+**Behavior (steps the host Claude follows):**
+
+1. **Read open items.** Call `study_feedback_actions(ws_root, slug)` and take the items with `status == "open"` (no action recorded yet). If none, report "No open feedback items for `<slug>`." and stop.
+2. **Propose per item (the judgment).** For each open item, read the feedback `text` and the study's `findings[]` and decide the best `kind` + `proposed_text` (+ `target_finding` for `next_action`, or seed selectors for `study-seed`). Show the proposal. Under `--dry-run`, stop after printing.
+3. **Record.** Call the deterministic helper `record_feedback_action(ws_root, item_id, kind=..., target_study=slug, proposed_text=..., target_finding=...)` to write the `actions[item_id]` entry (status `open`) into the feedback yaml (comment-preserving ruamel write). Invoke via `python -c` or the module, in the same YAML-direct shape as the other subcommands.
+4. **Optionally apply.** When `--apply` is passed, call `apply_feedback_action(ws_root, item_id)` per recorded action. For a `next_action` action this writes `findings[<target_finding>].next_action`; the action flips to `applied` (by/at). Apply is idempotent (re-apply → `already_applied`).
+5. **Report.** Print per item: `item_id`, chosen `kind`, `proposed_text`, and `recorded` / `applied`. Note any that need a human design-edit.
+
+**Notes:**
+
+- The `actions:` block is a NEW top-level key in the feedback yaml, parallel to `responses:`, keyed by `feedback_item_id(section, ts, author)`. Writes are idempotent + comment-preserving.
+- The dashboard's study-detail feedback panel renders these tracked actions (open/applied badge) and offers an **Apply** button that POSTs `item_id` to `/api/feedback-apply-action` → `apply_feedback_action` — so the same primitive backs both the skill and the UI.
 
 ### Utility
 
