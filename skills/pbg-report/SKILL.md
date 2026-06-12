@@ -151,6 +151,7 @@ The existing pre-publication linter from `pbg_superpowers.report_linter.lint_wor
 - **truncated_takeaways** (error) — `conclusion_logic.if_pass`/`if_fail` ending mid-sentence or <20 chars.
 - **status_claims_done_no_runs_recorded** (warning) — a study declares completion (`status: completed` / `gate_status: passed` / `evaluation_status: evaluated`) but records no run provenance at all (no `runs:`/`simulation_set:`/`planned_runs:`), so it renders as not-run/pending despite the headline.
 - **reviewer_clarity_ambiguity** (warning) — anything that would read ambiguously on the per-study run/test/verdict strip: ran-but-every-test-pending (no `runs[].outcomes` recorded), or `gate_status: passed` while a test is recorded FAILED. Single-sourced from `study_status.study_clarity_summary`.
+- **readout_migration_status** (info + warning) — surfaces each study's readout migration status: `migratable` readouts (info — safe to canonicalize, see the next step) and `needs_human` readouts (warning — un-parseable prose/derived selectors that must be re-authored against `/api/observables` via `/pbg-study check-observables`).
 
 Only **error**-level findings block publication.
 
@@ -160,6 +161,31 @@ Internally:
 # Pass B only:
 python -m pbg_superpowers.report_linter --ws .
 ```
+
+## Pass B½ — Canonicalize readouts (auto-migrate, before render)
+
+`/pbg-report` is one of the two triggers (the other is the explicit `/pbg-study migrate-readouts`) that auto-canonicalize the safe `migratable` readouts. Run this after Pass B passes and **before** rendering, so the rendered report shows every study's readouts in canonical form.
+
+For each member study under `$STUDIES_DIR` / `$INVESTIGATIONS_DIR`, rewrite only the safe (resolvable) readouts and tally the un-parseable ones:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+from pbg_superpowers.readout_migration import migrate_study_file
+needs_human_total = 0
+for sy in Path('.').glob('studies/*/study.yaml'):
+    report = migrate_study_file(sy.parent, write=True)  # ruamel round-trip; rewrites ONLY the readouts: block, leaves needs_human untouched
+    n = len(report.get('needs_human') or [])
+    if report.get('migrated'):
+        print(f"{sy.parent.name}: canonicalized {len(report['migrated'])} readout(s)")
+    if n:
+        print(f"{sy.parent.name}: {n} readout(s) still need_human (re-author via /pbg-study migrate-readouts)")
+        needs_human_total += n
+print(f"\nreadout migration: {needs_human_total} needs_human readout(s) remain across all studies")
+PY
+```
+
+`migrate_study_file(write=True)` is meaning-preserving, comment-safe, idempotent, and leaves every `needs_human` readout untouched — it only rewrites the resolvable ones. Report the total `needs_human` count as a (non-blocking) finding: these can't be auto-fixed and must be re-authored against the composite's real observables via `/pbg-study migrate-readouts <slug>` (which uses `/pbg-study check-observables` + `/api/observables`). The dashboard never writes — this canonicalize runs only here in the skill.
 
 ## Render
 
