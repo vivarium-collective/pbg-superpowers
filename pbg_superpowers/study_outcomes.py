@@ -45,7 +45,8 @@ def canonical_outcomes(spec_or_runs) -> dict:
 # ---------------------------------------------------------------------------
 
 # Code-owned mechanical fields written from runs.db
-_MECHANICAL = ("status", "kind", "emitter", "seeds", "params", "timestamp", "commit")
+_MECHANICAL = ("status", "kind", "emitter", "seeds", "params", "timestamp", "commit",
+               "generations", "sim_minutes", "n_readouts")
 
 
 def _emitter_kind(emitter_path: str | None) -> str:
@@ -72,6 +73,21 @@ def _mechanical_record(db_row: dict) -> dict:
         "timestamp": db_row.get("completed_at") or db_row.get("started_at"),
         "emitter": emitter,
     }
+    # Canonical run summary — every recorded simulation carries its quantitative
+    # shape (generations, simulated time, readouts collected) read from its store
+    # via RunReader, so all simulations render uniformly. Best-effort.
+    if emitter_path:
+        try:
+            from pbg_emitters.run_reader import RunReader
+            summ = RunReader.open(emitter_path).summary()
+            if summ.get("generations") is not None:
+                rec["generations"] = summ["generations"]
+            if summ.get("sim_minutes") is not None:
+                rec["sim_minutes"] = summ["sim_minutes"]
+            if summ.get("n_observables") is not None:
+                rec["n_readouts"] = summ["n_observables"]
+        except Exception:  # noqa: BLE001 — never block run recording
+            pass
     if db_row.get("generation_id") is not None:
         rec["generation_id"] = db_row.get("generation_id")
     params = db_row.get("params") or db_row.get("params_json")
