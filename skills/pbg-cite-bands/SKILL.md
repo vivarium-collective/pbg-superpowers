@@ -59,6 +59,59 @@ If the output is `[]`, all bands are already cited — nothing to do.
 
 ---
 
+## Step 1b — Pull the investigation's references as candidates
+
+When the study belongs to an **investigation**, the investigation usually
+already declares a curated pool of supporting references in its
+`investigation.yaml` `inputs.references` block (workspace bib_keys that resolve
+in `references/papers.bib`). These are first-class candidates for the uncited
+bands — surface them deterministically with `investigation_citation_gaps`
+(or the `pbg-citation-gaps` console script):
+
+```bash
+WS_ROOT="<workspace-root>"
+INV_SLUG="<investigation-slug>"   # the owning investigation of the study
+.venv/bin/python -c "
+import json
+from pbg_superpowers.citation_gaps import investigation_citation_gaps
+print(json.dumps(investigation_citation_gaps('$WS_ROOT', '$INV_SLUG'), indent=2))
+"
+# equivalently:
+.venv/bin/python -m pbg_superpowers.citation_gaps --workspace "$WS_ROOT" --investigation "$INV_SLUG"
+# or the console script: pbg-citation-gaps --workspace "$WS_ROOT" --investigation "$INV_SLUG"
+```
+
+The output is keyed by member study slug:
+```json
+{
+  "<study-slug>": {
+    "uncited_bands": [{ "test": "<test-name>", "observable": "<optional>" }],
+    "available_references": ["dnaa-abundance-jb-1991", "dnaa-stability-jb-1999"]
+  }
+}
+```
+
+For each uncited band in the study you are citing, the agent PROPOSES the most
+**topically-relevant** reference(s) from `available_references` — matching the
+reference's subject to the band's observable/test. **This match is the agent's
+judgment.** Then:
+
+1. Confirm the proposed pairing(s) with the user.
+2. Apply via `set_band_provenance(study_dir, test_name, cites=[bib_key])`
+   (Step 4 below) — the references already resolve as bib_keys, so no
+   cite-resolution work is needed.
+
+**Never fabricate.** Only link references the investigation has already declared
+in `inputs.references` (or another key already in `references/papers.bib`). If
+none of the investigation's references topically fits a band, fall through to
+the expert-PDF search (Step 2) or park it in `proposed_inputs` (Step 3) — do not
+invent a bib_key.
+
+This investigation-inputs pool is an **additional** candidate source; the
+expert-PDF path below still applies for bands it does not cover.
+
+---
+
 ## Step 2 — Surface candidate evidence per band
 
 For each uncited band, call `search_expert_docs` to find relevant passages
