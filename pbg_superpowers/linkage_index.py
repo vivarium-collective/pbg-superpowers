@@ -541,6 +541,45 @@ def _strip_lineage_prefix(leaf: str) -> str:
     return _LINEAGE_PREFIX.sub("", leaf)
 
 
+# A bulk-pool atom: ``MOLECULE[compartment]`` (e.g. ``ATP[c]``). Reconciles the
+# bulk dialects — a composite emits ``bulk[ATP[c]]`` while a study declares
+# ``bulk.ATP[c]`` or ``bulk__count[ATP[c], ADP[c]]``; all three name the same
+# observable and must MATCH (else the registry is silently empty for the bulk
+# class, which dominates v2ecoli). The SP2b-i lesson, bracket edition.
+_BULK_ATOM_RE = re.compile(r"[A-Za-z0-9_\-+]+\[[a-z0-9]+\]")
+
+
+def _observable_match_keys(token: str) -> frozenset[str]:
+    """Canonical comparison keys for an observable token.
+
+    Non-bulk tokens compare by their exact (lineage-stripped) string. A bulk
+    token reconciles to the SET of its ``MOLECULE[compartment]`` atoms, so
+    ``bulk[ATP[c]]`` (a composite leaf), ``bulk.ATP[c]`` and
+    ``bulk__count[ATP[c], ADP[c]]`` (study declarations) all share the key
+    ``ATP[c]`` and therefore match. Two tokens MATCH iff their key sets
+    intersect. The ``"bulk"`` guard keeps non-bulk bracketed paths (e.g. a
+    listener array ``listeners.x[gene]``) on exact-string matching — no false
+    positives."""
+    t = _strip_lineage_prefix(token)
+    if "bulk" in t.lower():
+        atoms = _BULK_ATOM_RE.findall(t)
+        if atoms:
+            return frozenset(atoms)
+    return frozenset({t})
+
+
+def _observable_key_map(nodes: list[dict]) -> dict[str, set[str]]:
+    """Map each match-key to the set of existing ``observable`` node ids that
+    carry it — so a composite leaf can SNAP onto the study-declared observable
+    node it matches (rather than minting a parallel, never-matching node)."""
+    out: dict[str, set[str]] = {}
+    for n in nodes:
+        if n.get("type") == "observable":
+            for k in _observable_match_keys(n.get("token", "")):
+                out.setdefault(k, set()).add(n["id"])
+    return out
+
+
 def enrich_observable_edges(
     index: dict,
     observables_for_ref: Callable[[str], dict],
@@ -561,6 +600,9 @@ def enrich_observable_edges(
     existing_emits = {
         (e["from"], e["to"]) for e in edges if e.get("type") == "emits"
     }
+    # match-key → existing observable node ids (study `measures` nodes); a leaf
+    # SNAPS onto the node(s) it matches by key, reconciling the bulk dialects.
+    key_to_oids = _observable_key_map(nodes)
 
     for node in list(nodes):
         if node.get("type") != "composite":
@@ -576,16 +618,27 @@ def enrich_observable_edges(
         for leaf in (result.get("leaves") or []):
             if not isinstance(leaf, str) or not leaf:
                 continue
-            tok = _strip_lineage_prefix(leaf)
-            oid = _id("observable", tok)
-            if oid not in node_ids:
-                nodes.append(_node(oid, "observable", token=tok))
-                node_ids.add(oid)
-            pair = (cid, oid)
-            if pair in existing_emits:
-                continue
-            existing_emits.add(pair)
-            edges.append(_edge(cid, oid, "emits"))
+            keys = _observable_match_keys(leaf)
+            target_oids: set[str] = set()
+            for k in keys:
+                target_oids |= key_to_oids.get(k, set())
+            if not target_oids:
+                # No study declares this observable — mint a node for the leaf
+                # so the composite's emission is still discoverable.
+                tok = _strip_lineage_prefix(leaf)
+                oid = _id("observable", tok)
+                if oid not in node_ids:
+                    nodes.append(_node(oid, "observable", token=tok))
+                    node_ids.add(oid)
+                    for k in keys:
+                        key_to_oids.setdefault(k, set()).add(oid)
+                target_oids = {oid}
+            for oid in target_oids:
+                pair = (cid, oid)
+                if pair in existing_emits:
+                    continue
+                existing_emits.add(pair)
+                edges.append(_edge(cid, oid, "emits"))
 
     return index
 
@@ -599,20 +652,26 @@ def studies_for_observable(
     """Cross-study registry for an observable token.
 
     Builds + enriches the index (the enrich step triggers the injected build),
-    then returns the composites that ``emits`` ``observable:<token>`` and the
-    studies that ``uses_composite`` any of them. Output lists carry BARE
-    slugs/composite-ids (the ``study:``/``composite:`` id prefixes stripped).
-    Tolerates ``token`` already being bare.
+    then returns the composites that ``emits`` an observable MATCHING ``token``
+    and the studies that ``uses_composite`` any of them. Matching is key-based
+    (:func:`_observable_match_keys`), so a query for ``bulk.ATP[c]`` finds a
+    composite leaf ``bulk[ATP[c]]`` and a study node ``bulk__count[ATP[c], …]``.
+    Output lists carry BARE slugs/composite-ids (the ``study:``/``composite:``
+    id prefixes stripped). Tolerates ``token`` already being bare.
     """
-    tok = _strip_lineage_prefix(token)
-    oid = _id("observable", tok)
+    query_keys = _observable_match_keys(token)
 
     index = build_index(ws_root)
     enrich_observable_edges(index, observables_for_ref)
 
+    target_oids = {
+        n["id"] for n in index["nodes"]
+        if n.get("type") == "observable"
+        and _observable_match_keys(n.get("token", "")) & query_keys
+    }
     comp_ids = {
         e["from"] for e in index["edges"]
-        if e.get("type") == "emits" and e["to"] == oid
+        if e.get("type") == "emits" and e["to"] in target_oids
     }
     studies: set[str] = set()
     for e in index["edges"]:

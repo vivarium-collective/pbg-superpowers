@@ -95,11 +95,13 @@ Or via the dashboard: `GET /api/linkage-index?investigation=<inv>` → `dag`.
 
 ### `observable <token>`
 
-The **cross-study observable registry**: which studies and composites measure
-an observable `<token>`. Unlike `finding-by-observable` (which resolves through
-finding evidence in the YAML), this answers "which composites actually *emit*
-this observable, and which studies use those composites" — so it needs the real
-composite build behind `studies_for_observable`.
+The **cross-study observable registry**: which composites *emit* an observable
+`<token>` and which studies use those composites. Unlike `finding-by-observable`
+(which resolves through finding evidence in the YAML), this answers "which
+composites actually *emit* this observable, and which studies use those
+composites" — so it needs the real composite build behind
+`studies_for_observable`. Matching reconciles the bulk dialects (a query for
+`bulk.ATP[c]` finds a composite leaf `bulk[ATP[c]]`).
 
 > **Triggers a composite build.** The emit edges come from an injected
 > `observables_for_ref` build callable, so the first call builds the composite
@@ -117,8 +119,10 @@ print("composites:", ", ".join(res["composites"]) or "(none)")
 PY
 ```
 
-Or via the dashboard: `GET /api/linkage-index?observable=<token>` → the
-registry (studies + composites). The server supplies the build callable.
+Or via the dashboard: `GET /api/linkage-index?observable_registry=<token>` → the
+registry (studies + composites). The server supplies the build callable. (Note
+the distinct `observable_registry=` param — `observable=` is the SP4a
+finding-by-observable query above, which returns `findings`.)
 
 ### `composite <id>`
 
