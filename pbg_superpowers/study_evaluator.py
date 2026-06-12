@@ -244,6 +244,18 @@ def _resolve_series(path: str, reader: "RunReader") -> pl.DataFrame:
     ``ObservableNotFound`` is raised only when BOTH ``series`` and the
     appropriate ``select`` fallback fail — never-guess is preserved.
 
+    Verdict-safe element-only resolver hybrid (SP2b-iii): only **element-kind**
+    readouts are routed through the canonical ``readout_resolver`` (folding the
+    literal-index regex into a single source — see the fast path below). The
+    ``scalar``, ``expression``, bare bracket **bulk-id**, and trailing-**prose**
+    dialects are deliberately handled by this function's local body, NOT the
+    resolver, because the resolver (a) returns ``UnresolvedReadout`` for a bare
+    bracket bulk id such as ``MONOMER0-160[c]`` — which the tokenize/``select``
+    body here resolves — and (b) strips a trailing parenthetical to a bare
+    ``scalar`` — which the evaluator correctly rejects. Routing either through
+    the resolver would change verdicts; only the literal-index dedup is safe.
+    Grounding: docs/plans/2026-06-12-sp2b-iii-evaluator-hybrid-plan.md.
+
     Args:
         path:   Observable path (e.g. ``listeners.mass.cell_mass``) or a
                 simple arithmetic expression over observables
