@@ -463,3 +463,107 @@ def test_cli_unknown_finding_exits_2(tmp_path):
     )
     assert cp.returncode == 2
     assert "F-99" in cp.stderr
+
+
+# ---------------------------------------------------------------------------
+# resolve_seed_source — the unifying resolver across the 4 followup families
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_seed_source_synthesizes_proposal_from_finding(tmp_path):
+    """A finding with a next_action seeds STANDALONE — no pre-existing
+    followup_proposals[] row. resolve_seed_source synthesizes an inline
+    proposal stub stamped with the finding id."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    # Drop the followup_proposals so the finding has to seed standalone.
+    parent.pop("followup_proposals", None)
+    src = sff.resolve_seed_source(parent, finding_id="F-03")
+    assert src.finding_id == "F-03"
+    assert src.synthesized is True
+    assert src.proposal  # a stub dict with an id
+    assert src.proposal["id"]
+    assert src.proposal.get("linked_finding") == "F-03"
+    # The stub's title/motivation are derived from the finding.
+    assert src.proposal.get("title")
+
+
+def test_resolve_seed_source_standalone_finding_builds_seed(tmp_path):
+    """resolve_seed_source + build_child_seed_from_finding yields a child
+    seed stamped seeded_from.finding with a derived purpose.question — with
+    NO pre-existing proposal."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    parent.pop("followup_proposals", None)
+    src = sff.resolve_seed_source(parent, finding_id="F-03")
+    seed = sff.build_child_seed_from_finding(
+        parent, "dnaa-01", src.proposal["id"], src.finding_id,
+    )
+    assert seed.seeded_from.get("finding") == "F-03"
+    assert seed.purpose.get("question")  # derived from next_action/statement
+
+
+def test_resolve_seed_source_prefers_existing_proposal(tmp_path):
+    """When a finding already has a resolvable proposal_id, resolve uses it
+    (not a synthesized stub)."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(
+        parent, finding_id="F-03", proposal_id="calibrate-dars",
+    )
+    assert src.synthesized is False
+    assert src.proposal["id"] == "calibrate-dars"
+    assert src.finding_id == "F-03"
+
+
+def test_resolve_seed_source_by_proposal_id(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    src = sff.resolve_seed_source(parent, proposal_id="calibrate-dars")
+    assert src.proposal["id"] == "calibrate-dars"
+    assert src.finding_id is None
+    assert src.synthesized is False
+
+
+def test_resolve_seed_source_legacy_follow_up_studies_idx(tmp_path):
+    """The legacy follow_up_studies[] family resolves by index into a
+    proposal-shaped SeedSource."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    parent["follow_up_studies"] = [
+        {"title": "Probe DARS reactivation", "why": "Because F-03.",
+         "kind": "calibration"},
+    ]
+    src = sff.resolve_seed_source(parent, followup_idx=0)
+    assert src.proposal["title"] == "Probe DARS reactivation"
+    assert src.family == "follow_up_studies"
+    assert src.finding_id is None
+
+
+def test_resolve_seed_source_discovery_implications_proposal(tmp_path):
+    """The discovery_implications.followup_study_proposals[] family resolves
+    by proposal_id."""
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    parent["discovery_implications"] = {
+        "followup_study_proposals": [
+            {"id": "di-1", "title": "DI follow-up", "study_type": "mechanism"},
+        ]
+    }
+    src = sff.resolve_seed_source(parent, proposal_id="di-1")
+    assert src.proposal["id"] == "di-1"
+    assert src.family == "discovery_implications.followup_study_proposals"
+
+
+def test_resolve_seed_source_requires_a_selector(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    with pytest.raises(ValueError):
+        sff.resolve_seed_source(parent)
+
+
+def test_resolve_seed_source_unknown_finding_raises(tmp_path):
+    parent_yaml = _make_parent_study(tmp_path)
+    parent = yaml.safe_load(parent_yaml.read_text())
+    with pytest.raises(ValueError, match="F-99"):
+        sff.resolve_seed_source(parent, finding_id="F-99")

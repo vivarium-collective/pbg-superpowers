@@ -157,6 +157,31 @@ class ChildSeed:
         return out
 
 
+@dataclass
+class SeedSource:
+    """A normalized seed origin, unifying the four followup field families.
+
+    Whatever the source family (``finding.next_action``,
+    ``followup_proposals[]``, legacy ``follow_up_studies[]``, or
+    ``discovery_implications.followup_study_proposals[]``), the resolver
+    returns one of these — a proposal-shaped dict (always carrying an
+    ``id``) plus an optional ``finding_id`` so the downstream writer can
+    stamp the finding's lineage.
+
+    - ``proposal`` — the proposal entry (real or synthesized) with an ``id``.
+    - ``finding_id`` — the originating finding id, if any.
+    - ``synthesized`` — True when ``proposal`` was synthesized from a
+      finding (no pre-existing ``followup_proposals[]`` row to stamp).
+    - ``family`` — the source family the proposal came from (for the
+      parent stamp + provenance header).
+    """
+
+    proposal: dict
+    finding_id: str | None = None
+    synthesized: bool = False
+    family: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Lookups
 # ---------------------------------------------------------------------------
@@ -174,6 +199,23 @@ def find_proposal(study: dict, proposal_id: str) -> dict | None:
     """Return the followup_proposals entry with ``id == proposal_id``, or None."""
     for p in (study.get("followup_proposals") or []):
         if isinstance(p, dict) and p.get("id") == proposal_id:
+            return p
+    return None
+
+
+def _discovery_proposals(study: dict) -> list[dict]:
+    """The ``discovery_implications.followup_study_proposals`` list, if any."""
+    disc = study.get("discovery_implications")
+    if not isinstance(disc, dict):
+        return []
+    out = disc.get("followup_study_proposals")
+    return out if isinstance(out, list) else []
+
+
+def find_discovery_proposal(study: dict, proposal_id: str) -> dict | None:
+    """Return the discovery_implications proposal with ``id == proposal_id``."""
+    for p in _discovery_proposals(study):
+        if isinstance(p, dict) and str(p.get("id")) == str(proposal_id):
             return p
     return None
 
@@ -403,6 +445,131 @@ def build_parent_proposal_patch(
     if finding_id and out.get("linked_finding") != finding_id:
         out["linked_finding"] = finding_id
     return out
+
+
+# ---------------------------------------------------------------------------
+# The unifying resolver — normalize the 4 followup families into a SeedSource
+# ---------------------------------------------------------------------------
+
+
+def _slug_fragment(text: str, max_len: int = 48) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return s[:max_len].rstrip("-")
+
+
+def _synthesize_proposal_from_finding(finding: dict, finding_id: str) -> dict:
+    """Build an inline proposal stub from a finding so it can seed STANDALONE.
+
+    A finding's ``next_action`` is the natural "what next" signal but there
+    may be no ``followup_proposals[]`` row to seed from. This synthesizes a
+    minimal proposal-shaped dict (id derived from the finding, title +
+    motivation derived from the finding's next_action / statement) so the
+    standard finding→child path runs without a pre-existing proposal. The
+    stub is NOT written to the parent's ``followup_proposals`` — only the
+    finding's ``seeded_study`` lineage is stamped downstream.
+    """
+    statement = finding.get("statement", "") or ""
+    next_action = finding.get("next_action")
+    title_src = (next_action or first_sentence(statement) or finding_id).strip()
+    frag = _slug_fragment(title_src) or _slug_fragment(finding_id) or "finding"
+    return {
+        "id": f"from-{finding_id.lower()}-{frag}".rstrip("-"),
+        "title": first_sentence(title_src) or title_src,
+        "motivation": (
+            first_sentence(statement)
+            or f"Follow up on finding {finding_id}."
+        ),
+        "status": "proposed",
+        "linked_finding": finding_id,
+        "synthesized": True,
+    }
+
+
+def resolve_seed_source(
+    study_spec: dict,
+    *,
+    finding_id: str | None = None,
+    proposal_id: str | None = None,
+    followup_idx: int | None = None,
+) -> SeedSource:
+    """Normalize any of the four followup field families into one SeedSource.
+
+    Resolution precedence:
+
+    1. ``proposal_id`` — looked up first in ``followup_proposals[]`` then in
+       ``discovery_implications.followup_study_proposals[]``.
+    2. ``followup_idx`` — indexes into the legacy ``follow_up_studies[]``.
+    3. ``finding_id`` alone — SYNTHESIZE an inline proposal stub so the
+       finding seeds STANDALONE (no pre-existing ``followup_proposals[]``
+       row required).
+
+    ``finding_id`` may be combined with ``proposal_id`` to seed from an
+    existing proposal while still stamping the finding's lineage.
+
+    Raises ``ValueError`` when no selector is given or the selector doesn't
+    resolve.
+    """
+    # Validate finding_id early (so an unknown finding fails fast regardless
+    # of which other selectors are present).
+    finding = None
+    if finding_id is not None:
+        finding = find_finding(study_spec, finding_id)
+        if finding is None:
+            avail = [
+                (f.get("id") or "<no-id>")
+                for f in (study_spec.get("findings") or [])
+                if isinstance(f, dict)
+            ]
+            raise ValueError(
+                f"finding {finding_id!r} not in findings (available: {sorted(avail)})"
+            )
+
+    # 1. proposal_id — followup_proposals[] preferred, discovery_implications next.
+    if proposal_id is not None and str(proposal_id) != "":
+        prop = find_proposal(study_spec, proposal_id)
+        if prop is not None:
+            return SeedSource(
+                proposal=prop, finding_id=finding_id,
+                synthesized=False, family="followup_proposals",
+            )
+        prop = find_discovery_proposal(study_spec, proposal_id)
+        if prop is not None:
+            return SeedSource(
+                proposal=prop, finding_id=finding_id, synthesized=False,
+                family="discovery_implications.followup_study_proposals",
+            )
+        raise ValueError(
+            f"proposal {proposal_id!r} not in followup_proposals or "
+            "discovery_implications.followup_study_proposals"
+        )
+
+    # 2. followup_idx — legacy follow_up_studies[].
+    if followup_idx is not None:
+        fus = study_spec.get("follow_up_studies") or []
+        if not isinstance(fus, list) or followup_idx < 0 or followup_idx >= len(fus):
+            raise ValueError(
+                f"followup_idx {followup_idx} out of range "
+                f"(parent has {len(fus) if isinstance(fus, list) else 0} follow_up_studies)"
+            )
+        fu = dict(fus[followup_idx])
+        if not fu.get("id"):
+            fu["id"] = _slug_fragment(fu.get("title") or "") or f"followup-{followup_idx}"
+        return SeedSource(
+            proposal=fu, finding_id=finding_id,
+            synthesized=False, family="follow_up_studies",
+        )
+
+    # 3. finding_id alone — synthesize an inline proposal stub.
+    if finding_id is not None:
+        stub = _synthesize_proposal_from_finding(finding, finding_id)
+        return SeedSource(
+            proposal=stub, finding_id=finding_id,
+            synthesized=True, family="finding.next_action",
+        )
+
+    raise ValueError(
+        "resolve_seed_source requires one of: finding_id, proposal_id, followup_idx"
+    )
 
 
 # ---------------------------------------------------------------------------
