@@ -20,8 +20,9 @@ import yaml
 # and the counts in README.md / CLAUDE.md — the test below fails if it drifts.
 USER_INVOCABLE_SKILLS = {
     "pbg-biology-forward", "pbg-catalog", "pbg-cite-bands", "pbg-dashboard",
-    "pbg-expert", "pbg-explore", "pbg-init", "pbg-investigation", "pbg-report",
-    "pbg-run", "pbg-server", "pbg-status", "pbg-study", "pbg-viz", "pbg-workspace",
+    "pbg-expert", "pbg-explore", "pbg-init", "pbg-investigation", "pbg-navigate",
+    "pbg-report", "pbg-run", "pbg-server", "pbg-status", "pbg-study", "pbg-viz",
+    "pbg-workspace",
 }
 
 
