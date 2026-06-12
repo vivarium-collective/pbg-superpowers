@@ -3,7 +3,7 @@ name: pbg-navigate
 description: Read-only navigation of the workspace knowledge graph (the SP4a linkage index). Surfaces the cheap reverse queries that today need grep — the AC→study gating matrix + unlinked-AC gaps, which studies cite a source, which findings measure an observable, and a study's prerequisite DAG. Pure deterministic query, no AI, no writes.
 user-invocable: true
 allowed-tools: Bash(*) Read
-argument-hint: ac-gaps <inv> | source <bib_key> | finding-by-observable <token> | dag <inv>
+argument-hint: ac-gaps <inv> | source <bib_key> | finding-by-observable <token> | dag <inv> | observable <token> | composite <id>
 ---
 
 # pbg-navigate
@@ -92,6 +92,56 @@ PY
 ```
 
 Or via the dashboard: `GET /api/linkage-index?investigation=<inv>` → `dag`.
+
+### `observable <token>`
+
+The **cross-study observable registry**: which composites *emit* an observable
+`<token>` and which studies use those composites. Unlike `finding-by-observable`
+(which resolves through finding evidence in the YAML), this answers "which
+composites actually *emit* this observable, and which studies use those
+composites" — so it needs the real composite build behind
+`studies_for_observable`. Matching reconciles the bulk dialects (a query for
+`bulk.ATP[c]` finds a composite leaf `bulk[ATP[c]]`).
+
+> **Triggers a composite build.** The emit edges come from an injected
+> `observables_for_ref` build callable, so the first call builds the composite
+> (cached, ~3s first time); subsequent calls are cheap.
+
+```bash
+.venv/bin/python - "$TOKEN" <<'PY'
+import sys
+from pbg_superpowers.linkage_index import studies_for_observable
+# observables_for_ref is the dashboard's _observables_for_ref (the real build).
+from vivarium_dashboard.server import _observables_for_ref
+res = studies_for_observable(".", sys.argv[1], observables_for_ref=_observables_for_ref)
+print("studies:   ", ", ".join(res["studies"]) or "(none)")
+print("composites:", ", ".join(res["composites"]) or "(none)")
+PY
+```
+
+Or via the dashboard: `GET /api/linkage-index?observable_registry=<token>` → the
+registry (studies + composites). The server supplies the build callable. (Note
+the distinct `observable_registry=` param — `observable=` is the SP4a
+finding-by-observable query above, which returns `findings`.)
+
+### `composite <id>`
+
+What a composite **emits** + which studies **use** it (via `composite_emits`).
+Also triggers a composite build (cached).
+
+```bash
+.venv/bin/python - "$ID" <<'PY'
+import sys
+from pbg_superpowers.linkage_index import composite_emits
+from vivarium_dashboard.server import _observables_for_ref
+res = composite_emits(".", sys.argv[1], observables_for_ref=_observables_for_ref)
+print("emits:", ", ".join(res["emits"]) or "(none)")
+print("used by studies:", ", ".join(res["used_by_studies"]) or "(none)")
+PY
+```
+
+Or via the dashboard: `GET /api/linkage-index?composite=<id>` → `emits` +
+`used_by_studies`.
 
 ## Notes
 
