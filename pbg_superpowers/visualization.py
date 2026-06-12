@@ -58,6 +58,70 @@ class Visualization(Step):
         'sample_every': {'_type': 'integer', '_default': 1},
     }
 
+    # Pluggable units resolver: a callable ``path -> unit_str | None``.
+    # Workspaces (e.g. v2ecoli) assign this; left None elsewhere -> no-op.
+    units_resolver = None
+
+    @classmethod
+    def resolve_unit(cls, path):
+        """Resolve the unit for an observable path via the pluggable resolver."""
+        resolver = cls.units_resolver
+        if resolver is None or not path:
+            return None
+        try:
+            return resolver(path) or None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _append_unit(label, unit):
+        """Append ``(unit)`` to a label, idempotently. None unit -> unchanged."""
+        if not unit:
+            return label
+        text = (label or "").rstrip()
+        if text.endswith(f"({unit})"):
+            return text
+        return f"{text} ({unit})".strip()
+
+    @classmethod
+    def finalize_figure(cls, fig, axis_units=()):
+        """Append schema units to matplotlib axis labels in-place.
+
+        ``axis_units`` is an iterable of ``(ax, which, path)`` where ``which`` is
+        ``'x'`` or ``'y'`` and ``path`` is the observable dotted path that axis
+        displays. Axes whose path has no unit are left unchanged. Returns ``fig``.
+        """
+        for ax, which, path in axis_units:
+            unit = cls.resolve_unit(path)
+            if not unit:
+                continue
+            if which == "y" and hasattr(ax, "set_ylabel"):
+                ax.set_ylabel(cls._append_unit(ax.get_ylabel(), unit))
+            elif which == "x" and hasattr(ax, "set_xlabel"):
+                ax.set_xlabel(cls._append_unit(ax.get_xlabel(), unit))
+        return fig
+
+    @classmethod
+    def figure_to_html(cls, fig, axis_units=(), *, dpi=150, close=True):
+        """Finalize axis units, then serialize a matplotlib figure to an <img>.
+
+        One-stop replacement for per-viz ``_fig_to_b64`` + manual <img> wrapping.
+        """
+        import base64
+        import io
+        cls.finalize_figure(fig, axis_units)
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
+        buf.seek(0)
+        b64 = base64.b64encode(buf.read()).decode("ascii")
+        if close:
+            try:
+                import matplotlib.pyplot as plt
+                plt.close(fig)
+            except Exception:
+                pass
+        return f'<img src="data:image/png;base64,{b64}" style="max-width:100%"/>'
+
     def inputs(self) -> dict[str, Any]:
         """Typed input ports — keys are port names; values are bigraph-schema
         type strings. Subclasses override.
