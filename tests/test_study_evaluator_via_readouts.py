@@ -187,6 +187,53 @@ def test_resolve_series_literal_index_not_available_raises():
 
 
 # ===========================================================================
+# SP2b-iii: verdict-safe element-kind routing through readout_resolver
+# ===========================================================================
+
+
+def test_literal_index_routes_through_resolver():
+    """A literal-index path is routed through the canonical readout_resolver
+    (kind == "element") and produces the SAME selector / series as the old
+    in-evaluator literal-index fast path — byte-identical select dict."""
+    from pbg_superpowers.readout_resolver import resolve_readout, ResolvedReadout
+
+    # The resolver classifies it as element and its select dict is byte-identical
+    # to the dict the old fast path passed to reader.select.
+    r = resolve_readout({"identifier": "listeners.monomer_counts[3]"})
+    assert isinstance(r, ResolvedReadout) and r.kind == "element"
+    assert r.to_select_dict() == {
+        "type": "literal_index",
+        "value": 3,
+        "observable": "listeners.monomer_counts",
+    }
+
+    series_for_idx3 = _bulk_series(42.0, n_gens=2, ticks_per_gen=4)
+    reader = FakeReaderWithSelect(
+        vector_data={("listeners.monomer_counts", 3): series_for_idx3}
+    )
+    df = se._resolve_series("listeners.monomer_counts[3]", reader)
+    assert df is not None and not df.is_empty()
+    assert list(df.columns) == ["generation", "time", "abs_time", "value"]
+    assert float(df["value"].mean()) == pytest.approx(42.0)
+
+
+def test_bare_bulk_id_still_resolves_via_fallback():
+    """The resolver gives up on a bare bracket bulk id (UnresolvedReadout), so
+    _resolve_series must fall through to the unchanged evaluator body, which
+    resolves it via the bulk_id select fallback — no regression."""
+    from pbg_superpowers.readout_resolver import resolve_readout, UnresolvedReadout
+
+    # Confirm the resolver does NOT claim this one (so the fast path falls through).
+    r = resolve_readout({"identifier": "MONOMER0-160[c]"})
+    assert isinstance(r, UnresolvedReadout)
+
+    reader = _make_reader_bulk({"MONOMER0-160[c]": 100.0})
+    df = se._resolve_series("MONOMER0-160[c]", reader)
+    assert df is not None and not df.is_empty()
+    assert float(df["value"].mean()) == pytest.approx(100.0)
+
+
+# ===========================================================================
 # TASK 1c: Never-guess preserved
 # ===========================================================================
 
