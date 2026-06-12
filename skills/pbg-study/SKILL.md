@@ -498,6 +498,48 @@ Run this whenever you add or edit `readouts[]` (Design/Build phase), and always 
 - Deterministic and AI-free on the server side: the endpoints (`/api/study-observable-check` + `/api/observables`) just build the composite and run the pure validator; the re-authoring judgment lives here in the skill. Headless callers can call `pbg_superpowers.readout_validation.validate_readouts(spec, available=available_observables(core, state, schema))` directly.
 - The composite build is cached (TTL), so repeated `check-observables` / `/api/observables` calls on the same baseline are fast.
 
+#### `migrate-readouts <slug>`
+
+Canonicalize a study's legacy readouts and drive the un-parseable ones to re-authoring. This is the explicit trigger for the readout-migration plumbing (the same canonicalize that `/pbg-report` runs automatically before rendering). It does two things — a **safe auto-rewrite** and a **guided re-authoring** — and never guesses a selector.
+
+Run this whenever `verify` / `check-observables` / the report linter flags `readout_migration_status` (migratable or needs_human readouts).
+
+**Behavior:**
+
+1. Walk up from cwd to find `workspace.yaml`. Compute the migration status (pure, no write):
+
+   ```python
+   from pbg_superpowers.readout_migration import readout_migration_status, migrate_study_file
+   status = readout_migration_status(study_dir)   # {canonical, migratable, needs_human}
+   ```
+
+   Report the three buckets to the user: how many are already `canonical`, how many are `migratable` (safe to rewrite), and how many are `needs_human` (must be re-authored).
+
+2. **Auto-canonicalize the `migratable` set.** These are resolvable readouts whose canonical form differs from the original — a meaning-preserving, comment-safe rewrite. After confirming with the user, write them:
+
+   ```python
+   report = migrate_study_file(study_dir, write=True)   # ruamel round-trip; rewrites ONLY the readouts: block
+   ```
+
+   `migrate_study_file` is idempotent and leaves every `needs_human` readout **untouched** (it only rewrites the resolvable ones). It returns `changed`/`written` flags and a `canonicalized` list — report `len(report['canonicalized'])` (the readouts ACTUALLY rewritten this call), not `len(report['migrated'])` (which also counts already-canonical readouts). On an already-canonical study it is a **true no-op** (`changed=False`, the file is left byte-identical). Hand-authored comments and all non-readout content survive; note that inline comments on an *individual readout entry* are not preserved across canonicalization (the readout dict is rebuilt from its resolved selector).
+
+3. **Re-author each `needs_human` readout.** These are prose `·`-groups, `derived` paths, or ambiguous identifiers the migration refuses to guess. For each one, drive re-authoring against the composite's *real* observables (SP2b-i):
+
+   - `GET /api/observables?ref=<baseline-composite>` (or run `/pbg-study check-observables <slug>`) to get the composite's actual emittable set (`leaves` = dotted paths, `catalogs` = `{observable: [labels]}`).
+   - Propose a canonical selector (`store_path`, `identifier`, or `index_by`) that points at an **actual** `leaf`/`catalog` entry for the intended quantity. Confirm with the user, then write it.
+   - **NEVER invent an observable.** If the intended quantity genuinely isn't emitted, that's a Build-phase gap — the composite must expose it first (`add-requirement`), not the readout pretending it does.
+
+4. Re-run `readout_migration_status` and report the residual `needs_human` count (the re-authoring queue that's left).
+
+**Arguments:**
+
+- `<slug>` (required) — study under `studies/<slug>/`.
+
+**Notes:**
+
+- The STATUS (`readout_migration_status`) is pure (dry-run, no write). The only WRITE is `migrate_study_file(write=True)` — invoked here after user confirmation, and by `/pbg-report` before rendering. The dashboard never writes (AI-free).
+- `needs_human` readouts are never auto-guessed; re-authoring is always a confirmed, observables-grounded edit.
+
 ### Simulate subcommands
 
 #### `run-baseline <study-name> [--composite <name>] [--steps N] [--no-refresh-viz]`

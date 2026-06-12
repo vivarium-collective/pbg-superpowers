@@ -14,6 +14,14 @@ truth.  SAFE by construction:
   * ``migrate_study_file`` defaults to **dry-run** (``write=False``); when
     ``write=True`` it rewrites only the ``readouts:`` block via a ruamel
     round-trip, preserving comments and all hand-authored non-readout content.
+    It is a **true no-op** when nothing actually changes (all readouts already
+    canonical / ``needs_human``): the file is left byte-for-byte identical.
+
+NOTE: canonicalization rebuilds each migrated readout dict from its resolved
+selector, so inline YAML comments attached to an *individual readout entry* are
+not preserved across a rewrite — acceptable, since the readout is the unit being
+rewritten.  Comments on non-readout content (and on the ``readouts:`` key
+itself) survive intact.
 
 Public API:
     migrate_readouts(spec) -> (new_readouts, report)
@@ -155,6 +163,62 @@ def _study_yaml_path(study_dir: Path | str) -> Path:
     return p if p.name == "study.yaml" else p / "study.yaml"
 
 
+# ---------------------------------------------------------------------------
+# Pure status classification (dry-run; never writes)
+# ---------------------------------------------------------------------------
+
+def readout_migration_status(study_dir: Path | str) -> dict:
+    """Classify a study's readouts into migration buckets (PURE read).
+
+    Loads the study spec, runs the **pure** ``migrate_readouts`` (a dry-run —
+    no file is ever touched), and sorts every readout into one of three
+    buckets:
+
+      * ``needs_human``  — unresolvable (prose ``·`` groups, ``derived``,
+        ambiguous). The migration keeps these untouched; a human must
+        re-author them against the composite's real observables. Carried
+        straight from the report as ``[{name, reason}, ...]``.
+      * ``migratable``   — resolvable AND the canonical form DIFFERS from the
+        original. A ``migrate_study_file(write=True)`` would safely rewrite
+        these (meaning-preserving). Returned as the *original* readout dicts.
+      * ``canonical``    — resolvable AND already canonical (a dry-run migrate
+        leaves them byte-identical). Nothing to do.
+
+    This function performs NO writes — it only reads ``study.yaml``. The actual
+    rewrite is ``migrate_study_file(write=True)``, invoked only by the skills.
+
+    Args:
+        study_dir: the study directory (or the ``study.yaml`` path itself).
+
+    Returns:
+        ``{"canonical": [readout, ...], "migratable": [readout, ...],
+           "needs_human": [{"name": ..., "reason": ...}, ...]}``
+    """
+    from pbg_superpowers import study_io
+
+    study_yaml = _study_yaml_path(study_dir)
+    spec = study_io.load_yaml_mapping(study_yaml)
+
+    originals: list[dict] = spec.get("readouts") or []
+    new_readouts, report = migrate_readouts(spec)
+
+    canonical: list[dict] = []
+    migratable: list[dict] = []
+    for original, new, entry in zip(originals, new_readouts, report["entries"]):
+        if entry.get("status") == "needs_human":
+            continue  # already accounted for in report["needs_human"]
+        if new == original:
+            canonical.append(original)
+        else:
+            migratable.append(original)
+
+    return {
+        "canonical": canonical,
+        "migratable": migratable,
+        "needs_human": list(report["needs_human"]),
+    }
+
+
 def migrate_study_file(study_dir: Path | str, write: bool = False) -> dict:
     """Migrate a study.yaml's readouts in place (default: dry-run).
 
@@ -164,11 +228,25 @@ def migrate_study_file(study_dir: Path | str, write: bool = False) -> dict:
                    the report WITHOUT touching the file.  When ``True``,
                    rewrite ONLY the ``readouts:`` block via a ruamel round-trip
                    (comment- and formatting-preserving); all other
-                   hand-authored content is left byte-for-byte intact.
+                   hand-authored content is left byte-for-byte intact.  When no
+                   readout actually changes (all already canonical /
+                   ``needs_human``), this is a **true no-op** — the file is left
+                   byte-for-byte identical and nothing is written.
 
     Returns:
-        The ``migrate_readouts`` report, augmented with ``"study_yaml"`` (path)
-        and ``"written"`` (bool).
+        The ``migrate_readouts`` report, augmented with:
+
+          * ``"study_yaml"`` (path),
+          * ``"written"`` (bool — whether the file was actually rewritten),
+          * ``"changed"`` (bool — whether canonicalization would change any
+            readout; ``False`` ⇒ already-canonical no-op even in dry-run), and
+          * ``"canonicalized"`` (list of names actually rewritten this call —
+            the *changed* subset of ``"migrated"``, which excludes readouts that
+            were already canonical).
+
+    Inline comments on an *individual readout entry* are not preserved across a
+    rewrite (the readout dict is rebuilt from its resolved selector); comments
+    on non-readout content survive intact.
     """
     from io import StringIO
 
@@ -181,6 +259,10 @@ def migrate_study_file(study_dir: Path | str, write: bool = False) -> dict:
     ryaml = YAML()
     ryaml.preserve_quotes = True
     ryaml.width = 4096  # avoid line-wrap reflow on long prose values
+    # Match the workspace study.yaml block-seq convention (`-` at offset 2,
+    # content at column 4) so a fresh readouts list is NOT reindented to the
+    # ruamel default (0-offset) — keeps the readouts block's original shape.
+    ryaml.indent(mapping=2, sequence=4, offset=2)
 
     rt_spec = ryaml.load(study_yaml.read_text())
     if rt_spec is None:
@@ -190,7 +272,25 @@ def migrate_study_file(study_dir: Path | str, write: bool = False) -> dict:
     report["study_yaml"] = str(study_yaml)
     report["written"] = False
 
-    if not write:
+    # Which readouts actually change (vs. already-canonical / needs_human, which
+    # round-trip to the same value).  Drives both the no-op short-circuit (FIX 2)
+    # and the accurate "canonicalized" count (FIX 3).
+    originals = list(rt_spec.get("readouts") or [])
+    canonicalized: list[str] = []
+    for new_ro, orig in zip(new_readouts, originals):
+        if new_ro != orig and isinstance(new_ro, dict):
+            name = new_ro.get("name")
+            if name:
+                canonicalized.append(name)
+    changed = len(new_readouts) != len(originals) or any(
+        new_ro != orig for new_ro, orig in zip(new_readouts, originals)
+    )
+    report["changed"] = changed
+    report["canonicalized"] = canonicalized
+
+    # No write requested, or nothing actually changed → true no-op (the file is
+    # left byte-for-byte identical; we never re-dump an already-canonical study).
+    if not write or not changed:
         return report
 
     # Replace ONLY the readouts block; everything else stays as loaded.
