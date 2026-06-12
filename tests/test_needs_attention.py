@@ -112,12 +112,14 @@ def tmp_study_findings(tmp_path) -> dict:
     return {
         "findings": [
             {"id": "F-01", "status": "novel",
-             "next_action": "seed a follow-up study"},          # next_action, no seed
-            {"id": "F-02", "status": "contradicts"},             # neither
+             "next_action": "seed a follow-up study"},          # next_action, no seed → STALE
+            {"id": "F-02", "status": "contradicts"},             # no next_action → terminal obs, NOT stale
             {"id": "F-03", "status": "novel",
-             "next_action": "seed it", "seeded_study": "s2"},    # both → not stale
+             "next_action": "seed it", "seeded_study": "s2"},    # next_action + seeded → NOT stale
             {"id": "F-04", "status": "seeded",
-             "seeded_study": "s9"},                              # terminal → excluded
+             "seeded_study": "s9"},                              # no next_action → NOT stale
+            {"id": "F-05", "status": "partial",
+             "next_action": "test boundary case"},               # next_action, no seed → STALE
         ],
     }
 
@@ -129,8 +131,10 @@ def tmp_inv_run_param_drift(tmp_path) -> Path:
     _study(root, "s1", {
         "enforced_params": {"translation_efficiency": 1, "mrna_per_min": 1.5},
         "runs": [
+            # params persist as a JSON STRING (the real _mechanical_record shape,
+            # from runs_meta.params_json), NOT a dict — the scan must decode it.
             {"name": "r1", "status": "completed",
-             "params": {"translation_efficiency": 20}},  # mismatch + missing mrna
+             "params": '{"translation_efficiency": 20}'},  # mismatch + missing mrna
         ],
     }, inv="inv")
     return root
@@ -164,7 +168,8 @@ def tmp_inv_mixed(tmp_path) -> Path:
     })
     _study(root, "s1", {
         "tests": [{"name": "t"}],
-        "findings": [{"id": "F-01", "status": "novel"}],  # low stale
+        "findings": [{"id": "F-01", "status": "novel",
+                      "next_action": "seed a follow-up"}],  # next_action, no seed → low stale
     }, inv="inv")
     _write(root / "investigations" / "inv" / "feedback" / "001.yaml", {
         "annotations": {
@@ -205,8 +210,10 @@ def test_verdict_divergence_read_from_persisted_flag(tmp_inv_study_diverges):
 
 
 def test_stale_finding_classifier(tmp_study_findings):
+    # Stale = next_action declared but never seeded. A finding with NO
+    # next_action (F-02, F-04) is a terminal observation, NOT a pending decision.
     stale = {f["id"] for f in _stale_findings(tmp_study_findings)}
-    assert stale == {"F-01", "F-02"}
+    assert stale == {"F-01", "F-05"}
 
 
 def test_param_drift_surfaces_when_run_violates(tmp_inv_run_param_drift):

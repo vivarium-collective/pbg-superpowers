@@ -25,6 +25,7 @@ back to YAML. AI-free: deterministic aggregation only.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Callable
 
@@ -37,12 +38,6 @@ from . import linkage_index
 # ---------------------------------------------------------------------------
 
 _SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
-
-# Finding statuses that mark a finding as already terminal/accepted — these are
-# NOT decisions-needed even with no seeded_study.
-_TERMINAL_FINDING_STATUSES = {
-    "accepted", "resolved", "closed", "seeded", "confirms", "done",
-}
 
 
 def _item(kind: str, severity: str, study: str | None, ref: str,
@@ -65,21 +60,23 @@ def _item(kind: str, severity: str, study: str | None, ref: str,
 def _stale_findings(spec: dict) -> list[dict]:
     """Return the findings in ``spec`` that are stale.
 
-    A finding is stale when:
-      * ``next_action`` absent/empty AND no ``seeded_study``, OR
-      * ``next_action`` present but no ``seeded_study``.
+    A finding is stale ONLY when it declares a ``next_action`` (an explicit
+    "what to do next") but carries no ``seeded_study`` link — i.e. the
+    follow-through was specified but never materialized into a child study.
 
-    i.e. it carries no ``seeded_study`` link — the "what next" signal was never
-    followed through. A finding whose ``status`` marks it terminal/accepted (see
-    ``_TERMINAL_FINDING_STATUSES``) is excluded.
+    A finding with NO ``next_action`` is NOT stale: it is a terminal
+    observation (``novel``/``confirms``/``contradicts``/``partial`` result kept
+    for the record), not a pending decision. Keying off ``next_action`` (a
+    workflow field) rather than the scientific ``status`` avoids flagging the
+    bulk of ordinary findings — the false-positive flood the plan warns against.
     """
     out: list[dict] = []
     for f in (spec.get("findings") or []):
         if not isinstance(f, dict):
             continue
-        status = str(f.get("status") or "").strip().lower()
-        if status in _TERMINAL_FINDING_STATUSES:
-            continue
+        na = f.get("next_action")
+        if not (isinstance(na, str) and na.strip()):
+            continue  # no declared next step → not a pending decision
         seeded = f.get("seeded_study")
         has_seeded = isinstance(seeded, str) and seeded.strip() != ""
         if not has_seeded:
@@ -150,6 +147,27 @@ def _open_feedback_items(ws_root: Path, slug: str) -> list[dict]:
     return items
 
 
+def _run_applied_params(run: dict) -> dict | None:
+    """The applied params of a recorded run, as a dict.
+
+    ``study_outcomes._mechanical_record`` persists them from
+    ``runs_meta.params_json`` UNPARSED, so a real run carries ``params`` (or
+    ``params_json``) as a JSON STRING, not a dict — decode it. (An in-memory
+    dict is also accepted.) Returns None when no usable params are present."""
+    raw = run.get("params")
+    if raw is None:
+        raw = run.get("params_json")
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            val = json.loads(raw)
+        except Exception:  # noqa: BLE001 — malformed JSON → no usable params
+            return None
+        return val if isinstance(val, dict) else None
+    return None
+
+
 def _param_drift_items(slug: str, spec: dict) -> list[dict]:
     from .param_enforcement import check_enforced_params, load_enforced_params
 
@@ -160,8 +178,8 @@ def _param_drift_items(slug: str, spec: dict) -> list[dict]:
     for run in (spec.get("runs") or []):
         if not isinstance(run, dict):
             continue
-        applied = run.get("params")
-        if not isinstance(applied, dict):
+        applied = _run_applied_params(run)
+        if applied is None:
             # Can't assemble applied params for this run — skip it (best-effort).
             continue
         for v in check_enforced_params(declared, applied):
@@ -178,16 +196,12 @@ def _stale_finding_items(slug: str, spec: dict) -> list[dict]:
     items: list[dict] = []
     for f in _stale_findings(spec):
         fid = str(f.get("id") or "")
-        na = f.get("next_action")
-        if isinstance(na, str) and na.strip():
-            detail = f"next_action set ('{na.strip()}') but no seeded_study."
-        else:
-            detail = "no next_action and no seeded_study."
+        na = str(f.get("next_action") or "").strip()
         items.append(_item(
             "stale_finding", "low", slug, fid,
-            f"Finding '{fid}' has no follow-through",
-            detail,
-            "draft next_action / seed",
+            f"Finding '{fid}' declared a next_action but no study was seeded",
+            f"next_action set ('{na}') but no seeded_study.",
+            "seed a study from this finding",
         ))
     return items
 
@@ -228,13 +242,13 @@ def _member_studies(wp: WorkspacePaths, inv_spec: dict) -> list[tuple[str, dict]
     """Resolve the investigation's member studies (slug, spec), filtered to its
     ``studies:`` list. Best-effort — unparseable studies are silently skipped."""
     members = inv_spec.get("studies")
-    member_set = (
-        {m for m in members if isinstance(m, str)} if isinstance(members, list)
-        else None
-    )
+    # A missing/malformed ``studies:`` list means NO members — do NOT fall back
+    # to scanning the whole workspace (that would pull in unrelated studies'
+    # signals under this investigation).
+    member_set = {m for m in members if isinstance(m, str)} if isinstance(members, list) else set()
     out: list[tuple[str, dict]] = []
     for slug, _sdir, spec in linkage_index._iter_studies(wp):
-        if member_set is None or slug in member_set:
+        if slug in member_set:
             out.append((slug, spec))
     return out
 
