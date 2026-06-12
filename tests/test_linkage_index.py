@@ -19,6 +19,9 @@ from pbg_superpowers.linkage_index import (
     studies_for_source,
     findings_for_observable,
     study_dag,
+    enrich_observable_edges,
+    studies_for_observable,
+    composite_emits,
 )
 
 
@@ -178,3 +181,80 @@ def test_build_index_pure_read(tmp_ws):
     findings_for_observable(tmp_ws, "x.y")
     study_dag(tmp_ws, "the-inv")
     assert _snapshot(tmp_ws) == before  # no writes
+
+
+# ---------------------------------------------------------------------------
+# SP4b: composite → observable edge enrichment (injected build) + registry
+# ---------------------------------------------------------------------------
+
+def _stub_obs(ref):
+    """Injected stand-in for the dashboard's _observables_for_ref — NO real build."""
+    if "baseline" in ref:
+        return {
+            "leaves": ["agents.0.listeners.mass.cell_mass", "agents.0.bulk[ATP[c]]"],
+            "catalogs": {},
+        }
+    return {"leaves": [], "catalogs": {}}
+
+
+@pytest.fixture
+def tmp_ws_obs_registry(tmp_path) -> Path:
+    """Two studies sharing a baseline composite that emits cell_mass; one study
+    measures the BARE token the composite emits under an agents.N. prefix."""
+    root = _ws(tmp_path)
+    _study(root, "s1", {
+        "conditions": {"baseline": {"composite": "v2ecoli.composites.baseline.baseline"}},
+        "tests": [{"name": "mass", "measure": {"path": "listeners.mass.cell_mass"}}],
+    })
+    _study(root, "s2", {
+        "conditions": {"baseline": {"composite": "v2ecoli.composites.baseline.baseline"}},
+    })
+    return root
+
+
+def test_enrich_adds_composite_emits_edges(tmp_ws_obs_registry):
+    idx = build_index(tmp_ws_obs_registry)
+    assert not [e for e in idx["edges"] if e["type"] == "emits"]  # YAML core: none yet
+    enrich_observable_edges(idx, _stub_obs)
+    emits = [e for e in idx["edges"] if e["type"] == "emits"]
+    assert emits
+    assert any(e["from"].startswith("composite:") and e["to"].startswith("observable:")
+               for e in emits)
+
+
+def test_emits_edge_strips_lineage_prefix_to_match_study_token(tmp_ws_obs_registry):
+    idx = build_index(tmp_ws_obs_registry)
+    enrich_observable_edges(idx, _stub_obs)
+    measures = {e["to"] for e in idx["edges"] if e["type"] == "measures"}
+    emits = {e["to"] for e in idx["edges"] if e["type"] == "emits"}
+    assert emits & measures  # normalized observable node id is shared
+    assert "observable:listeners.mass.cell_mass" in emits
+
+
+def test_studies_for_observable_cross_study(tmp_ws_obs_registry):
+    res = studies_for_observable(tmp_ws_obs_registry, "listeners.mass.cell_mass",
+                                 observables_for_ref=_stub_obs)
+    assert set(res["studies"]) >= {"s1", "s2"}
+    assert res["composites"]
+
+
+def test_composite_emits(tmp_ws_obs_registry):
+    res = composite_emits(tmp_ws_obs_registry, "v2ecoli.composites.baseline.baseline",
+                          observables_for_ref=_stub_obs)
+    assert any("cell_mass" in tok for tok in res["emits"])
+    assert res["used_by_studies"]
+
+
+def test_enrich_is_pure_given_injected_fn(tmp_ws_obs_registry):
+    before = _snapshot(tmp_ws_obs_registry)
+    idx = build_index(tmp_ws_obs_registry)
+    enrich_observable_edges(idx, _stub_obs)
+    assert _snapshot(tmp_ws_obs_registry) == before  # no writes
+
+
+def test_enrich_tolerates_raising_observables_for_ref(tmp_ws_obs_registry):
+    def boom(ref):
+        raise RuntimeError("build failed")
+    idx = build_index(tmp_ws_obs_registry)
+    enrich_observable_edges(idx, boom)  # must NOT raise
+    assert not [e for e in idx["edges"] if e["type"] == "emits"]

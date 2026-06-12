@@ -18,12 +18,28 @@ Design notes
   roll-up here.
 - **Best-effort per study.** A study whose YAML fails to parse is skipped, not
   fatal — the rest of the graph still builds.
-- SP4b (composite→observable edges needing real composite builds) is deferred.
+- **SP4b — composite→observable edges (INJECTED build).** The only expensive
+  edge — what a composite actually emits — is added by
+  :func:`enrich_observable_edges`, which takes an injected
+  ``observables_for_ref(ref) -> {"leaves": [...], "catalogs": {...}}`` callable
+  (the dashboard's ``_observables_for_ref``). ``build_index`` and the pure YAML
+  core never depend on or pay for a build; only the registry queries that opt in
+  (by supplying the callable) trigger one. Emitted leaves are lineage-prefix
+  normalized (strip a leading ``agents.<n>.``) so they MATCH the bare tokens
+  studies declare.
 
 Public API
 ----------
 ``build_index(ws_root) -> {"nodes": [...], "edges": [...]}``
-    The full typed graph.
+    The full typed graph. PURE — never builds a composite.
+``enrich_observable_edges(index, observables_for_ref) -> index``
+    Mutate ``index`` in place, adding ``composite --emits--> observable`` edges
+    from an INJECTED build callable (tolerant: a composite that fails to build
+    is skipped). In-memory only — never writes YAML.
+``studies_for_observable(ws_root, token, *, observables_for_ref) -> {"studies": [...], "composites": [...]}``
+    Cross-study registry: which studies/composites emit an observable token.
+``composite_emits(ws_root, composite_id, *, observables_for_ref) -> {"emits": [...], "used_by_studies": [...]}``
+    What a composite emits + which studies use it.
 ``ac_gating_matrix(ws_root, inv) -> {...}``
     Per-criterion study→result matrix; ``gap: True`` when an acceptance
     criterion carries no ``study:`` link (the live chromosome-cycle gap).
@@ -36,8 +52,9 @@ Public API
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from . import study_io
 from .workspace_paths import WorkspacePaths
@@ -508,3 +525,140 @@ def study_dag(ws_root: Path | str, inv: str) -> dict:
             edges.append({"from": from_slug, "to": to_slug, "type": "prerequisite"})
 
     return {"investigation": inv, "nodes": nodes, "edges": edges}
+
+
+# ---------------------------------------------------------------------------
+# SP4b: composite → observable edge enrichment (INJECTED build)
+# ---------------------------------------------------------------------------
+
+_LINEAGE_PREFIX = re.compile(r"^agents\.\d+\.")
+
+
+def _strip_lineage_prefix(leaf: str) -> str:
+    """Strip a leading ``agents.<n>.`` lineage prefix so a composite-emitted
+    leaf (``agents.0.listeners.mass.cell_mass``) matches the BARE token a study
+    declares (``listeners.mass.cell_mass``). See the SP2b-i lesson."""
+    return _LINEAGE_PREFIX.sub("", leaf)
+
+
+def enrich_observable_edges(
+    index: dict,
+    observables_for_ref: Callable[[str], dict],
+) -> dict:
+    """Add ``composite --emits--> observable`` edges from an INJECTED build.
+
+    For each ``composite`` node, call ``observables_for_ref(node["name"])``
+    (the dashboard's ``_observables_for_ref``) — the ONLY expensive edge, kept
+    out of the pure :func:`build_index` core. Each returned leaf is
+    lineage-prefix-normalized so it lands on the SAME ``observable:<token>``
+    node a study ``measures``. Tolerant: a composite whose build raises is
+    skipped (no edges for it). Mutates and returns the SAME ``index`` dict —
+    in-memory only, never writes YAML.
+    """
+    nodes: list[dict] = index["nodes"]
+    edges: list[dict] = index["edges"]
+    node_ids = {n["id"] for n in nodes}
+    existing_emits = {
+        (e["from"], e["to"]) for e in edges if e.get("type") == "emits"
+    }
+
+    for node in list(nodes):
+        if node.get("type") != "composite":
+            continue
+        comp = node["name"]
+        cid = node["id"]
+        try:
+            result = observables_for_ref(comp)
+        except Exception:  # noqa: BLE001 — tolerant: skip composites that can't build
+            continue
+        if not isinstance(result, dict):
+            continue
+        for leaf in (result.get("leaves") or []):
+            if not isinstance(leaf, str) or not leaf:
+                continue
+            tok = _strip_lineage_prefix(leaf)
+            oid = _id("observable", tok)
+            if oid not in node_ids:
+                nodes.append(_node(oid, "observable", token=tok))
+                node_ids.add(oid)
+            pair = (cid, oid)
+            if pair in existing_emits:
+                continue
+            existing_emits.add(pair)
+            edges.append(_edge(cid, oid, "emits"))
+
+    return index
+
+
+def studies_for_observable(
+    ws_root: Path | str,
+    token: str,
+    *,
+    observables_for_ref: Callable[[str], dict],
+) -> dict:
+    """Cross-study registry for an observable token.
+
+    Builds + enriches the index (the enrich step triggers the injected build),
+    then returns the composites that ``emits`` ``observable:<token>`` and the
+    studies that ``uses_composite`` any of them. Output lists carry BARE
+    slugs/composite-ids (the ``study:``/``composite:`` id prefixes stripped).
+    Tolerates ``token`` already being bare.
+    """
+    tok = _strip_lineage_prefix(token)
+    oid = _id("observable", tok)
+
+    index = build_index(ws_root)
+    enrich_observable_edges(index, observables_for_ref)
+
+    comp_ids = {
+        e["from"] for e in index["edges"]
+        if e.get("type") == "emits" and e["to"] == oid
+    }
+    studies: set[str] = set()
+    for e in index["edges"]:
+        if e.get("type") == "uses_composite" and e["to"] in comp_ids:
+            studies.add(_strip_id_prefix(e["from"]))
+
+    return {
+        "studies": sorted(studies),
+        "composites": sorted(_strip_id_prefix(c) for c in comp_ids),
+    }
+
+
+def composite_emits(
+    ws_root: Path | str,
+    composite_id: str,
+    *,
+    observables_for_ref: Callable[[str], dict],
+) -> dict:
+    """What a composite emits + which studies use it.
+
+    Builds + enriches the index, then collects the bare observable tokens this
+    composite ``emits`` and the study slugs that ``uses_composite`` it.
+    """
+    cid = _id("composite", composite_id)
+
+    index = build_index(ws_root)
+    enrich_observable_edges(index, observables_for_ref)
+
+    emits: list[str] = []
+    for e in index["edges"]:
+        if e.get("type") == "emits" and e["from"] == cid:
+            emits.append(_strip_id_prefix(e["to"]))
+    used_by: set[str] = set()
+    for e in index["edges"]:
+        if e.get("type") == "uses_composite" and e["to"] == cid:
+            used_by.add(_strip_id_prefix(e["from"]))
+
+    return {
+        "emits": sorted(set(emits)),
+        "used_by_studies": sorted(used_by),
+    }
+
+
+def _strip_id_prefix(nid: str) -> str:
+    """``composite:v2ecoli.x`` → ``v2ecoli.x``; ``study:s1`` → ``s1``.
+
+    Splits off only the leading ``kind:`` prefix (one split) so composite ids
+    that themselves contain ``:`` survive intact."""
+    return nid.split(":", 1)[1] if ":" in nid else nid
