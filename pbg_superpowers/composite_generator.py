@@ -19,7 +19,13 @@ class GeneratorEntry:
     id: str                           # "<dotted_module>.<name>"
     name: str
     description: str
-    parameters: dict[str, dict]       # {name: {type, default, description?}}
+    parameters: dict[str, dict]       # {name: {type, default, description?, choices?}}
+    # Each parameter is a {type, default, description?} dict. A string-typed
+    # parameter may additionally declare ``choices: [..]`` (a list of allowed
+    # string values); the dashboard / bigraph-loom Configure form renders such
+    # a parameter as a dropdown instead of a free-text input. ``choices`` is
+    # passed through to the config_schema verbatim (see composite_discovery's
+    # ``discover_all``), so no special handling is needed beyond declaring it.
     func: Callable[..., dict]
     module: str
     default_n_steps: int | None = None  # framework-owned runtime knob; UI pre-fill

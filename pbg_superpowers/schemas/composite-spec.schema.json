@@ -19,9 +19,10 @@
       "additionalProperties": {
         "type": "object",
         "properties": {
-          "type": {"enum": ["float", "int", "string", "str", "bool"]},
+          "type": {"enum": ["float", "int", "string", "str", "bool", "list[string]", "map"]},
           "default": {},
-          "description": {"type": "string"}
+          "description": {"type": "string"},
+          "choices": {"type": "array", "items": {"type": "string"}}
         }
       }
     },
