@@ -228,6 +228,22 @@ def test_scan_build_free_by_default_omits_phantom(tmp_inv_with_phantom_readout):
     assert not any(i["kind"] == "phantom_observable" for i in res["items"])
 
 
+def test_phantom_observable_opt_in(tmp_inv_with_phantom_readout):
+    res = scan_investigation(tmp_inv_with_phantom_readout, "inv",
+                             observables_for_ref=_stub_obs)
+    assert any(i["kind"] == "phantom_observable" and i["severity"] == "high"
+               and i["ref"] == "phantom" for i in res["items"])
+
+
+def test_phantom_build_raise_is_tolerated(tmp_inv_with_phantom_readout):
+    def _boom(ref):
+        raise RuntimeError("composite build failed")
+    res = scan_investigation(tmp_inv_with_phantom_readout, "inv",
+                             observables_for_ref=_boom)
+    # A build that raises skips that study; the scan still returns.
+    assert not any(i["kind"] == "phantom_observable" for i in res["items"])
+
+
 def test_summary_ranks_by_severity(tmp_inv_mixed):
     res = scan_investigation(tmp_inv_mixed, "inv")
     sev = [i["severity"] for i in res["items"]]

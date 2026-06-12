@@ -192,6 +192,34 @@ def _stale_finding_items(slug: str, spec: dict) -> list[dict]:
     return items
 
 
+def _phantom_observable_items(
+    slug: str, spec: dict, observables_for_ref: Callable[[str], Any],
+) -> list[dict]:
+    from .readout_validation import validate_readouts
+
+    items: list[dict] = []
+    for ref in linkage_index._composites_of_study(spec):
+        try:
+            available = observables_for_ref(ref)
+        except Exception:  # noqa: BLE001 — a build that raises skips this ref
+            continue
+        if not isinstance(available, dict):
+            continue
+        try:
+            results = validate_readouts(spec, available=available)
+        except Exception:  # noqa: BLE001
+            continue
+        for r in results:
+            if r.get("status") == "not_in_structure":
+                items.append(_item(
+                    "phantom_observable", "high", slug, str(r.get("name") or ""),
+                    f"Readout '{r.get('name')}' is not in the composite structure",
+                    r.get("detail") or "",
+                    "fix the readout",
+                ))
+    return items
+
+
 # ---------------------------------------------------------------------------
 # The aggregator
 # ---------------------------------------------------------------------------
@@ -266,6 +294,13 @@ def scan_investigation(
             items.extend(_stale_finding_items(slug, spec))
         except Exception:  # noqa: BLE001
             pass
+        if observables_for_ref is not None:
+            try:
+                items.extend(
+                    _phantom_observable_items(slug, spec, observables_for_ref)
+                )
+            except Exception:  # noqa: BLE001
+                pass
 
     items.sort(key=lambda i: (
         _SEVERITY_RANK.get(i["severity"], 99), i["kind"], i["ref"]
