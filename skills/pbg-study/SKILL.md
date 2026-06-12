@@ -521,7 +521,7 @@ Run this whenever `verify` / `check-observables` / the report linter flags `read
    report = migrate_study_file(study_dir, write=True)   # ruamel round-trip; rewrites ONLY the readouts: block
    ```
 
-   `migrate_study_file` is idempotent and leaves every `needs_human` readout **untouched** (it only rewrites the resolvable ones). Hand-authored comments and all non-readout content survive.
+   `migrate_study_file` is idempotent and leaves every `needs_human` readout **untouched** (it only rewrites the resolvable ones). It returns `changed`/`written` flags and a `canonicalized` list — report `len(report['canonicalized'])` (the readouts ACTUALLY rewritten this call), not `len(report['migrated'])` (which also counts already-canonical readouts). On an already-canonical study it is a **true no-op** (`changed=False`, the file is left byte-identical). Hand-authored comments and all non-readout content survive; note that inline comments on an *individual readout entry* are not preserved across canonicalization (the readout dict is rebuilt from its resolved selector).
 
 3. **Re-author each `needs_human` readout.** These are prose `·`-groups, `derived` paths, or ambiguous identifiers the migration refuses to guess. For each one, drive re-authoring against the composite's *real* observables (SP2b-i):
 

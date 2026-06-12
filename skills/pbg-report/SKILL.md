@@ -176,8 +176,11 @@ needs_human_total = 0
 for sy in Path('.').glob('studies/*/study.yaml'):
     report = migrate_study_file(sy.parent, write=True)  # ruamel round-trip; rewrites ONLY the readouts: block, leaves needs_human untouched
     n = len(report.get('needs_human') or [])
-    if report.get('migrated'):
-        print(f"{sy.parent.name}: canonicalized {len(report['migrated'])} readout(s)")
+    # report ACTUALLY-canonicalized readouts (the changed subset), NOT
+    # len(report['migrated']) — which also counts already-canonical ones.
+    canonicalized = report.get('canonicalized') or []
+    if canonicalized:
+        print(f"{sy.parent.name}: canonicalized {len(canonicalized)} readout(s)")
     if n:
         print(f"{sy.parent.name}: {n} readout(s) still need_human (re-author via /pbg-study migrate-readouts)")
         needs_human_total += n
@@ -185,7 +188,7 @@ print(f"\nreadout migration: {needs_human_total} needs_human readout(s) remain a
 PY
 ```
 
-`migrate_study_file(write=True)` is meaning-preserving, comment-safe, idempotent, and leaves every `needs_human` readout untouched — it only rewrites the resolvable ones. Report the total `needs_human` count as a (non-blocking) finding: these can't be auto-fixed and must be re-authored against the composite's real observables via `/pbg-study migrate-readouts <slug>` (which uses `/pbg-study check-observables` + `/api/observables`). The dashboard never writes — this canonicalize runs only here in the skill.
+`migrate_study_file(write=True)` is meaning-preserving, comment-safe, idempotent, and leaves every `needs_human` readout untouched — it only rewrites the resolvable ones. It is a **true no-op** on an already-canonical study (the file is left byte-identical — `changed=False`/`written=False`), so re-running `/pbg-report` never reflows a clean readouts block. Note: inline comments on an *individual readout entry* are not preserved across canonicalization (the readout dict is rebuilt from its resolved selector); comments on non-readout content survive. Report the total `needs_human` count as a (non-blocking) finding: these can't be auto-fixed and must be re-authored against the composite's real observables via `/pbg-study migrate-readouts <slug>` (which uses `/pbg-study check-observables` + `/api/observables`). The dashboard never writes — this canonicalize runs only here in the skill.
 
 ## Render
 

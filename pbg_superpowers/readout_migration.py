@@ -14,6 +14,14 @@ truth.  SAFE by construction:
   * ``migrate_study_file`` defaults to **dry-run** (``write=False``); when
     ``write=True`` it rewrites only the ``readouts:`` block via a ruamel
     round-trip, preserving comments and all hand-authored non-readout content.
+    It is a **true no-op** when nothing actually changes (all readouts already
+    canonical / ``needs_human``): the file is left byte-for-byte identical.
+
+NOTE: canonicalization rebuilds each migrated readout dict from its resolved
+selector, so inline YAML comments attached to an *individual readout entry* are
+not preserved across a rewrite — acceptable, since the readout is the unit being
+rewritten.  Comments on non-readout content (and on the ``readouts:`` key
+itself) survive intact.
 
 Public API:
     migrate_readouts(spec) -> (new_readouts, report)
@@ -220,11 +228,25 @@ def migrate_study_file(study_dir: Path | str, write: bool = False) -> dict:
                    the report WITHOUT touching the file.  When ``True``,
                    rewrite ONLY the ``readouts:`` block via a ruamel round-trip
                    (comment- and formatting-preserving); all other
-                   hand-authored content is left byte-for-byte intact.
+                   hand-authored content is left byte-for-byte intact.  When no
+                   readout actually changes (all already canonical /
+                   ``needs_human``), this is a **true no-op** — the file is left
+                   byte-for-byte identical and nothing is written.
 
     Returns:
-        The ``migrate_readouts`` report, augmented with ``"study_yaml"`` (path)
-        and ``"written"`` (bool).
+        The ``migrate_readouts`` report, augmented with:
+
+          * ``"study_yaml"`` (path),
+          * ``"written"`` (bool — whether the file was actually rewritten),
+          * ``"changed"`` (bool — whether canonicalization would change any
+            readout; ``False`` ⇒ already-canonical no-op even in dry-run), and
+          * ``"canonicalized"`` (list of names actually rewritten this call —
+            the *changed* subset of ``"migrated"``, which excludes readouts that
+            were already canonical).
+
+    Inline comments on an *individual readout entry* are not preserved across a
+    rewrite (the readout dict is rebuilt from its resolved selector); comments
+    on non-readout content survive intact.
     """
     from io import StringIO
 
@@ -237,6 +259,10 @@ def migrate_study_file(study_dir: Path | str, write: bool = False) -> dict:
     ryaml = YAML()
     ryaml.preserve_quotes = True
     ryaml.width = 4096  # avoid line-wrap reflow on long prose values
+    # Match the workspace study.yaml block-seq convention (`-` at offset 2,
+    # content at column 4) so a fresh readouts list is NOT reindented to the
+    # ruamel default (0-offset) — keeps the readouts block's original shape.
+    ryaml.indent(mapping=2, sequence=4, offset=2)
 
     rt_spec = ryaml.load(study_yaml.read_text())
     if rt_spec is None:
@@ -246,7 +272,25 @@ def migrate_study_file(study_dir: Path | str, write: bool = False) -> dict:
     report["study_yaml"] = str(study_yaml)
     report["written"] = False
 
-    if not write:
+    # Which readouts actually change (vs. already-canonical / needs_human, which
+    # round-trip to the same value).  Drives both the no-op short-circuit (FIX 2)
+    # and the accurate "canonicalized" count (FIX 3).
+    originals = list(rt_spec.get("readouts") or [])
+    canonicalized: list[str] = []
+    for new_ro, orig in zip(new_readouts, originals):
+        if new_ro != orig and isinstance(new_ro, dict):
+            name = new_ro.get("name")
+            if name:
+                canonicalized.append(name)
+    changed = len(new_readouts) != len(originals) or any(
+        new_ro != orig for new_ro, orig in zip(new_readouts, originals)
+    )
+    report["changed"] = changed
+    report["canonicalized"] = canonicalized
+
+    # No write requested, or nothing actually changed → true no-op (the file is
+    # left byte-for-byte identical; we never re-dump an already-canonical study).
+    if not write or not changed:
         return report
 
     # Replace ONLY the readouts block; everything else stays as loaded.

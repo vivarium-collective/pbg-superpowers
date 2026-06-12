@@ -256,6 +256,118 @@ def test_migrate_study_file_write_preserves_comments_and_other_content(tmp_path)
 
 
 # ---------------------------------------------------------------------------
+# FIX 1 + FIX 2 + FIX 3: no-op on already-canonical + indentation preservation
+# ---------------------------------------------------------------------------
+
+# An all-canonical study (one canonical readout + one needs_human prose readout):
+# a migrate_study_file(write=True) must be a TRUE no-op (byte-identical), since
+# nothing actually changes — the canonical readout is already canonical and the
+# needs_human one is kept untouched.
+STUDY_YAML_ALL_CANONICAL = """\
+# An all-canonical study — migrate must be a true no-op (byte-identical).
+name: dnaa-canonical
+objective: |
+  Already-canonical readouts; nothing to rewrite.
+readouts:
+  - name: DnaA monomer total
+    index_by:
+      type: literal_index
+      value: 3861
+    store_path: listeners.monomer_counts
+    units: molecules/cell
+    status: primary
+  - name: DnaA-form counts
+    status: measured
+    identifier: "bulk PD03831[c] (apo) · MONOMER0-160[c] (DnaA-ATP)"
+    units: molecules/cell
+# trailing comment
+baselines: []
+"""
+
+
+def test_migrate_study_file_already_canonical_is_byte_identical_noop(tmp_path):
+    """An all-canonical study: write=True is a TRUE no-op — the file is left
+    byte-for-byte identical, and the report reports changed=False/written=False."""
+    study_dir = tmp_path / "dnaa-canonical"
+    study_dir.mkdir()
+    sy = study_dir / "study.yaml"
+    sy.write_text(STUDY_YAML_ALL_CANONICAL)
+    before = sy.read_bytes()
+
+    report = migrate_study_file(study_dir, write=True)
+
+    assert report["changed"] is False
+    assert report["written"] is False
+    # FIX 2: byte-identical, not just meaning-identical.
+    assert sy.read_bytes() == before
+    # FIX 3: nothing was actually canonicalized this run.
+    assert report.get("canonicalized") == []
+    # the prose readout is still flagged for a human (untouched).
+    assert [h["name"] for h in report["needs_human"]] == ["DnaA-form counts"]
+
+
+def test_migrate_study_file_changed_flag_true_on_real_change(tmp_path):
+    """A study with a migratable readout reports changed=True/written=True and
+    names the actually-canonicalized readout (FIX 3)."""
+    study_dir = tmp_path / "dnaa-test"
+    study_dir.mkdir()
+    sy = study_dir / "study.yaml"
+    sy.write_text(STUDY_YAML_TEXT)
+
+    report = migrate_study_file(study_dir, write=True)
+    assert report["changed"] is True
+    assert report["written"] is True
+    # FIX 3: the actually-canonicalized set is the changed readout, NOT the
+    # already-canonical/needs_human ones.
+    assert report.get("canonicalized") == ["DnaA monomer total"]
+
+
+def test_migrate_study_file_preserves_readouts_block_indentation(tmp_path):
+    """FIX 1: on a real change, only the changed selector lines differ — the
+    non-readout blocks + comments stay byte-identical, and the readouts block
+    keeps its original 2-space block-seq offset (no whole-block reindent)."""
+    study_dir = tmp_path / "dnaa-test"
+    study_dir.mkdir()
+    sy = study_dir / "study.yaml"
+    sy.write_text(STUDY_YAML_TEXT)
+
+    report = migrate_study_file(study_dir, write=True)
+    assert report["written"] is True
+    text = sy.read_text()
+
+    # readouts block keeps its original indentation: `-` at column 2, content
+    # at column 4 (sequence=4, offset=2), NOT reindented to column 0.
+    assert "\n  - name: DnaA monomer total" in text
+    assert "\n    status: primary" in text
+    assert "\n- name:" not in text  # no 0-offset block-seq reindent
+
+    # non-readout blocks + their comments survive byte-for-byte.
+    assert text.startswith(
+        "# A hand-authored study with comments that MUST survive migration.\n"
+    )
+    assert "# trailing comment\nbaselines: []\n" in text
+
+    # only the readouts region changed: the lines OUTSIDE the readouts block are
+    # identical between before and after.
+    before_lines = STUDY_YAML_TEXT.splitlines()
+    after_lines = text.splitlines()
+    # the pre-readouts header (name/objective) is untouched
+    assert before_lines[:5] == after_lines[:5]
+
+
+def test_migrate_study_file_dry_run_reports_changed(tmp_path):
+    """changed reflects whether a write WOULD change anything, even in dry-run."""
+    study_dir = tmp_path / "dnaa-test"
+    study_dir.mkdir()
+    sy = study_dir / "study.yaml"
+    sy.write_text(STUDY_YAML_TEXT)
+
+    report = migrate_study_file(study_dir, write=False)
+    assert report["written"] is False
+    assert report["changed"] is True
+
+
+# ---------------------------------------------------------------------------
 # readout_migration_status — pure classify into canonical/migratable/needs_human
 # ---------------------------------------------------------------------------
 
