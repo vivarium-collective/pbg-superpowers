@@ -1,5 +1,7 @@
 """Tests for the evidence & rigor scorecard (pbg_superpowers.rigor)."""
-from pbg_superpowers.rigor import study_rigor, investigation_rigor, GAP, WARN, OK
+from pbg_superpowers.rigor import (
+    study_rigor, investigation_rigor, finding_evidential_weight, GAP, WARN, OK,
+)
 
 
 def _sev(scorecard, dim_id):
@@ -258,3 +260,116 @@ def test_could_fail_if_no_longer_counts_for_falsifiability():
     assert _sev(study_rigor(spec), "falsifiability") == GAP
     # study.falsifiability remains the canonical (and only) source.
     assert _sev(study_rigor({"falsifiability": "would fail if ..."}), "falsifiability") == OK
+
+
+# ---------------------------------------------------------------------------
+# Item 8 — per-finding evidential weight (strong / moderate / weak).
+# ---------------------------------------------------------------------------
+
+def _strong_spec():
+    """A study where one finding (test=agency-advantage) can satisfy all five
+    evidential dimensions when matched."""
+    return {
+        "name": "study-z",
+        "robustness": {"n_replicates": 3, "seeds": [0, 1, 2],
+                       "per_measure": [{"name": "agency-advantage", "mean": 1.0, "std": 0.05}]},
+        "controls": [
+            {"name": "non-sensing control for agency-advantage", "kind": "negative",
+             "observed": "no-advantage", "result": "PASS"},
+        ],
+        "alternative_hypotheses": [
+            {"claim": "plain movement to resources", "discriminated_by": "agency-advantage",
+             "status": "excluded"},
+        ],
+        "findings": [
+            {"statement": "agency in service of survival", "tier": "interpretation",
+             "mechanism_origin": "emergent",
+             "evidence": {"from_test": "agency-advantage"},
+             "calibration_anchor": {"divergence_factor": 0.4}},
+        ],
+    }
+
+
+def test_finding_weight_strong_when_all_dims_match():
+    spec = _strong_spec()
+    res = finding_evidential_weight(spec, spec["findings"][0])
+    assert res["weight"] == "strong"
+    assert res["n_supporting"] == 5
+    assert all(res["dims"].values())
+    assert set(res["dims"]) == {"replication", "effect_size", "control_strength",
+                                "independence", "alternatives"}
+
+
+def test_finding_weight_moderate_at_two_to_three_dims():
+    # emergent (independence) + an excluded alternative (degraded study-level)
+    # → 2 dims → moderate. No replication, no effect size, no control.
+    spec = {
+        "alternative_hypotheses": [{"claim": "alt", "status": "excluded"}],
+        "findings": [{"statement": "x", "tier": "interpretation",
+                      "mechanism_origin": "emergent",
+                      "evidence": {"from_test": "t"}}],
+    }
+    res = finding_evidential_weight(spec, spec["findings"][0])
+    assert res["weight"] == "moderate"
+    assert res["n_supporting"] == 2
+    assert res["dims"]["independence"] is True
+    assert res["dims"]["alternatives"] is True
+    assert res["dims"]["replication"] is False
+
+
+def test_finding_weight_weak_when_unsupported():
+    spec = {"findings": [{"statement": "It works.", "evidence": {"from_test": "t"}}]}
+    res = finding_evidential_weight(spec, spec["findings"][0])
+    assert res["weight"] == "weak"
+    assert res["n_supporting"] <= 1
+
+
+def test_finding_weight_effect_size_reads_divergence_factor():
+    spec = {"findings": [{"statement": "x", "evidence": {"from_test": "t"},
+                          "calibration_anchor": {"divergence_factor": 0.3}}]}
+    res = finding_evidential_weight(spec, spec["findings"][0])
+    assert res["dims"]["effect_size"] is True
+    # zero divergence is not a meaningful effect size
+    spec0 = {"findings": [{"statement": "x", "evidence": {"from_test": "t"},
+                           "calibration_anchor": {"divergence_factor": 0.0}}]}
+    assert finding_evidential_weight(spec0, spec0["findings"][0])["dims"]["effect_size"] is False
+
+
+def test_finding_weight_control_degrades_to_study_level():
+    # The discriminating control does NOT name the finding's test, so the
+    # tolerant matcher degrades to the study-level "any discriminating control".
+    spec = {
+        "controls": [{"name": "external-membrane", "kind": "negative",
+                      "observed": "fail-closure", "result": "PASS"}],
+        "findings": [{"statement": "x", "evidence": {"from_test": "unrelated-test"}}],
+    }
+    res = finding_evidential_weight(spec, spec["findings"][0])
+    assert res["dims"]["control_strength"] is True
+
+
+def test_finding_weight_control_pass_without_observed_no_credit():
+    spec = {
+        "controls": [{"name": "external", "kind": "negative", "result": "PASS"}],  # no observed
+        "findings": [{"statement": "x", "evidence": {"from_test": "t"}}],
+    }
+    assert finding_evidential_weight(spec, spec["findings"][0])["dims"]["control_strength"] is False
+
+
+def test_finding_weight_replication_restricted_to_finding_measure():
+    # The finding's OWN measure is tight (agreement OK) even though another
+    # measure in the study is noisy → restricted replication is True.
+    spec = {
+        "robustness": {"n_replicates": 3, "seeds": [0, 1, 2], "per_measure": [
+            {"name": "mine", "mean": 1.0, "std": 0.02},
+            {"name": "other", "mean": 1.0, "std": 0.9},  # noisy, but not this finding's
+        ]},
+        "findings": [{"statement": "x", "evidence": {"from_test": "mine"}}],
+    }
+    assert finding_evidential_weight(spec, spec["findings"][0])["dims"]["replication"] is True
+
+
+def test_finding_weight_tolerant_of_empty():
+    res = finding_evidential_weight({}, {})
+    assert res["weight"] == "weak"
+    assert res["n_supporting"] == 0
+    assert finding_evidential_weight(None, None)["weight"] == "weak"

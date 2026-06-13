@@ -17,7 +17,9 @@ from pathlib import Path
 import pytest
 
 from pbg_superpowers import study_io
-from pbg_superpowers.needs_attention import scan_investigation, _stale_findings
+from pbg_superpowers.needs_attention import (
+    scan_investigation, _stale_findings, open_epistemic_debts,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +267,124 @@ def test_summary_ranks_by_severity(tmp_inv_mixed):
 def test_investigation_slug_echoed(tmp_inv_with_unlinked_ac):
     res = scan_investigation(tmp_inv_with_unlinked_ac, "inv")
     assert res["investigation"] == "inv"
+
+
+# ---------------------------------------------------------------------------
+# Item 15 — open epistemic debts (negative knowledge), per-study collector.
+# ---------------------------------------------------------------------------
+
+def _kinds(debts):
+    return {d["kind"] for d in debts}
+
+
+def test_debts_minimal_study_harvests_rigor_gaps():
+    # A bare study yields the rigor GAP-derived debts.
+    debts = open_epistemic_debts({"name": "s", "findings": [{"statement": "it works"}]})
+    kinds = _kinds(debts)
+    assert "claim-untested" in kinds            # no replication / no falsifiability
+    assert "control-absent" in kinds            # no controls
+    assert "alternative-not-excluded" in kinds  # no alternatives declared
+    # severity-sorted (high → medium → low)
+    rank = {"high": 0, "medium": 1, "low": 2}
+    sev = [rank[d["severity"]] for d in debts]
+    assert sev == sorted(sev)
+    assert {d["severity"] for d in debts} <= {"high", "medium", "low"}
+    assert set(kinds) <= {
+        "claim-untested", "control-absent", "metric-uncalibrated",
+        "alternative-not-excluded", "region-unexplored", "viz-stale"}
+
+
+def test_debt_control_absent_from_pending_and_empty_observed():
+    spec = {
+        "controls": [
+            {"name": "ctrl-pending", "kind": "negative", "result": "PENDING"},
+            {"name": "ctrl-no-observed", "kind": "negative", "result": "PASS"},  # no observed
+        ],
+    }
+    debts = open_epistemic_debts(spec)
+    refs = {d["ref"] for d in debts if d["kind"] == "control-absent"}
+    assert {"ctrl-pending", "ctrl-no-observed"} <= refs
+
+
+def test_debt_alternative_not_excluded():
+    spec = {"alternative_hypotheses": [
+        {"claim": "plain movement", "status": "not-excluded"},
+        {"claim": "noise", "status": "untested"},
+        {"claim": "ruled out", "status": "excluded"},  # not a debt
+    ]}
+    alts = [d for d in open_epistemic_debts(spec) if d["kind"] == "alternative-not-excluded"]
+    refs = {d["ref"] for d in alts}
+    assert "plain movement" in refs and "noise" in refs
+    assert "ruled out" not in refs
+
+
+def test_debt_metric_uncalibrated_from_anchor_marker():
+    # An anchor present but with no literature target / observed value is uncalibrated.
+    spec = {"findings": [{"id": "F-1", "statement": "x",
+                          "calibration_anchor": {"note": "TBD"}}]}
+    debts = open_epistemic_debts(spec)
+    assert any(d["kind"] == "metric-uncalibrated" and d["ref"] == "F-1" for d in debts)
+    # A fully-anchored calibration is NOT a debt.
+    ok = {"findings": [{"id": "F-2", "statement": "x",
+                        "calibration_anchor": {"literature_target": 28.0, "observed_value": 27.0}}]}
+    assert not any(d["kind"] == "metric-uncalibrated" for d in open_epistemic_debts(ok))
+
+
+def test_debt_viz_stale_from_freshness_marker():
+    spec = {"visualizations": [
+        {"name": "growth", "chart": "charts/growth.png", "freshness": "stale"},
+        {"name": "mass", "chart": "charts/mass.png", "stale": True},
+        {"name": "fresh", "chart": "charts/fresh.png", "freshness": "fresh"},  # not a debt
+    ]}
+    stale = [d for d in open_epistemic_debts(spec) if d["kind"] == "viz-stale"]
+    refs = {d["ref"] for d in stale}
+    assert {"charts/growth.png", "charts/mass.png"} == refs
+    assert all(d["severity"] == "low" for d in stale)
+
+
+def test_debt_region_unexplored_from_remaining_uncertainties():
+    spec = {"discovery_implications": {"remaining_uncertainties": [
+        "does it hold under nutrient shift?",
+        {"note": "untested at high temperature"},
+    ]}}
+    regions = [d for d in open_epistemic_debts(spec) if d["kind"] == "region-unexplored"]
+    assert len(regions) == 2
+    notes = {d["note"] for d in regions}
+    assert "does it hold under nutrient shift?" in notes
+    assert "untested at high temperature" in notes
+
+
+def test_debts_well_defended_study_has_few_debts():
+    # The well-defended study from test_rigor: no control/alternative/replication debts.
+    spec = {
+        "name": "study-y",
+        "robustness": {"n_replicates": 5, "seeds": [0, 1, 2, 3, 4], "parameter_sweep": True},
+        "controls": [
+            {"name": "external-membrane", "kind": "negative",
+             "observed": "fail-closure", "result": "PASS"},
+            {"name": "self-producing", "kind": "positive",
+             "observed": "closure-holds", "result": "PASS"},
+        ],
+        "limitations": "Only the geometric-boundary aspect is modelled.",
+        "alternative_hypotheses": [
+            {"claim": "plain movement", "discriminated_by": "non-sensing control",
+             "status": "excluded"},
+        ],
+        "findings": [
+            {"statement": "agency in service of survival", "tier": "interpretation",
+             "mechanism_origin": "emergent", "evidence": {"from_test": "agency-advantage"}},
+        ],
+        "falsifiability": "Advantage vanishes if the non-sensing control matched it.",
+    }
+    kinds = _kinds(open_epistemic_debts(spec))
+    assert "control-absent" not in kinds
+    assert "alternative-not-excluded" not in kinds
+    assert "claim-untested" not in kinds  # replication OK + falsifiability + origin OK
+
+
+def test_debts_tolerant_of_empty():
+    assert open_epistemic_debts({}) and isinstance(open_epistemic_debts({}), list)
+    assert open_epistemic_debts(None) == open_epistemic_debts({})
 
 
 # ---------------------------------------------------------------------------
