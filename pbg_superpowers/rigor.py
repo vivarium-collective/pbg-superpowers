@@ -1110,7 +1110,9 @@ def framework_metrics(study_specs: list[dict], inv_specs: list[dict]) -> dict:
                 if not (t.get("pass_if") or t.get("calibration_anchor")):
                     continue
                 band_total += 1
-                if t.get("cites") or t.get("calibration_anchor"):
+                # A band is "sourced" by a literature link (cites /
+                # calibration_anchor) OR an honest pass_if.provenance.kind (#9).
+                if _test_threshold_sourced(t):
                     band_cited += 1
 
     # 4. Replication coverage — ≥3 replicates (reuse _replicate_count).
