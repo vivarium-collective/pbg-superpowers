@@ -70,3 +70,18 @@ def test_intervention_node_shape():
 def test_config_schema_present():
     assert 'mode' in Intervention.config_schema
     assert 'window' in Intervention.config_schema
+
+
+def test_decouple_freezes_at_first_active_value():
+    # decouple holds the target at its value when the intervention first became
+    # active. With no other process moving x, that's just the initial value.
+    assert _run(intervention_node(['x'], mode='decouple'), x0=12.0, steps=3) == pytest.approx(12.0)
+
+
+def test_remove_is_alias_for_decouple():
+    assert _run(intervention_node(['x'], mode='remove'), x0=4.0, steps=2) == pytest.approx(4.0)
+
+
+def test_invert_drives_to_negative_current():
+    # one step: delta = -2*5 = -10 -> x = -5
+    assert _run(intervention_node(['x'], mode='invert'), x0=5.0, steps=1) == pytest.approx(-5.0)

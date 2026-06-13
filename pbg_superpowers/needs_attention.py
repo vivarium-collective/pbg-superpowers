@@ -13,6 +13,8 @@ The six signals (all reuse — none reimplemented):
   4. Phantom / not-in-structure observable — ``readout_validation.validate_readouts`` (high, OPT-IN)
   5. Param drift                    — ``param_enforcement.check_enforced_params``     (high)
   6. Stale finding                  — greenfield ``_stale_findings`` classifier       (low)
+  7. Invariant regression           — ``study.invariant_check[]`` status invalidated/weakened
+                                        (C-INVAR; high/medium)
 
 Isolation invariant (the SP4b lesson): the scan is build-free and cheap by
 DEFAULT — signals 1,2,3,5,6 read YAML only. Signal 4 (phantom observable) needs
@@ -208,6 +210,42 @@ def _stale_finding_items(slug: str, spec: dict) -> list[dict]:
     return items
 
 
+_INVARIANT_STATUS_SEVERITY = {"invalidated": "high", "weakened": "medium"}
+
+
+def _invariant_regression_items(slug: str, spec: dict) -> list[dict]:
+    """Harvest a study's ``invariant_check[]`` entries whose status regressed.
+
+    Each entry (written by the autopoiesis spine, C-INVAR) records re-running an
+    *earlier* study's named measure in the current code state:
+    ``{study, test, prior, now, status}``. A status of ``invalidated`` (a prior
+    invariant no longer holds → high) or ``weakened`` (it still holds but moved
+    the wrong way → medium) is a regression the navigator must decide on.
+    ``preserved``/``strengthened`` are healthy and not surfaced.
+    """
+    items: list[dict] = []
+    for chk in (spec.get("invariant_check") or []):
+        if not isinstance(chk, dict):
+            continue
+        status = str(chk.get("status") or "").lower()
+        severity = _INVARIANT_STATUS_SEVERITY.get(status)
+        if severity is None:
+            continue
+        prior_study = str(chk.get("study") or "")
+        test = str(chk.get("test") or "")
+        prior = chk.get("prior")
+        now = chk.get("now")
+        items.append(_item(
+            "invariant_regression", severity, slug,
+            f"{prior_study}:{test}" if prior_study or test else slug,
+            f"Invariant '{test}' from '{prior_study}' {status} in '{slug}'",
+            f"re-run of '{prior_study}' measure '{test}': prior={prior!r} now={now!r} "
+            f"→ status {status}.",
+            "investigate invariant regression",
+        ))
+    return items
+
+
 def _phantom_observable_items(
     slug: str, spec: dict, observables_for_ref: Callable[[str], Any],
 ) -> list[dict]:
@@ -308,6 +346,10 @@ def scan_investigation(
             pass
         try:
             items.extend(_stale_finding_items(slug, spec))
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            items.extend(_invariant_regression_items(slug, spec))
         except Exception:  # noqa: BLE001
             pass
         if observables_for_ref is not None:

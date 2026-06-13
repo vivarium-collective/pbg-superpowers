@@ -143,6 +143,26 @@ def tmp_inv_run_param_drift(tmp_path) -> Path:
 
 
 @pytest.fixture
+def tmp_inv_invariant_regression(tmp_path) -> Path:
+    root = _ws(tmp_path)
+    _inv(root, "inv", {"studies": ["s1"]})
+    _study(root, "s1", {
+        "tests": [{"name": "t"}],
+        "invariant_check": [
+            {"study": "s0", "test": "operational_closure",
+             "prior": True, "now": False, "status": "invalidated"},   # high
+            {"study": "s0", "test": "precariousness",
+             "prior": 0.8, "now": 0.4, "status": "weakened"},          # medium
+            {"study": "s0", "test": "growth", "prior": 1.0, "now": 1.1,
+             "status": "strengthened"},                                # healthy → omit
+            {"study": "s0", "test": "containment", "prior": 1.0, "now": 1.0,
+             "status": "preserved"},                                   # healthy → omit
+        ],
+    }, inv="inv")
+    return root
+
+
+@pytest.fixture
 def tmp_inv_with_phantom_readout(tmp_path) -> Path:
     root = _ws(tmp_path)
     _inv(root, "inv", {"studies": ["s1"]})
@@ -226,6 +246,17 @@ def test_param_drift_surfaces_when_run_violates(tmp_inv_run_param_drift):
     assert {d["ref"] for d in drifts} == {"translation_efficiency", "mrna_per_min"}
 
 
+def test_invariant_regression_surfaces_invalidated_and_weakened(tmp_inv_invariant_regression):
+    res = scan_investigation(tmp_inv_invariant_regression, "inv")
+    regs = [i for i in res["items"] if i["kind"] == "invariant_regression"]
+    # Only invalidated (high) + weakened (medium) surface; preserved/strengthened omitted.
+    assert len(regs) == 2
+    by_sev = {r["severity"]: r for r in regs}
+    assert by_sev["high"]["ref"] == "s0:operational_closure"
+    assert by_sev["high"]["study"] == "s1"
+    assert by_sev["medium"]["ref"] == "s0:precariousness"
+
+
 def test_scan_is_pure_no_writes(tmp_inv_with_unlinked_ac):
     before = _snapshot(tmp_inv_with_unlinked_ac)
     scan_investigation(tmp_inv_with_unlinked_ac, "inv")
@@ -261,7 +292,8 @@ def test_summary_ranks_by_severity(tmp_inv_mixed):
     assert res["summary"]["total"] == len(res["items"])
     assert set(res["summary"]["by_kind"]) <= {
         "uncovered_ac", "verdict_divergence", "open_feedback",
-        "param_drift", "stale_finding", "phantom_observable"}
+        "param_drift", "stale_finding", "phantom_observable",
+        "invariant_regression"}
 
 
 def test_investigation_slug_echoed(tmp_inv_with_unlinked_ac):
