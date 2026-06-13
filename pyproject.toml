@@ -12,6 +12,10 @@ dependencies = [
     "bigraph-schema>=0.0.60",
     "process-bigraph>=0.0.66",
     "pypdf>=4.0",
+    # Default framework emitters available in every pbg- workspace. Base install
+    # is lightweight (SQLiteEmitter, stdlib); heavy backends stay extras-gated
+    # via pbg-emitters[parquet] / [xarray] (see the `evaluator` extra).
+    "pbg-emitters",
 ]
 
 [project.optional-dependencies]
