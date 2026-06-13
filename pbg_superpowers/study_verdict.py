@@ -292,11 +292,19 @@ def lifecycle_floor(finding: dict, spec: dict) -> str:
             if replicated:
                 rank = max(rank, _LIFECYCLE_RANK["provisional-claim"])
 
-        # generalized requires a true generality signal (axes / sweep, #22) —
-        # NOT mere replication (which only earns provisional-claim above).
-        axes = _rigor._finding_generality_axes(finding) | _rigor._study_generality_axes(spec)
-        if axes:
+        # generalized requires the FINDING's OWN generality claim (#22) — NOT a
+        # study-level sweep (which would lift every finding in the study) and NOT
+        # mere replication (which only earns provisional-claim above). A single
+        # declared axis earns provisional-claim; ≥2 axes or an explicit
+        # framework-level claim earns generalized. A finding the author marked
+        # instance_specific never reaches generalized.
+        faxes = _rigor._finding_generality_axes(finding)
+        gen = finding.get("generality") if isinstance(finding.get("generality"), dict) else {}
+        level = str(gen.get("level") or "").strip().lower()
+        if level != "instance_specific" and (len(faxes) >= 2 or level == "framework"):
             rank = max(rank, _LIFECYCLE_RANK["generalized"])
+        elif faxes:
+            rank = max(rank, _LIFECYCLE_RANK["provisional-claim"])
 
     return LIFECYCLE_STATES[rank]
 

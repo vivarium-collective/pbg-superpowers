@@ -127,6 +127,17 @@ def _expected_band(expected: Any) -> dict | None:
     f = _to_float(expected)
     if f is not None:
         return {"value": f}
+    # Tolerate a prose ``expected`` that LEADS with a comparator + number, e.g.
+    # "<= 0 (closed) for the genuine loop" or "> 0 — opens the gap". Authors
+    # write predictions as readable sentences; parse the machine-comparable head.
+    if isinstance(expected, str):
+        import re
+        m = re.match(r"\s*(<=|>=|==|!=|<|>|=)?\s*(-?\d+(?:\.\d+)?)", expected)
+        if m:
+            op, num = m.group(1), float(m.group(2))
+            if not op or op == "=":
+                return {"value": num}
+            return {"op": "==" if op == "=" else op, "value": num}
     return None
 
 
@@ -198,22 +209,46 @@ def score_support(hypothesis: dict, study_specs: list[dict]) -> list[dict]:
         slug = _study_slug(study)
         for finding in _findings(study):
             measure, observed = _finding_measure_observed(finding)
-            if not measure or measure.lower() not in preds:
+            if not measure:
+                continue
+            # A prediction's ``observable`` may name the behavior-test (e.g.
+            # ``operational-closure``) OR the underlying measure field (e.g.
+            # ``closure_gap_size``). Resolve both so authored predictions that
+            # reference the measure field still match findings keyed by test.
+            candidates = {measure.lower()}
+            field = _test_measure_field(study, measure)
+            if field:
+                candidates.add(field.lower())
+            matched = next((c for c in candidates if c in preds), None)
+            if matched is None:
                 continue
             ov = _to_float(observed)
             if ov is None:
                 continue
-            band = _expected_band(preds[measure.lower()])
+            band = _expected_band(preds[matched])
             if band is None:
                 continue
             ok = _evaluate(ov, band)
             log.append({
                 "study": slug,
-                "observation": f"{measure}={observed} vs expected {preds[measure.lower()]}",
+                "observation": f"{matched}={observed} vs expected {preds[matched]}",
                 "delta": SUPPORTS if ok else WEAKENS,
                 "discriminating": True,
             })
     return log
+
+
+def _test_measure_field(study: dict, test_name: str) -> str | None:
+    """Resolve a behavior-test name to its ``measure.field`` (so a prediction
+    that names the measure field matches a finding keyed by the test name)."""
+    if not isinstance(study, dict):
+        return None
+    for t in study.get("behavior_tests") or []:
+        if isinstance(t, dict) and t.get("name") == test_name:
+            m = t.get("measure")
+            if isinstance(m, dict) and isinstance(m.get("field"), str):
+                return m["field"].strip()
+    return None
 
 
 def _alt_entries(study: dict) -> list[dict]:

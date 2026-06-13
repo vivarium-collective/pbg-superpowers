@@ -324,10 +324,16 @@ def threshold_sensitivity(spec: dict, test_name: str,
     except Exception:  # noqa: BLE001 — defensive
         _band_from_pass_if = None  # type: ignore
     band = _band_from_pass_if(test.get("pass_if")) if _band_from_pass_if else None
-    if not band:
-        return []
     pass_if = test.get("pass_if") if isinstance(test.get("pass_if"), dict) else {}
     op = pass_if.get("op")
+    # Fallback for the {op, value} pass_if shape (which _band_from_pass_if, keyed
+    # on low/high/threshold, does not recognise): treat ``value`` as the cutoff.
+    if not band:
+        val = pass_if.get("value")
+        if isinstance(val, (int, float)) and not isinstance(val, bool):
+            band = {"threshold": val}
+    if not band:
+        return []
 
     # Recorded observed value from the canonical run's outcomes.
     try:
