@@ -461,3 +461,84 @@ def test_golden_scan_real_investigation_read_only():
         acs = [i for i in res["items"]
                if i["kind"] == "uncovered_ac" and i["severity"] == "high"]
         assert acs, "expected uncovered-AC high items for the SP4a live gap"
+
+
+# ---------------------------------------------------------------------------
+# Wave 3a — new collectors: next_action_type on stale findings (#7),
+# confirmatory-not-preregistered (#18), diagnostic_branch_needed (#19)
+# ---------------------------------------------------------------------------
+
+from pbg_superpowers.needs_attention import (
+    _stale_finding_items,
+    _unregistered_confirmatory_items,
+    _diagnostic_branch_items,
+)
+
+
+def test_stale_finding_item_carries_next_action_type():
+    spec = {"findings": [
+        {"id": "F1", "next_action": "Calibrate kS", "next_action_type": "calibrate"},
+        {"id": "F2", "next_action": "Look into it"},  # no enum
+    ]}
+    items = _stale_finding_items("s", spec)
+    by_ref = {it["ref"]: it for it in items}
+    assert by_ref["F1"]["next_action_type"] == "calibrate"
+    assert by_ref["F1"]["action_hint"] == "calibrate"
+    assert by_ref["F2"]["next_action_type"] is None
+    assert by_ref["F2"]["action_hint"] == "seed a study from this finding"
+
+
+def test_confirmatory_not_preregistered_item():
+    spec = {"study_type": "confirmatory",
+            "behavior_tests": [{"name": "t", "pass_if": {"low": 1}}]}
+    items = _unregistered_confirmatory_items("c1", spec)
+    assert len(items) == 1
+    assert items[0]["kind"] == "confirmatory_not_preregistered"
+    assert items[0]["severity"] == "medium"
+
+
+def test_confirmatory_preregistered_before_run_no_item():
+    spec = {
+        "study_type": "confirmatory",
+        "preregistered": {"registered_at": "2026-01-01"},
+        "runs": [{"name": "r", "status": "complete", "timestamp": "2026-05-01"}],
+    }
+    assert _unregistered_confirmatory_items("c1", spec) == []
+
+
+def test_non_confirmatory_never_flagged():
+    assert _unregistered_confirmatory_items("s", {"study_type": "exploratory"}) == []
+    assert _unregistered_confirmatory_items("s", {}) == []
+
+
+def test_diagnostic_branch_needed_on_failure():
+    spec = {
+        "behavior_tests": [{"name": "t1"}],
+        "runs": [{"name": "r", "status": "complete", "timestamp": "2026-05-01",
+                  "outcomes": {"t1": {"result": "fail"}}}],
+    }
+    items = _diagnostic_branch_items("s", spec)
+    assert len(items) == 1
+    assert items[0]["kind"] == "diagnostic_branch_needed"
+    assert items[0]["severity"] == "high"
+    assert items[0]["action_hint"] == "seed a diagnostic study"
+
+
+def test_diagnostic_branch_silent_when_already_seeded():
+    spec = {
+        "behavior_tests": [{"name": "t1"}],
+        "runs": [{"name": "r", "status": "complete", "timestamp": "2026-05-01",
+                  "outcomes": {"t1": {"result": "fail"}}}],
+        "conclusion_logic": {"if_primary_tests_fail": {
+            "diagnose": [{"hypothesis": "check X", "seeded_study": "s-diag"}]}},
+    }
+    assert _diagnostic_branch_items("s", spec) == []
+
+
+def test_diagnostic_branch_silent_on_pass():
+    spec = {
+        "behavior_tests": [{"name": "t1"}],
+        "runs": [{"name": "r", "status": "complete", "timestamp": "2026-05-01",
+                  "outcomes": {"t1": {"result": "pass"}}}],
+    }
+    assert _diagnostic_branch_items("s", spec) == []

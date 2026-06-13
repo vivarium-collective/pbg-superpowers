@@ -346,6 +346,10 @@ CHECKS = (
     "missing_simulation_set",
     # SP2b-ii: readout migration status — migratable (info) + needs_human (warning)
     "readout_migration_status",
+    # Wave 3a: workflow-typing enums (next_action_type / study_type) — soft
+    "next_action_type_missing",
+    "next_action_type_unknown",
+    "study_type_unknown",
 )
 
 
@@ -836,6 +840,113 @@ def _check_finding_references_unknown_expert_doc(ctx: _LintContext) -> None:
                 "Add it to workspace.yaml.expert_docs[] first."
             ),
             check="finding_references_unknown_expert_doc",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Wave 3a — workflow-typing soft checks (critique #7 / #10)
+# ---------------------------------------------------------------------------
+
+
+def _workflow_typing_enums() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The (next_action_type, study_type) enums, imported defensively so a
+    missing/renamed source module degrades to a built-in copy rather than
+    crashing the lint run."""
+    try:
+        from pbg_superpowers.seed_from_followup import NEXT_ACTION_TYPES
+    except Exception:  # noqa: BLE001
+        NEXT_ACTION_TYPES = (
+            "replicate", "calibrate", "ablate", "adversarially_probe",
+            "refine_representation", "split_hypothesis", "retire_hypothesis",
+            "escalate_model",
+        )
+    try:
+        from pbg_superpowers.rigor import STUDY_TYPES
+    except Exception:  # noqa: BLE001
+        STUDY_TYPES = (
+            "exploratory", "confirmatory", "diagnostic", "adversarial", "standard",
+        )
+    return tuple(NEXT_ACTION_TYPES), tuple(STUDY_TYPES)
+
+
+def _check_workflow_typing(ctx: _LintContext) -> None:
+    """Soft checks for the wave-3a workflow-typing enums (critique #7 / #10).
+
+    All warning-level (additive / optional fields — existing studies with
+    free-text ``next_action`` and no ``study_type`` keep validating):
+
+    - a finding (or followup proposal) sets ``next_action`` but no
+      ``next_action_type`` — mirrors the mechanism_origin gap nudge.
+    - ``next_action_type`` is set to a value outside the enum.
+    - ``study_type`` (or its ``kind`` / ``study_kind`` aliases) is set to a
+      value outside the enum.
+    """
+    spec = ctx.spec
+    next_action_types, study_types = _workflow_typing_enums()
+
+    def _check_action(container: dict, path: str) -> None:
+        na = container.get("next_action")
+        nat = container.get("next_action_type")
+        has_na = isinstance(na, str) and na.strip()
+        has_nat = isinstance(nat, str) and nat.strip()
+        if has_na and not has_nat:
+            ctx.add(
+                level="warning",
+                field_path=f"{path}.next_action_type",
+                message=(
+                    "next_action is set but next_action_type is absent. Add a "
+                    f"machine-readable next_action_type (one of {list(next_action_types)}) "
+                    "so the action is filterable; the free-text next_action stays "
+                    "as the rationale."
+                ),
+                check="next_action_type_missing",
+            )
+        if has_nat and nat.strip() not in next_action_types:
+            ctx.add(
+                level="warning",
+                field_path=f"{path}.next_action_type",
+                message=(
+                    f"next_action_type {nat.strip()!r} is not a recognised value. "
+                    f"Expected one of {list(next_action_types)}."
+                ),
+                check="next_action_type_unknown",
+            )
+
+    findings = spec.get("findings") or []
+    if isinstance(findings, list):
+        for idx, f in enumerate(findings):
+            if isinstance(f, dict):
+                _check_action(f, f"findings[{idx}]")
+
+    # followup proposals — both the v3 list and the discovery_implications nest.
+    for sect in ("followup_proposals", "followup_study_proposals"):
+        items = spec.get(sect) or []
+        if isinstance(items, list):
+            for idx, p in enumerate(items):
+                if isinstance(p, dict):
+                    _check_action(p, f"{sect}[{idx}]")
+    di = spec.get("discovery_implications")
+    if isinstance(di, dict):
+        items = di.get("followup_study_proposals") or []
+        if isinstance(items, list):
+            for idx, p in enumerate(items):
+                if isinstance(p, dict):
+                    _check_action(p, f"discovery_implications.followup_study_proposals[{idx}]")
+
+    # study_type enum (critique #10) — honor the kind / study_kind aliases.
+    raw_st = spec.get("study_type") or spec.get("kind") or spec.get("study_kind")
+    if isinstance(raw_st, str) and raw_st.strip() and raw_st.strip().lower() not in study_types:
+        field = "study_type" if spec.get("study_type") else (
+            "kind" if spec.get("kind") else "study_kind"
+        )
+        ctx.add(
+            level="warning",
+            field_path=field,
+            message=(
+                f"{field} {raw_st.strip()!r} is not a recognised study_type. "
+                f"Expected one of {list(study_types)}."
+            ),
+            check="study_type_unknown",
         )
 
 
@@ -2111,6 +2222,8 @@ _CHECK_FUNCTIONS = (
     _check_speculative_readout_paths,
     # SP2b-ii: readout migration status (migratable + needs_human)
     _check_readout_migration_status,
+    # Wave 3a: workflow-typing enums (next_action_type / study_type)
+    _check_workflow_typing,
 )
 
 

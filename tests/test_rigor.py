@@ -373,3 +373,127 @@ def test_finding_weight_tolerant_of_empty():
     assert res["weight"] == "weak"
     assert res["n_supporting"] == 0
     assert finding_evidential_weight(None, None)["weight"] == "weak"
+
+
+# ---------------------------------------------------------------------------
+# Wave 3a — _study_type, exploratory falsification, confirmatory dim,
+# intent label, and framework_metrics (critiques #10, #18, #1, #26)
+# ---------------------------------------------------------------------------
+
+from pbg_superpowers.rigor import _study_type, framework_metrics
+
+
+def _dim_ids(scorecard):
+    return {d["id"] for d in scorecard["dimensions"]}
+
+
+def test_study_type_reads_field_and_aliases():
+    assert _study_type({"study_type": "exploratory"}) == "exploratory"
+    # legacy kind / study_kind aliases still resolve
+    assert _study_type({"kind": "adversarial"}) == "adversarial"
+    assert _study_type({"study_kind": "confirmatory"}) == "confirmatory"
+    # study_type wins over the alias
+    assert _study_type({"study_type": "diagnostic", "kind": "adversarial"}) == "diagnostic"
+    # unknown / unset → standard
+    assert _study_type({"kind": "whatever"}) == "standard"
+    assert _study_type({}) == "standard"
+    assert _study_type(None) == "standard"
+
+
+def test_study_rigor_reports_study_type_and_no_extra_dim_for_standard():
+    sc = study_rigor({"name": "s", "runs": [{"name": "r"}]})
+    assert sc["study_type"] == "standard"
+    # back-compat: standard studies do NOT get the confirmatory preregistration dim
+    assert "preregistration" not in _dim_ids(sc)
+
+
+def test_confirmatory_pass_on_posthoc_criteria_warns():
+    spec = {
+        "name": "c1",
+        "study_type": "confirmatory",
+        "behavior_tests": [{"name": "t1", "pass_if": {"low": 1}}],
+        "runs": [{"name": "r1", "status": "complete", "timestamp": "2026-01-02",
+                  "outcomes": {"t1": {"result": "pass"}}}],
+        "gate_status": "passed",
+        # no preregistered block → can't show criteria predate the run
+    }
+    sc = study_rigor(spec)
+    assert "preregistration" in _dim_ids(sc)
+    assert _sev(sc, "preregistration") == WARN
+
+
+def test_confirmatory_preregistered_before_run_is_ok():
+    spec = {
+        "name": "c2",
+        "study_type": "confirmatory",
+        "behavior_tests": [{"name": "t1", "pass_if": {"low": 1}}],
+        "runs": [{"name": "r1", "status": "complete", "timestamp": "2026-05-01",
+                  "started_at": "2026-05-01", "outcomes": {"t1": {"result": "pass"}}}],
+        "gate_status": "passed",
+        "preregistered": {"registered_at": "2026-01-01",
+                          "thresholds": {"t1": {"low": 1}}},
+    }
+    sc = study_rigor(spec)
+    assert _sev(sc, "preregistration") == OK
+
+
+def test_exploratory_pass_not_counted_toward_falsification_exposure():
+    # A single exploratory study that passes everything is NOT falsification
+    # exposure (it observed, it didn't test a hypothesis).
+    explor = {"name": "e1", "study_type": "exploratory", "gate_status": "passed"}
+    inv = investigation_rigor({}, [explor])
+    fe = next(d for d in inv["dimensions"] if d["id"] == "falsification_exposure")
+    assert fe["severity"] == GAP
+
+    # A non-exploratory study that did NOT pass DOES expose falsification.
+    failed = {"name": "f1", "study_type": "standard", "gate_status": "failed"}
+    inv2 = investigation_rigor({}, [failed])
+    fe2 = next(d for d in inv2["dimensions"] if d["id"] == "falsification_exposure")
+    assert fe2["severity"] == OK
+
+
+def test_investigation_rigor_exposes_method_intent():
+    inv = investigation_rigor({}, [{"name": "s"}])
+    assert "intent" in inv
+    assert "METHOD" in inv["intent"]
+
+
+def test_framework_metrics_aggregates_existing_fields():
+    studies = [
+        {  # discriminating control + emergent interp + 3 seeds + excluded alt
+            "name": "s1",
+            "robustness": {"n_replicates": 3},
+            "controls": [{"kind": "negative", "result": "PASS", "observed": "fail"}],
+            "findings": [{"tier": "interpretation", "mechanism_origin": "emergent"}],
+            "alternative_hypotheses": [{"claim": "x", "status": "excluded"}],
+            "behavior_tests": [{"name": "t", "pass_if": {"low": 1}, "cites": ["k"]}],
+            "gate_status": "passed",
+        },
+        {  # no control, missing mechanism_origin, 1 seed, uncited band
+            "name": "s2",
+            "findings": [{"tier": "interpretation"}],
+            "behavior_tests": [{"name": "t2", "pass_if": {"low": 1}}],
+            "gate_status": "failed",
+        },
+    ]
+    invs = [{"acceptance_criteria": [{"behavior": "a", "study": "s1"},
+                                     {"behavior": "b"}]}]
+    m = framework_metrics(studies, invs)
+    assert m["n_studies"] == 2
+    assert m["n_investigations"] == 1
+    assert m["discriminating_controls"] == {"fraction": 0.5, "count": 1, "total": 2}
+    assert m["emergent_interpretations"] == {"fraction": 0.5, "count": 1, "total": 2}
+    assert m["missing_mechanism_origin"] == {"fraction": 0.5, "count": 1, "total": 2}
+    assert m["threshold_provenance"] == {"fraction": 0.5, "count": 1, "total": 2}
+    assert m["replication_coverage"] == {"fraction": 0.5, "count": 1, "total": 2}
+    assert m["ac_coverage"] == {"fraction": 0.5, "count": 1, "total": 2}
+    assert m["alternatives_excluded"] == {"fraction": 0.5, "count": 1, "total": 2}
+    # s2 failed (non-exploratory) → falsification exposure
+    assert m["falsification_exposure"]["count"] == 2  # s1 has disc control, s2 failed
+
+
+def test_framework_metrics_tolerant_of_empty():
+    m = framework_metrics([], [])
+    assert m["n_studies"] == 0
+    assert m["discriminating_controls"]["fraction"] is None
+    assert framework_metrics(None, None)["n_studies"] == 0

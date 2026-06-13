@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .study_outcomes import canonical_outcomes
+from .study_outcomes import canonical_outcomes, canonical_run
 from .study_status import _TEST_FAIL, _TEST_PASS, _TEST_SKIP, _study_tests
 
 
@@ -145,6 +145,81 @@ def diverges_from_authored(spec: dict) -> bool:
     if authored_mapped is None:
         return False
     return authored_mapped != verdict["result"]
+
+
+# ---------------------------------------------------------------------------
+# Pre-registration status (critique #18) — pure spec -> dict
+# ---------------------------------------------------------------------------
+
+
+def _run_start_timestamp(run: dict | None) -> str | None:
+    """The canonical run's start time, preferring ``started_at`` then the
+    generic ``timestamp`` (which study_outcomes derives from completed/started)."""
+    if not isinstance(run, dict):
+        return None
+    for k in ("started_at", "timestamp"):
+        v = run.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
+
+def preregistration_status(spec: dict) -> dict:
+    """Whether a study's acceptance criteria were PRE-registered (critique #18).
+
+    Pure ``spec -> {preregistered, registered_before_run, criteria_match}``:
+
+    - ``preregistered`` (bool) — a non-empty ``preregistered:`` block exists.
+    - ``registered_before_run`` (bool | None) — ``preregistered.registered_at``
+      is at or before the canonical run's start time. ``None`` when either
+      timestamp is missing (degrade gracefully — author-supplied ``registered_at``
+      is often absent).
+    - ``criteria_match`` (bool | None) — every name in
+      ``preregistered.thresholds`` resolves to a ``behavior_tests[]`` whose
+      ``pass_if`` equals the pre-registered threshold. ``None`` when no
+      ``thresholds`` were declared.
+
+    Tolerant of a minimal / absent block.
+    """
+    spec = spec or {}
+    prereg = spec.get("preregistered")
+    if not isinstance(prereg, dict) or not prereg:
+        return {
+            "preregistered": False,
+            "registered_before_run": None,
+            "criteria_match": None,
+        }
+
+    out: dict = {
+        "preregistered": True,
+        "registered_before_run": None,
+        "criteria_match": None,
+    }
+
+    # registered_before_run — compare the author-supplied registered_at (ISO
+    # string) to the canonical run's start. ISO-8601 strings order lexically.
+    registered_at = prereg.get("registered_at")
+    started = _run_start_timestamp(canonical_run(spec))
+    if (isinstance(registered_at, str) and registered_at.strip()
+            and isinstance(started, str) and started.strip()):
+        out["registered_before_run"] = registered_at.strip() <= started.strip()
+
+    # criteria_match — pre-registered thresholds vs the actual behavior_tests.
+    thresholds = prereg.get("thresholds")
+    if isinstance(thresholds, dict) and thresholds:
+        actual = {
+            t.get("name"): t.get("pass_if")
+            for t in _study_tests(spec)
+            if isinstance(t, dict) and t.get("name")
+        }
+        match = True
+        for name, predeclared in thresholds.items():
+            if name not in actual or actual.get(name) != predeclared:
+                match = False
+                break
+        out["criteria_match"] = match
+
+    return out
 
 
 # ---------------------------------------------------------------------------

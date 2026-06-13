@@ -332,3 +332,64 @@ runs:
         ge = spec["pipeline_gate"]["gate_evaluator"]
         assert "alpha" in ge["blocked_by"]
         assert "beta" not in ge["blocked_by"]
+
+
+# ---------------------------------------------------------------------------
+# Wave 3a — preregistration_status (critique #18)
+# ---------------------------------------------------------------------------
+
+from pbg_superpowers.study_verdict import preregistration_status
+
+
+def test_preregistration_status_absent_block_degrades():
+    res = preregistration_status({"name": "s"})
+    assert res == {"preregistered": False,
+                   "registered_before_run": None,
+                   "criteria_match": None}
+    assert preregistration_status(None)["preregistered"] is False
+
+
+def test_preregistration_registered_before_run_true():
+    spec = {
+        "preregistered": {"registered_at": "2026-01-01"},
+        "runs": [{"name": "r", "status": "complete", "timestamp": "2026-05-01"}],
+    }
+    res = preregistration_status(spec)
+    assert res["preregistered"] is True
+    assert res["registered_before_run"] is True
+
+
+def test_preregistration_registered_after_run_false():
+    spec = {
+        "preregistered": {"registered_at": "2026-06-01"},
+        "runs": [{"name": "r", "status": "complete", "started_at": "2026-05-01"}],
+    }
+    assert preregistration_status(spec)["registered_before_run"] is False
+
+
+def test_preregistration_missing_timestamp_is_none():
+    spec = {
+        "preregistered": {"thresholds": {"t1": {"low": 1}}},  # no registered_at
+        "runs": [{"name": "r", "status": "complete", "timestamp": "2026-05-01"}],
+    }
+    res = preregistration_status(spec)
+    assert res["registered_before_run"] is None  # degrade — no registered_at
+
+
+def test_preregistration_criteria_match():
+    spec = {
+        "preregistered": {"registered_at": "2026-01-01",
+                          "thresholds": {"t1": {"low": 1}, "t2": {"high": 5}}},
+        "behavior_tests": [{"name": "t1", "pass_if": {"low": 1}},
+                           {"name": "t2", "pass_if": {"high": 5}}],
+    }
+    assert preregistration_status(spec)["criteria_match"] is True
+
+
+def test_preregistration_criteria_mismatch():
+    spec = {
+        "preregistered": {"registered_at": "2026-01-01",
+                          "thresholds": {"t1": {"low": 9}}},
+        "behavior_tests": [{"name": "t1", "pass_if": {"low": 1}}],
+    }
+    assert preregistration_status(spec)["criteria_match"] is False

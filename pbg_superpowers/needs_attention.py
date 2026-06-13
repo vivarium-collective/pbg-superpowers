@@ -201,13 +201,93 @@ def _stale_finding_items(slug: str, spec: dict) -> list[dict]:
     for f in _stale_findings(spec):
         fid = str(f.get("id") or "")
         na = str(f.get("next_action") or "").strip()
-        items.append(_item(
+        # critique #7: when the finding carries a machine-readable
+        # next_action_type enum, use it as the action_hint and emit it on the
+        # item so the navigator can filter by action.
+        nat = f.get("next_action_type")
+        nat = nat.strip() if isinstance(nat, str) and nat.strip() else None
+        action_hint = nat if nat else "seed a study from this finding"
+        it = _item(
             "stale_finding", "low", slug, fid,
             f"Finding '{fid}' declared a next_action but no study was seeded",
             f"next_action set ('{na}') but no seeded_study.",
-            "seed a study from this finding",
-        ))
+            action_hint,
+        )
+        it["next_action_type"] = nat
+        items.append(it)
     return items
+
+
+def _unregistered_confirmatory_items(slug: str, spec: dict) -> list[dict]:
+    """Confirmatory studies whose criteria were not pre-registered (critique #18).
+
+    A confirmatory study that lacks a ``preregistered:`` block, or whose
+    ``registered_before_run`` is not established, can't show its criteria
+    predate the run. Medium when there's no block at all; low when a block
+    exists but the run ordering is unconfirmed.
+    """
+    if rigor._study_type(spec) != "confirmatory":
+        return []
+    try:
+        from .study_verdict import preregistration_status
+        pre = preregistration_status(spec)
+    except Exception:  # noqa: BLE001 — defensive cross-module import
+        return []
+    if pre.get("preregistered") and pre.get("registered_before_run") is True:
+        return []
+    if not pre.get("preregistered"):
+        severity = "medium"
+        detail = ("confirmatory study has no preregistered: block — the "
+                  "acceptance criteria can't be shown to predate the run.")
+    else:
+        severity = "low"
+        detail = ("confirmatory study is pre-registered but registered_before_run "
+                  "is not established (registered_at vs the run's start time).")
+    return [_item(
+        "confirmatory_not_preregistered", severity, slug, slug,
+        f"Confirmatory study '{slug}' is not pre-registered",
+        detail,
+        "pre-register criteria before running",
+    )]
+
+
+def _diagnostic_already_seeded(spec: dict) -> bool:
+    """True when a diagnose[] entry already carries a ``seeded_study`` stamp —
+    reuse of the seeded_study stamp pattern (critique #19) so a fixed/seeded
+    failure stops re-flagging."""
+    cl = spec.get("conclusion_logic")
+    fail = cl.get("if_primary_tests_fail") if isinstance(cl, dict) else None
+    diag = fail.get("diagnose") if isinstance(fail, dict) else None
+    if isinstance(diag, list):
+        for d in diag:
+            if isinstance(d, dict) and str(d.get("seeded_study") or "").strip():
+                return True
+    return False
+
+
+def _diagnostic_branch_items(slug: str, spec: dict) -> list[dict]:
+    """A failed / needs-calibration study with no seeded diagnostic child (#19).
+
+    When ``roll_up_verdict`` reports the study ``failed`` or
+    ``needs_calibration`` and no diagnose[] entry has been seeded yet, surface a
+    high-severity prompt to seed a diagnostic study.
+    """
+    try:
+        from .study_verdict import roll_up_verdict
+        result = roll_up_verdict(spec).get("result")
+    except Exception:  # noqa: BLE001 — defensive
+        return []
+    if result not in ("failed", "needs_calibration"):
+        return []
+    if _diagnostic_already_seeded(spec):
+        return []
+    return [_item(
+        "diagnostic_branch_needed", "high", slug, slug,
+        f"Study '{slug}' verdict is '{result}' with no diagnostic study seeded",
+        f"roll_up_verdict result is '{result}' but no "
+        "conclusion_logic.if_primary_tests_fail.diagnose entry has a seeded_study.",
+        "seed a diagnostic study",
+    )]
 
 
 _INVARIANT_STATUS_SEVERITY = {"invalidated": "high", "weakened": "medium"}
@@ -346,6 +426,14 @@ def scan_investigation(
             pass
         try:
             items.extend(_stale_finding_items(slug, spec))
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            items.extend(_unregistered_confirmatory_items(slug, spec))
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            items.extend(_diagnostic_branch_items(slug, spec))
         except Exception:  # noqa: BLE001
             pass
         try:
