@@ -1048,6 +1048,8 @@ def compute_outcomes(
                 else None
             )
             code_result = outcome.get("result")  # None for agent / needs_rerun
+            if code_result == "ungraded":
+                code_result = None  # a skip (couldn't grade), not a verdict — reconcile as no_authored, not divergent
 
             if code_result is not None and authored_result is not None:
                 reconcile = "agree" if code_result == authored_result else "divergent"

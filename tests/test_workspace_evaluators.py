@@ -2,8 +2,11 @@ import inspect
 import sys
 import textwrap
 from pathlib import Path
+from unittest.mock import patch
 
+import polars as pl
 import pytest
+import yaml
 
 from pbg_superpowers import study_evaluator as se
 
@@ -80,4 +83,60 @@ def test_compute_outcomes_threads_ws_root_into_evaluate_study():
     assert "evaluate_study(spec, reader, ws_root=ws_root)" in src, (
         "compute_outcomes must pass ws_root to evaluate_study so workspace "
         "evaluators are reachable"
+    )
+
+
+def test_compute_outcomes_ungraded_reconciles_as_no_authored(tmp_path: Path):
+    """An 'ungraded' outcome (workspace evaluator skip) must reconcile as
+    no_authored, NOT divergent, even when the authored result is PASS/FAIL."""
+    # Build a minimal store dir (just needs to exist and be resolvable)
+    store_dir = tmp_path / "store"
+    store_dir.mkdir()
+    (store_dir / "history").mkdir()
+
+    # Study: one test t1 with an authored PASS; run pointing at the store
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    (study_dir / "study.yaml").write_text(
+        textwrap.dedent(f"""\
+            schema_version: 4
+            name: ungraded-test-study
+            tests:
+            - name: t1
+              measure:
+                kind: report_card_axis
+              pass_if:
+                op: eq
+                value: 1
+            runs:
+            - name: run-a
+              emitter:
+                store: {store_dir}
+              outcomes:
+                t1:
+                  result: PASS
+                  detail: authored pass
+        """),
+        encoding="utf-8",
+    )
+
+    # Fake reader (content irrelevant — evaluate_study is monkeypatched)
+    fake_reader = object()
+
+    # evaluate_study returns an ungraded skip for t1
+    def _fake_evaluate_study(spec, reader, ws_root=None):
+        return {"t1": {"result": "ungraded", "evaluated_by": "report_card",
+                        "detail": "no verdict file found"}}
+
+    with (
+        patch("pbg_emitters.RunReader") as mock_cls,
+        patch.object(se, "evaluate_study", side_effect=_fake_evaluate_study),
+    ):
+        mock_cls.open.return_value = fake_reader
+        se.compute_outcomes(study_dir)
+
+    doc = yaml.safe_load((study_dir / "study.yaml").read_text())
+    reconcile = doc["runs"][0]["computed_outcomes"]["t1"]["reconcile"]
+    assert reconcile == "no_authored", (
+        f"Expected 'no_authored' for ungraded skip, got {reconcile!r}"
     )
