@@ -88,6 +88,19 @@ An Investigation slug is also a **git branch name** and a **worktree directory n
 
 The vivarium-dashboard exposes POST `/api/iset-create` for the initial scaffold (it emits a v2-shape `investigation.yaml` with the narrative spine commented in as TODO placeholders — executive, scientific_argument, biological_story, at_a_glance, glossary, guidelines). Update subcommands write YAML directly to disk using an atomic tmp-file + rename pattern, because the dashboard doesn't yet expose mutation endpoints for the narrative-spine fields. Read paths use GET `/api/iset-list` and GET `/api/iset/<name>`.
 
+## Rigor (investigation level)
+
+An investigation should defend its claims against a skeptical reader; the
+dashboard computes an **evidence & rigor scorecard** and the report surfaces it.
+At the investigation level, declare `competing_frameworks: [{name, relation}]`
+(compare your interpretive lens to alternatives) and include at least one member
+study with `kind: adversarial` (a system that should NOT qualify — the metric
+passes by rejecting it), so **adversarial coverage**, **falsification exposure**,
+and **comparative framing** all read `ok`. Drive each member study toward 8/8 per
+the per-study checklist. Full guide:
+[`docs/conventions/rigor-checklist.md`](../../docs/conventions/rigor-checklist.md).
+`pbg-autopoiesis` is the reference (5/5 investigation, every study 8/8).
+
 ## Common prelude
 
 All sub-commands:
