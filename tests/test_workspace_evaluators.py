@@ -1,3 +1,4 @@
+import inspect
 import sys
 import textwrap
 from pathlib import Path
@@ -72,3 +73,11 @@ def test_evaluate_test_unknown_kind_no_ws_still_agent():
     test = {"name": "t", "measure": {"kind": "nope"}, "pass_if": {"op": "x"}}
     out = se.evaluate_test(test, reader=None, ws_root=None)
     assert out["evaluated_by"] == "agent"
+
+
+def test_compute_outcomes_threads_ws_root_into_evaluate_study():
+    src = inspect.getsource(se.compute_outcomes)
+    assert "evaluate_study(spec, reader, ws_root=ws_root)" in src, (
+        "compute_outcomes must pass ws_root to evaluate_study so workspace "
+        "evaluators are reachable"
+    )

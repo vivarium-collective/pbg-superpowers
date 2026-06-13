@@ -1028,7 +1028,7 @@ def compute_outcomes(
                     "pip install 'pbg-superpowers[evaluator]'"
                 ) from _ie
             reader = RunReader.open(store_path)
-            outcomes = evaluate_study(spec, reader)
+            outcomes = evaluate_study(spec, reader, ws_root=ws_root)
         except Exception as exc:  # noqa: BLE001
             run["computed_outcomes"] = ruamel.yaml.CommentedMap(
                 {"_status": f"evaluation_error: {exc}"}
