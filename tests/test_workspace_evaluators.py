@@ -7,6 +7,14 @@ import pytest
 from pbg_superpowers import study_evaluator as se
 
 
+@pytest.fixture(autouse=True)
+def _evict_fixture_packages():
+    yield
+    for mod_name in list(sys.modules):
+        if mod_name.startswith(("pbg_toyws", "pbg_brokenws")):
+            del sys.modules[mod_name]
+
+
 def _make_fixture_ws(tmp_path: Path, kind: str = "toy_kind") -> Path:
     """A throwaway workspace whose pbg_<name>.evaluators registers one evaluator."""
     ws = tmp_path / "ws"

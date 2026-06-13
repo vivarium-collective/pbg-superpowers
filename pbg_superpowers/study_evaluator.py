@@ -5,8 +5,9 @@ DSL → per-test PASS/FAIL/PARTIAL + provenance.  B2b adds write-back of a
 parallel ``computed_outcomes`` block per run — never touching ``outcomes``.
 
 Public API:
-    evaluate_study(spec, reader) -> dict[str, dict]
-    evaluate_test(test, reader) -> dict
+    evaluate_study(spec, reader, ws_root=None) -> dict[str, dict]
+    evaluate_test(test, reader, ws_root=None) -> dict
+    load_workspace_evaluators(ws_root) -> dict[str, Callable]
     compute_outcomes(study_dir, ws_root=None) -> summary_dict
     _resolve_run_store(run, study_dir, ws_root=None) -> str | None
 
@@ -64,7 +65,7 @@ def clear_workspace_evaluator_cache() -> None:
     _WS_EVALUATOR_CACHE.clear()
 
 
-def _workspace_package_slug(ws_root) -> str:
+def _workspace_package_slug(ws_root: Any) -> str:
     """pbg_<name> for the workspace, mirroring build_core()'s home.
 
     NOTE: deliberately uses the pbg_<name> convention (where build_core lives),
@@ -81,7 +82,7 @@ def _workspace_package_slug(ws_root) -> str:
     return "pbg_" + str(name).replace("-", "_")
 
 
-def load_workspace_evaluators(ws_root) -> dict[str, Callable]:
+def load_workspace_evaluators(ws_root: Any) -> dict[str, Callable]:
     """Import the workspace's pbg_<name>.evaluators and collect its registrations.
 
     Returns a {measure_kind: callable} dict. Empty if ws_root is None, the
