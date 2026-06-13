@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import polars as pl
 
@@ -48,6 +48,69 @@ RUN_DATA_KINDS: frozenset[str] = frozenset({
 
 
 # ---------------------------------------------------------------------------
+# Pluggable workspace evaluators (generic seam — framework ships none).
+#
+# A workspace augments evaluation by shipping a `register_evaluators(registry)`
+# hook in its `pbg_<name>` package (the same package that hosts build_core()).
+# When evaluate_test hits a measure.kind that is NOT a native RUN_DATA_KIND, it
+# consults the workspace registry before falling back to the agent bucket.
+# ---------------------------------------------------------------------------
+
+_WS_EVALUATOR_CACHE: dict[str, dict[str, Callable]] = {}
+
+
+def clear_workspace_evaluator_cache() -> None:
+    """Drop the per-workspace evaluator cache (used by tests / after reinstall)."""
+    _WS_EVALUATOR_CACHE.clear()
+
+
+def _workspace_package_slug(ws_root) -> str:
+    """pbg_<name> for the workspace, mirroring build_core()'s home.
+
+    NOTE: deliberately uses the pbg_<name> convention (where build_core lives),
+    NOT workspace.yaml `package_path` (which points at the simulation package,
+    e.g. v2ecoli). dashes -> underscores.
+    """
+    import yaml
+    from pathlib import Path
+    name = "workspace"
+    wy = Path(ws_root) / "workspace.yaml"
+    if wy.is_file():
+        data = yaml.safe_load(wy.read_text(encoding="utf-8")) or {}
+        name = data.get("name") or name
+    return "pbg_" + str(name).replace("-", "_")
+
+
+def load_workspace_evaluators(ws_root) -> dict[str, Callable]:
+    """Import the workspace's pbg_<name>.evaluators and collect its registrations.
+
+    Returns a {measure_kind: callable} dict. Empty if ws_root is None, the
+    package/hook is absent, or the hook raises (a broken workspace hook must
+    never crash evaluation — degrade to the agent bucket). Cached per ws_root.
+    """
+    import sys
+    from pathlib import Path
+    if ws_root is None:
+        return {}
+    key = str(Path(ws_root).resolve())
+    if key in _WS_EVALUATOR_CACHE:
+        return _WS_EVALUATOR_CACHE[key]
+    registry: dict[str, Callable] = {}
+    try:
+        if key not in sys.path:
+            sys.path.insert(0, key)
+        pkg = _workspace_package_slug(ws_root)
+        mod = __import__(f"{pkg}.evaluators", fromlist=["register_evaluators"])
+        hook = getattr(mod, "register_evaluators", None)
+        if callable(hook):
+            hook(registry)
+    except Exception:  # noqa: BLE001 — never let a workspace hook break evaluation
+        registry = {}
+    _WS_EVALUATOR_CACHE[key] = registry
+    return registry
+
+
+# ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
 
@@ -63,40 +126,41 @@ class WindowNotSupported(Exception):
 # Public API
 # ---------------------------------------------------------------------------
 
-def evaluate_study(spec: dict, reader: "RunReader") -> dict[str, dict]:
+def evaluate_study(spec: dict, reader: "RunReader", ws_root=None) -> dict[str, dict]:
     """Evaluate all behavior tests in a study spec.
 
-    Args:
-        spec:   study YAML parsed as dict; tests keyed by 'tests' or 'behavior_tests'.
-        reader: RunReader opened on the run to evaluate against.
-
-    Returns:
-        Mapping from test name → outcome dict.
+    ws_root enables workspace-pluggable evaluators (load_workspace_evaluators);
+    omit it to evaluate with native kinds only.
     """
     tests = spec.get("tests") or spec.get("behavior_tests") or []
     results: dict[str, dict] = {}
     for i, test in enumerate(tests):
         name = test.get("name", f"test_{i}")
-        results[name] = evaluate_test(test, reader)
+        results[name] = evaluate_test(test, reader, ws_root=ws_root)
     return results
 
 
-def evaluate_test(test: dict, reader: "RunReader") -> dict:
+def evaluate_test(test: dict, reader: "RunReader", ws_root=None) -> dict:
     """Evaluate a single behavior test against a run.
 
-    Returns one of:
-        code outcome: result + measured_value + evaluated_by + operator + detail
-        agent bucket: evaluated_by="agent" + reason
-        needs_rerun:  evaluated_by="needs_rerun" + reason
+    Resolution order: native RUN_DATA_KIND (code) → workspace-registered
+    evaluator for the kind → agent bucket.
     """
     # 1. Require measure block
     measure = test.get("measure")
     if not measure:
         return _agent("missing measure block")
 
-    # 2. Kind must be in the closed run-data set
+    # 2. Kind: native run-data, else a workspace-registered evaluator, else agent
     kind = measure.get("kind", "")
     if kind not in RUN_DATA_KINDS:
+        registry = load_workspace_evaluators(ws_root)
+        evaluator = registry.get(kind)
+        if evaluator is not None:
+            try:
+                return evaluator(test, reader, ws_root)
+            except Exception as exc:  # noqa: BLE001
+                return _agent(f"workspace evaluator {kind!r} error: {exc}")
         return _agent(f"non-run-data kind: {kind!r}")
 
     # 3. Require pass_if block
