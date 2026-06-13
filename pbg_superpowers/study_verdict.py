@@ -123,6 +123,31 @@ def roll_up_verdict(spec: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Authored-vs-computed divergence (pure helper, reusable by callers/spines)
+# ---------------------------------------------------------------------------
+
+def diverges_from_authored(spec: dict) -> bool:
+    """True when the authored ``gate_status`` disagrees with the computed verdict.
+
+    Pure ``spec -> bool``. Maps the authored ``gate_status`` to the result
+    vocabulary and compares it to ``roll_up_verdict(spec)['result']``. Returns
+    False when there is no recognised authored ``gate_status`` (no comparison
+    possible) or when authored and computed agree.
+
+    This is the single canonical divergence rule used by
+    :func:`write_gate_evaluator`; it is exposed so other code (e.g. the
+    pbg-autopoiesis spine) can compute the same value without a file write.
+    """
+    spec = spec or {}
+    verdict = roll_up_verdict(spec)
+    authored_gate = str(spec.get("gate_status") or "").strip().lower()
+    authored_mapped = _GATE_STATUS_MAP.get(authored_gate)
+    if authored_mapped is None:
+        return False
+    return authored_mapped != verdict["result"]
+
+
+# ---------------------------------------------------------------------------
 # Task 2: write_gate_evaluator
 # ---------------------------------------------------------------------------
 
@@ -158,14 +183,8 @@ def write_gate_evaluator(study_dir) -> bool:
     spec = study_io.load_yaml_mapping(study_yaml)
     verdict = roll_up_verdict(spec)
 
-    # Authored gate_status → mapped result (for divergence check)
-    authored_gate = str(spec.get("gate_status") or "").strip().lower()
-    authored_mapped = _GATE_STATUS_MAP.get(authored_gate)
-    if authored_mapped is None:
-        # No recognised authored gate_status → divergence is undefined; default False
-        diverges = False
-    else:
-        diverges = authored_mapped != verdict["result"]
+    # Authored gate_status vs computed verdict (single canonical rule).
+    diverges = diverges_from_authored(spec)
 
     new_evaluator: dict = {
         "result": verdict["result"],
