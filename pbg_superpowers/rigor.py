@@ -30,13 +30,17 @@ study.yaml::
       n_replicates: 3
       seeds: [0, 1, 2]
       parameter_sweep: true
-    controls:                         # negative / discriminating / adversarial controls
+    controls:                         # negative / discriminating / calibration controls
       - name: externally-maintained-membrane
-        kind: negative                # negative | positive | adversarial
+        kind: negative                # negative | adversarial | positive | borderline
         hypothesis: "If the membrane is supplied externally, closure should FAIL."
         expected: fail-closure
         observed: fail-closure        # optional, after running
         result: PASS                  # PASS = control discriminated as expected
+      # A positive/borderline control calibrates the metric across its range (C4).
+    limitations: "What this result does NOT show: e.g. only one membrane function
+      (a geometric boundary) is modelled, not transport/signalling/energetics."
+      # or does_not_show: [...]
     alternative_hypotheses:           # competing explanations + how excluded
       - claim: "Survival gain is plain movement-to-resources, not sense-making."
         discriminated_by: "non-sensing motile control"
@@ -56,6 +60,9 @@ investigation.yaml::
         behavior: ...
         could_fail_if: "..."          # falsifiability note
         independent: false            # derived from theory-under-test vs independent perspective
+    competing_frameworks:             # compared interpretive lenses (C13)
+      - name: active inference
+        relation: "predicts the same survival gain; distinguished by ..."
 """
 from __future__ import annotations
 
@@ -70,6 +77,15 @@ _SEVERITY_RANK = {GAP: 0, WARN: 1, OK: 2}
 
 def _as_list(v: Any) -> list:
     return v if isinstance(v, list) else ([] if v is None else [v])
+
+
+def _nonempty(v: Any) -> bool:
+    """True if a str/list field carries actual content."""
+    if isinstance(v, str):
+        return bool(v.strip())
+    if isinstance(v, list):
+        return any(str(x).strip() for x in v)
+    return bool(v)
 
 
 def _findings(spec: dict) -> list[dict]:
@@ -138,20 +154,32 @@ def study_rigor(spec: dict) -> dict:
                          "single run — no replication across seeds declared "
                          "(add robustness.seeds or simulation_set.seeds)", ["C4"]))
 
-    # 2. Negative / discriminating controls [C1, C2]
+    # 2. Controls & calibration [C1, C2, C4] — a system that SHOULD fail
+    #    (discriminative power) AND a clearly-passing / borderline case so the
+    #    metric is calibrated across its range, not merely asserted.
     controls = [c for c in _as_list(spec.get("controls")) if isinstance(c, dict)]
     negs = [c for c in controls if (c.get("kind") or "").lower() in ("negative", "adversarial")]
+    pos = [c for c in controls if (c.get("kind") or "").lower() in ("positive", "borderline")]
     discriminating = [c for c in negs if str(c.get("result", "")).upper() == "PASS"]
-    if discriminating:
-        dims.append(_dim("negative_control", "Negative controls", OK,
-                         f"{len(discriminating)} discriminating control(s) behaved as expected", ["C1", "C2"]))
-    elif negs:
-        dims.append(_dim("negative_control", "Negative controls", WARN,
-                         f"{len(negs)} control(s) declared but none recorded a discriminating result", ["C1", "C2"]))
+    if not controls:
+        dims.append(_dim("negative_control", "Controls & calibration", GAP,
+                         "no controls — declare a system that SHOULD fail the criteria "
+                         "(externally-maintained / -supplied) plus a clearly-passing / borderline "
+                         "case so the metric is calibrated, not just asserted", ["C1", "C2", "C4"]))
+    elif not negs:
+        dims.append(_dim("negative_control", "Controls & calibration", WARN,
+                         "controls declared but none negative/adversarial — add a system that SHOULD fail", ["C1", "C2"]))
+    elif discriminating and pos:
+        dims.append(_dim("negative_control", "Controls & calibration", OK,
+                         f"{len(discriminating)} discriminating control(s) + a passing/borderline case "
+                         "calibrate the metric across its range", ["C1", "C2", "C4"]))
+    elif discriminating:
+        dims.append(_dim("negative_control", "Controls & calibration", WARN,
+                         "negative control discriminates, but no clearly-passing / borderline case to "
+                         "calibrate the metric across its range", ["C2", "C4"]))
     else:
-        dims.append(_dim("negative_control", "Negative controls", GAP,
-                         "no negative control — declare a system that SHOULD fail the criteria "
-                         "(e.g. externally-maintained / -supplied) to show discriminative power", ["C1", "C2"]))
+        dims.append(_dim("negative_control", "Controls & calibration", WARN,
+                         f"{len(negs)} control(s) declared but none recorded a discriminating result", ["C1", "C2"]))
 
     # 3. Alternative hypotheses [C3, C6, C8]
     alts = [a for a in _as_list(spec.get("alternative_hypotheses")) if isinstance(a, dict)]
@@ -216,6 +244,13 @@ def study_rigor(spec: dict) -> dict:
         dims.append(_dim("mechanism_origin", "Engineered vs emergent", OK,
                          "interpretation claims declare engineered vs emergent", ["C7"]))
 
+    # 7. Limitations / "what this does not show" [C8, C11]
+    has_lim = _nonempty(spec.get("limitations")) or _nonempty(spec.get("does_not_show"))
+    dims.append(_dim("limitations", "Limitations stated", OK if has_lim else GAP,
+                     "states what the result does not show" if has_lim
+                     else "no limitations / 'what this does not show' — add a short bound on the claim "
+                          "(scope/fidelity of the model, what is NOT demonstrated)", ["C8", "C11"]))
+
     score = {GAP: 0, WARN: 0, OK: 0}
     for d in dims:
         score[d["severity"]] = score.get(d["severity"], 0) + 1
@@ -253,18 +288,61 @@ def investigation_rigor(inv_spec: dict, study_specs: list[dict]) -> dict:
     adversarial = [s for s in study_specs if _is_adversarial(s)]
     if adversarial:
         dims.append(_dim("adversarial_coverage", "Adversarial testing", OK,
-                         f"{len(adversarial)} adversarial study(ies) designed to break the framework", ["C10"]))
+                         f"{len(adversarial)} adversarial study(ies) designed to break the framework", ["C10", "C12", "C15"]))
     else:
         dims.append(_dim("adversarial_coverage", "Adversarial testing", GAP,
-                         "no adversarial study — add one that tries to BREAK the criteria "
-                         "(can a meaningless/parasitic/externally-maintained system score well?)", ["C10"]))
+                         "no adversarial study — add one that tries to BREAK the criteria: "
+                         "mimic / parasitic-or-dependent / externally-maintained / random-cyclic "
+                         "systems that should NOT qualify", ["C10", "C12", "C15"]))
 
-    # Methodology strength [C9] — informational positive headline.
+    # Methodology strength [C9, C2, C14] — informational positive headline; the
+    # reusable methodological contribution the reviewers single out.
     has_dag = any("pipeline_gate" in (s or {}) for s in study_specs)
     has_ac = bool(_as_list(inv_spec.get("acceptance_criteria")))
     if has_dag and has_ac:
         dims.append(_dim("methodology", "Traceable methodology", OK,
-                         "study DAG + explicit acceptance criteria + pass/fail gates + traceable findings", ["C9"]))
+                         "capability ladder (study DAG) + explicit acceptance criteria + pass/fail "
+                         "gates + traceable findings — the reusable methodological contribution", ["C9", "C2", "C14"]))
+
+    # Falsification exposure [C1] — has the framework ever been seen to reject
+    # something? All-pass with no failing control reads as confirmation-only.
+    def _passed(s):
+        pg = (s or {}).get("pipeline_gate") or {}
+        ge = (pg.get("gate_evaluator") or {}) if isinstance(pg, dict) else {}
+        res = str(ge.get("result") or (s or {}).get("gate_status") or "").lower()
+        return res in ("passed", "pass")
+
+    def _has_discriminating_negative(s):
+        for c in _as_list((s or {}).get("controls")):
+            if (isinstance(c, dict)
+                    and (c.get("kind") or "").lower() in ("negative", "adversarial")
+                    and str(c.get("result", "")).upper() == "PASS"):
+                return True
+        return False
+
+    all_passed = bool(study_specs) and all(_passed(s) for s in study_specs)
+    visible_failure = (bool(adversarial)
+                       or any(_has_discriminating_negative(s) for s in study_specs)
+                       or (bool(study_specs) and not all_passed))
+    if visible_failure:
+        dims.append(_dim("falsification_exposure", "Falsification exposure", OK,
+                         "the framework has been shown to reject at least one system (a discriminating "
+                         "negative control, an adversarial study, or a non-passing result)", ["C1"]))
+    else:
+        dims.append(_dim("falsification_exposure", "Falsification exposure", GAP,
+                         "every study passes and nothing was shown to fail — the framework was not "
+                         "visibly exposed to falsification (add a control that fails, an adversarial "
+                         "study, or report a non-passing result)", ["C1"]))
+
+    # Competing theoretical frameworks [C13]
+    cf = _as_list(inv_spec.get("competing_frameworks"))
+    if cf:
+        dims.append(_dim("comparative_framing", "Comparative framing", OK,
+                         f"{len(cf)} competing theoretical framework(s) compared", ["C13"]))
+    else:
+        dims.append(_dim("comparative_framing", "Comparative framing", GAP,
+                         "no competing theoretical frameworks compared (viability theory, organizational / "
+                         "constraint closure, active inference) — show the findings uniquely support this lens", ["C13"]))
 
     # Aggregate the worst per-study gap count as an investigation signal.
     study_gaps = sum(sc["score"]["gap"] for sc in per_study.values())

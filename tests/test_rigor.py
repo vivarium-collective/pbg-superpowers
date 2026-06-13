@@ -22,7 +22,8 @@ def test_minimal_study_flags_the_reviewer_gaps():
     assert _sev(sc, "alternatives") == GAP           # C6 no alternatives
     assert _sev(sc, "claim_discipline") == WARN      # C3 untiered findings
     assert _sev(sc, "falsifiability") == GAP         # C5 no falsifiability note
-    assert sc["score"]["gap"] >= 4
+    assert _sev(sc, "limitations") == GAP            # C8/C11 no limitations
+    assert sc["score"]["gap"] >= 5
     assert "rigor dimensions addressed" in sc["summary"]
 
 
@@ -37,7 +38,10 @@ def test_well_defended_study_is_ok():
         "controls": [
             {"name": "external-membrane", "kind": "negative",
              "hypothesis": "supplied externally -> closure fails", "result": "PASS"},
+            {"name": "self-producing", "kind": "positive",
+             "hypothesis": "genuine self-production -> closure holds", "result": "PASS"},
         ],
+        "limitations": "Only the geometric-boundary aspect of the membrane is modelled.",
         "alternative_hypotheses": [
             {"claim": "plain movement to resources", "discriminated_by": "non-sensing control",
              "status": "excluded"},
@@ -52,7 +56,7 @@ def test_well_defended_study_is_ok():
     }
     sc = study_rigor(spec)
     for dim in ("replication", "negative_control", "alternatives",
-                "claim_discipline", "falsifiability", "mechanism_origin"):
+                "claim_discipline", "falsifiability", "mechanism_origin", "limitations"):
         assert _sev(sc, dim) == OK, f"{dim} should be OK"
     assert sc["score"]["gap"] == 0
 
@@ -79,6 +83,36 @@ def test_interpretation_without_origin_warns():
 # Investigation roll-up: adversarial coverage + methodology headline.
 # ---------------------------------------------------------------------------
 
+def test_controls_negative_only_warns_calibration():
+    # A negative control discriminates, but without a passing/borderline case the
+    # metric isn't calibrated across its range (review-2 C4).
+    sc = study_rigor({"controls": [{"name": "x", "kind": "negative", "result": "PASS"}]})
+    assert _sev(sc, "negative_control") == WARN
+
+
+def test_limitations_ok_when_declared():
+    assert _sev(study_rigor({"limitations": "does not model transport"}), "limitations") == OK
+    assert _sev(study_rigor({"does_not_show": ["transport", "signalling"]}), "limitations") == OK
+
+
+def test_investigation_falsification_and_comparative_gaps():
+    inv = {"acceptance_criteria": [{"study": "s1", "behavior": "b"}]}
+    specs = [{"name": "s1", "pipeline_gate": {"gate_evaluator": {"result": "passed"}}}]
+    ir = investigation_rigor(inv, specs)
+    assert _sev(ir, "falsification_exposure") == GAP   # C1 all-pass, nothing failed
+    assert _sev(ir, "comparative_framing") == GAP      # C13 no competing frameworks
+
+
+def test_discriminating_control_and_competing_frameworks_flip_to_ok():
+    inv = {"acceptance_criteria": [{"study": "s1", "behavior": "b"}],
+           "competing_frameworks": [{"name": "active inference"}]}
+    specs = [{"name": "s1", "pipeline_gate": {"gate_evaluator": {"result": "passed"}},
+              "controls": [{"kind": "negative", "result": "PASS"}]}]
+    ir = investigation_rigor(inv, specs)
+    assert _sev(ir, "falsification_exposure") == OK    # a system was shown to fail
+    assert _sev(ir, "comparative_framing") == OK
+
+
 def test_investigation_flags_missing_adversarial_study():
     inv = {"acceptance_criteria": [{"study": "s1", "behavior": "b"}]}
     specs = [{"name": "s1", "pipeline_gate": {}, "runs": [{}]}]
@@ -100,6 +134,6 @@ def test_investigation_recognizes_adversarial_study():
 
 def test_pure_no_mutation_and_tolerant_of_empty():
     # Empty / None specs must not raise.
-    assert study_rigor({})["score"]["total"] == 6
-    assert study_rigor(None)["score"]["total"] == 6
+    assert study_rigor({})["score"]["total"] == 7
+    assert study_rigor(None)["score"]["total"] == 7
     assert investigation_rigor(None, None)["per_study"] == {}
