@@ -13,7 +13,11 @@ from pathlib import Path
 import pytest
 
 from pbg_superpowers import study_io
-from pbg_superpowers.study_verdict import roll_up_verdict, write_gate_evaluator
+from pbg_superpowers.study_verdict import (
+    diverges_from_authored,
+    roll_up_verdict,
+    write_gate_evaluator,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +132,43 @@ class TestRollUpVerdictBlocked:
         assert v["result"] == "blocked"
         assert "t1" in v["blocked_by"]
         assert "t2" in v["blocked_by"]
+
+
+# ---------------------------------------------------------------------------
+# Public helper: diverges_from_authored (pure, reusable by the spine)
+# ---------------------------------------------------------------------------
+
+class TestDivergesFromAuthored:
+    def test_diverges_when_authored_disagrees(self):
+        spec = _spec(_named("t1"), {"t1": {"result": "FAIL"}})
+        spec["gate_status"] = "passed"
+        assert diverges_from_authored(spec) is True
+
+    def test_agrees_when_authored_matches(self):
+        spec = _spec(_named("t1"), {"t1": {"result": "FAIL"}})
+        spec["gate_status"] = "failed"
+        assert diverges_from_authored(spec) is False
+
+    def test_no_authored_gate_status_is_not_divergent(self):
+        spec = _spec(_named("t1"), {"t1": {"result": "PASS"}})
+        assert diverges_from_authored(spec) is False
+
+    def test_unrecognised_gate_status_is_not_divergent(self):
+        spec = _spec(_named("t1"), {"t1": {"result": "PASS"}})
+        spec["gate_status"] = "whatever"
+        assert diverges_from_authored(spec) is False
+
+    def test_tolerant_of_empty_spec(self):
+        assert diverges_from_authored({}) is False
+        assert diverges_from_authored(None) is False
+
+    def test_matches_write_gate_evaluator(self, tmp_path: Path):
+        # The helper value equals what write_gate_evaluator persists.
+        d = _study_dir(tmp_path, COMMENT_YAML)  # gate_status=passed, t1=FAIL
+        write_gate_evaluator(d)
+        spec = study_io.load_yaml_mapping(d / "study.yaml")
+        persisted = spec["pipeline_gate"]["gate_evaluator"]["diverges_from_authored"]
+        assert diverges_from_authored(spec) == persisted is True
 
 
 # ---------------------------------------------------------------------------

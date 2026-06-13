@@ -51,7 +51,6 @@ study.yaml::
         mechanism_origin: engineered  # engineered | emergent (for tier=interpretation)
         evidence: {from_test: agency-advantage}
     falsifiability: "Closure would fail if the membrane were externally supplied."
-      # or per behavior_test: could_fail_if: "..."
 
 investigation.yaml::
 
@@ -73,6 +72,11 @@ GAP = "gap"
 WARN = "warn"
 OK = "ok"
 _SEVERITY_RANK = {GAP: 0, WARN: 1, OK: 2}
+
+# Above this coefficient of variation, per-measure spread across seeds is
+# treated as cross-seed disagreement (item 14 — replication scores AGREEMENT,
+# not merely count). Deterministic threshold; tolerant of missing sub-fields.
+_HIGH_CV = 0.5
 
 
 def _as_list(v: Any) -> list:
@@ -124,6 +128,62 @@ def _replicate_count(spec: dict) -> tuple[int, bool]:
     return len(_as_list(spec.get("runs"))), False
 
 
+def _replication_agreement(spec: dict, n_rep: int) -> tuple[bool, str]:
+    """Inspect ``robustness`` for cross-seed AGREEMENT (item 14).
+
+    Returns ``(disagrees, reason)``. Two deterministic signals, both optional:
+
+    * ``robustness.per_measure[*]`` — an explicit ``cv`` (coefficient of
+      variation), else derived as ``|std / mean|``; a value above
+      :data:`_HIGH_CV` means the measure is not stable across seeds.
+    * ``robustness.seeds_with_advantage`` — count (int) or list of seeds, or a
+      fraction in ``(0, 1]`` (float); no majority (``<= 0.5`` of replicates)
+      means the seeds don't agree on the effect.
+
+    When no agreement evidence is present, returns ``(False, "")`` — the
+    replicate count alone stands. Tolerant of malformed sub-fields.
+    """
+    rob = spec.get("robustness")
+    if not isinstance(rob, dict):
+        return False, ""
+    reasons: list[str] = []
+
+    # 1. Per-measure coefficient of variation.
+    for m in _as_list(rob.get("per_measure")):
+        if not isinstance(m, dict):
+            continue
+        cv = m.get("cv")
+        if cv is None:
+            std = m.get("std")
+            mean = m.get("mean")
+            try:
+                if std is not None and mean not in (None, 0):
+                    cv = abs(float(std) / float(mean))
+            except (TypeError, ValueError, ZeroDivisionError):
+                cv = None
+        try:
+            if cv is not None and float(cv) > _HIGH_CV:
+                reasons.append(f"{m.get('name') or 'a measure'} CoV={float(cv):.2f}")
+        except (TypeError, ValueError):
+            pass
+
+    # 2. Majority agreement among seeds.
+    swa = rob.get("seeds_with_advantage")
+    frac = None
+    if isinstance(swa, bool):
+        frac = None
+    elif isinstance(swa, list):
+        frac = (len(swa) / n_rep) if n_rep else None
+    elif isinstance(swa, int):
+        frac = (swa / n_rep) if n_rep else None
+    elif isinstance(swa, float):
+        frac = swa if 0 < swa <= 1 else ((swa / n_rep) if n_rep else None)
+    if frac is not None and frac <= 0.5:
+        reasons.append("no majority of seeds shows the advantage")
+
+    return (bool(reasons), "; ".join(reasons))
+
+
 def _dim(id_: str, label: str, severity: str, detail: str, comments: list[str]) -> dict:
     return {"id": id_, "label": label, "severity": severity,
             "detail": detail, "comments": comments}
@@ -141,11 +201,18 @@ def study_rigor(spec: dict) -> dict:
     tiered = [f for f in findings if f.get("tier")]
     dims: list[dict] = []
 
-    # 1. Replication [C4]
+    # 1. Replication [C4] — score AGREEMENT, not just count (item 14): with
+    #    enough replicates, also check that the seeds actually agree.
     n_rep, sweep = _replicate_count(spec)
     if sweep or n_rep >= 3:
-        dims.append(_dim("replication", "Replication", OK,
-                         f"{n_rep} replicate(s)" + (" + parameter sweep" if sweep else ""), ["C4"]))
+        base = f"{n_rep} replicate(s)" + (" + parameter sweep" if sweep else "")
+        disagrees, why = _replication_agreement(spec, n_rep)
+        if disagrees:
+            dims.append(_dim("replication", "Replication", WARN,
+                             base + f" but seeds disagree ({why}) — "
+                             "result is not robust across seeds", ["C4"]))
+        else:
+            dims.append(_dim("replication", "Replication", OK, base, ["C4"]))
     elif n_rep == 2:
         dims.append(_dim("replication", "Replication", WARN,
                          "only 2 replicates — add seeds for a robustness claim", ["C4"]))
@@ -160,7 +227,10 @@ def study_rigor(spec: dict) -> dict:
     controls = [c for c in _as_list(spec.get("controls")) if isinstance(c, dict)]
     negs = [c for c in controls if (c.get("kind") or "").lower() in ("negative", "adversarial")]
     pos = [c for c in controls if (c.get("kind") or "").lower() in ("positive", "borderline")]
-    discriminating = [c for c in negs if str(c.get("result", "")).upper() == "PASS"]
+    # A control only discriminates if it actually ran (non-empty `observed`)
+    # AND recorded a PASS — a PASS with no observation earns no credit (item 15).
+    discriminating = [c for c in negs
+                      if str(c.get("result", "")).upper() == "PASS" and _nonempty(c.get("observed"))]
     if not controls:
         dims.append(_dim("negative_control", "Controls & calibration", GAP,
                          "no controls — declare a system that SHOULD fail the criteria "
@@ -183,10 +253,15 @@ def study_rigor(spec: dict) -> dict:
 
     # 3. Alternative hypotheses [C3, C6, C8] — also credit the Decide-phase
     #    synthesis (discovery_implications.alternate_hypotheses).
+    # [C5] Single alternatives source: prefer the Decide-phase synthesis
+    # (discovery_implications.alternate_hypotheses), fall back to the top-level
+    # alternative_hypotheses so authored prose anywhere still counts.
     _di = spec.get("discovery_implications") or {}
-    alts = [a for a in _as_list(spec.get("alternative_hypotheses")) if isinstance(a, dict)]
+    alts = []
     if isinstance(_di, dict):
-        alts += [a for a in _as_list(_di.get("alternate_hypotheses")) if isinstance(a, dict)]
+        alts = [a for a in _as_list(_di.get("alternate_hypotheses")) if isinstance(a, dict)]
+    if not alts:
+        alts = [a for a in _as_list(spec.get("alternative_hypotheses")) if isinstance(a, dict)]
     excluded = [a for a in alts if (a.get("status") or "").lower() == "excluded"]
     if excluded:
         dims.append(_dim("alternatives", "Alternative hypotheses", OK,
@@ -218,22 +293,13 @@ def study_rigor(spec: dict) -> dict:
             dims.append(_dim("claim_discipline", "Claim discipline", OK,
                              "findings tiered; interpretation claims carry evidence", ["C3"]))
 
-    # 5. Falsifiability of the bar [C5, C1]
+    # 5. Falsifiability of the bar [C5, C1] — the one authored field is
+    #    study.falsifiability (no producer ever writes a per-test could_fail_if).
     has_fals = bool(str(spec.get("falsifiability") or "").strip())
-    if not has_fals:
-        for t in _as_list(spec.get("behavior_tests")):
-            if isinstance(t, dict) and str(t.get("could_fail_if") or "").strip():
-                has_fals = True
-                break
-    if not has_fals:
-        for c in _as_list(spec.get("acceptance_criteria")):  # study-embedded, if any
-            if isinstance(c, dict) and str(c.get("could_fail_if") or "").strip():
-                has_fals = True
-                break
     dims.append(_dim("falsifiability", "Falsifiability", OK if has_fals else GAP,
                      "a 'how this could fail' note is declared" if has_fals
                      else "criteria read as tailored-to-succeed — add a falsifiability note "
-                          "(study.falsifiability or behavior_test.could_fail_if)", ["C5", "C1"]))
+                          "(study.falsifiability)", ["C5", "C1"]))
 
     # 6. Engineered vs emergent [C7]
     interp_no_origin = [f for f in interp if not (f.get("mechanism_origin"))]
@@ -335,7 +401,8 @@ def investigation_rigor(inv_spec: dict, study_specs: list[dict]) -> dict:
         for c in _as_list((s or {}).get("controls")):
             if (isinstance(c, dict)
                     and (c.get("kind") or "").lower() in ("negative", "adversarial")
-                    and str(c.get("result", "")).upper() == "PASS"):
+                    and str(c.get("result", "")).upper() == "PASS"
+                    and _nonempty(c.get("observed"))):  # item 15: must have run
                 return True
         return False
 

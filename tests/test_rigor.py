@@ -38,9 +38,11 @@ def test_well_defended_study_is_ok():
         "robustness": {"n_replicates": 5, "seeds": [0, 1, 2, 3, 4], "parameter_sweep": True},
         "controls": [
             {"name": "external-membrane", "kind": "negative",
-             "hypothesis": "supplied externally -> closure fails", "result": "PASS"},
+             "hypothesis": "supplied externally -> closure fails",
+             "observed": "fail-closure", "result": "PASS"},
             {"name": "self-producing", "kind": "positive",
-             "hypothesis": "genuine self-production -> closure holds", "result": "PASS"},
+             "hypothesis": "genuine self-production -> closure holds",
+             "observed": "closure-holds", "result": "PASS"},
         ],
         "limitations": "Only the geometric-boundary aspect of the membrane is modelled.",
         "alternative_hypotheses": [
@@ -109,7 +111,7 @@ def test_discriminating_control_and_competing_frameworks_flip_to_ok():
     inv = {"acceptance_criteria": [{"study": "s1", "behavior": "b"}],
            "competing_frameworks": [{"name": "active inference"}]}
     specs = [{"name": "s1", "pipeline_gate": {"gate_evaluator": {"result": "passed"}},
-              "controls": [{"kind": "negative", "result": "PASS"}]}]
+              "controls": [{"kind": "negative", "observed": "fail-closure", "result": "PASS"}]}]
     ir = investigation_rigor(inv, specs)
     assert _sev(ir, "falsification_exposure") == OK    # a system was shown to fail
     assert _sev(ir, "comparative_framing") == OK
@@ -149,3 +151,110 @@ def test_next_steps_dimension():
                 "next_steps") == OK
     # empty discovery_implications dict is still a gap
     assert _sev(study_rigor({"discovery_implications": {}}), "next_steps") == GAP
+
+
+# ---------------------------------------------------------------------------
+# Item 14 — replication scores AGREEMENT, not just count.
+# ---------------------------------------------------------------------------
+
+def test_replication_downgrades_on_high_cv():
+    # 3 replicates but one measure has a high coefficient of variation → WARN.
+    spec = {"robustness": {"n_replicates": 3, "seeds": [0, 1, 2],
+                           "per_measure": [{"name": "growth_rate", "mean": 1.0, "std": 0.9}]}}
+    assert _sev(study_rigor(spec), "replication") == WARN
+
+
+def test_replication_downgrades_on_explicit_cv():
+    spec = {"robustness": {"n_replicates": 3, "per_measure": [{"name": "g", "cv": 0.8}]}}
+    assert _sev(study_rigor(spec), "replication") == WARN
+
+
+def test_replication_ok_on_tight_seeds():
+    # 3 replicates and a tight measure → still OK.
+    spec = {"robustness": {"n_replicates": 3, "seeds": [0, 1, 2],
+                           "per_measure": [{"name": "growth_rate", "mean": 1.0, "std": 0.05}]}}
+    assert _sev(study_rigor(spec), "replication") == OK
+
+
+def test_replication_downgrades_without_seed_majority():
+    # 3 replicates but only 1 seed shows the advantage → no majority → WARN.
+    spec = {"robustness": {"n_replicates": 3, "seeds_with_advantage": 1}}
+    assert _sev(study_rigor(spec), "replication") == WARN
+
+
+def test_replication_ok_with_seed_majority():
+    spec = {"robustness": {"n_replicates": 3, "seeds_with_advantage": 2}}
+    assert _sev(study_rigor(spec), "replication") == OK
+
+
+def test_replication_seed_advantage_fraction():
+    # A float in (0, 1] is read as a fraction directly.
+    assert _sev(study_rigor({"robustness": {"n_replicates": 4, "seeds_with_advantage": 0.25}}),
+                "replication") == WARN
+    assert _sev(study_rigor({"robustness": {"n_replicates": 4, "seeds_with_advantage": 0.75}}),
+                "replication") == OK
+
+
+def test_replication_tolerant_of_malformed_robustness():
+    # Missing/garbage sub-fields must not raise and must not downgrade.
+    spec = {"robustness": {"n_replicates": 3,
+                           "per_measure": [{"name": "x"}, "junk", {"std": None}]}}
+    assert _sev(study_rigor(spec), "replication") == OK
+
+
+# ---------------------------------------------------------------------------
+# Item 15 — a control needs a non-empty `observed` to earn discriminating credit.
+# ---------------------------------------------------------------------------
+
+def test_control_pass_without_observed_earns_no_credit():
+    # PASS but never run (no `observed`) → no discriminating credit → WARN.
+    spec = {"controls": [
+        {"name": "external", "kind": "negative", "result": "PASS"},
+        {"name": "self", "kind": "positive", "result": "PASS"},
+    ]}
+    assert _sev(study_rigor(spec), "negative_control") == WARN
+
+
+def test_control_pass_with_observed_earns_credit():
+    spec = {"controls": [
+        {"name": "external", "kind": "negative", "observed": "fail-closure", "result": "PASS"},
+        {"name": "self", "kind": "positive", "observed": "closure-holds", "result": "PASS"},
+    ]}
+    assert _sev(study_rigor(spec), "negative_control") == OK
+
+
+def test_falsification_exposure_requires_observed_control():
+    # A discriminating-negative claim with no `observed` must NOT count as
+    # falsification exposure at the investigation level (item 15).
+    inv = {"acceptance_criteria": [{"study": "s1", "behavior": "b"}],
+           "competing_frameworks": [{"name": "active inference"}]}
+    specs = [{"name": "s1", "pipeline_gate": {"gate_evaluator": {"result": "passed"}},
+              "controls": [{"kind": "negative", "result": "PASS"}]}]  # no observed
+    ir = investigation_rigor(inv, specs)
+    assert _sev(ir, "falsification_exposure") == GAP
+
+
+# ---------------------------------------------------------------------------
+# Item 9 (C5) — alternatives source: DI preferred, top-level fallback.
+# ---------------------------------------------------------------------------
+
+def test_alternatives_from_discovery_implications():
+    spec = {"discovery_implications": {"alternate_hypotheses": [
+        {"claim": "a", "status": "excluded"}]}}
+    assert _sev(study_rigor(spec), "alternatives") == OK
+
+
+def test_alternatives_fallback_to_top_level():
+    spec = {"alternative_hypotheses": [{"claim": "a", "status": "excluded"}]}
+    assert _sev(study_rigor(spec), "alternatives") == OK
+
+
+# ---------------------------------------------------------------------------
+# Item 1 — could_fail_if is no longer a falsifiability source (dead field).
+# ---------------------------------------------------------------------------
+
+def test_could_fail_if_no_longer_counts_for_falsifiability():
+    spec = {"behavior_tests": [{"name": "t", "could_fail_if": "x"}]}
+    assert _sev(study_rigor(spec), "falsifiability") == GAP
+    # study.falsifiability remains the canonical (and only) source.
+    assert _sev(study_rigor({"falsifiability": "would fail if ..."}), "falsifiability") == OK
