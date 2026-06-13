@@ -59,10 +59,20 @@ def test_well_defended_study_is_ok():
         ],
         "falsifiability": "Survival advantage would vanish if the non-sensing control matched it.",
         "discovery_implications": {"followup_study_proposals": [{"id": "s2", "title": "next"}]},
+        # Wave 3b: a fully-calibrated metric + ≥2 generality axes turn the new
+        # dims green too.
+        "calibration_ladder": {
+            "metric": "survival", "known_fail": "external-membrane",
+            "known_pass": "self-producing", "borderline": "self-producing",
+        },
+    }
+    spec["findings"][1]["generality"] = {
+        "axes_tested": ["parameter_regime", "initial_conditions"], "level": "mechanism",
     }
     sc = study_rigor(spec)
     for dim in ("replication", "negative_control", "alternatives", "claim_discipline",
-                "falsifiability", "mechanism_origin", "limitations", "next_steps"):
+                "falsifiability", "mechanism_origin", "limitations", "next_steps",
+                "threshold_provenance", "metric_calibration", "generality"):
         assert _sev(sc, dim) == OK, f"{dim} should be OK"
     assert sc["score"]["gap"] == 0
 
@@ -140,8 +150,8 @@ def test_investigation_recognizes_adversarial_study():
 
 def test_pure_no_mutation_and_tolerant_of_empty():
     # Empty / None specs must not raise.
-    assert study_rigor({})["score"]["total"] == 8
-    assert study_rigor(None)["score"]["total"] == 8
+    assert study_rigor({})["score"]["total"] == 11
+    assert study_rigor(None)["score"]["total"] == 11
     assert investigation_rigor(None, None)["per_study"] == {}
 
 

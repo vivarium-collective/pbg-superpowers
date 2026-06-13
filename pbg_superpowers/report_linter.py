@@ -350,6 +350,12 @@ CHECKS = (
     "next_action_type_missing",
     "next_action_type_unknown",
     "study_type_unknown",
+    # Wave 3b: claim_scope / generality / lifecycle_state enums + floor — soft
+    "claim_scope_unknown",
+    "generality_axis_unknown",
+    "generality_level_unknown",
+    "lifecycle_state_unknown",
+    "lifecycle_state_below_floor",
 )
 
 
@@ -948,6 +954,135 @@ def _check_workflow_typing(ctx: _LintContext) -> None:
             ),
             check="study_type_unknown",
         )
+
+
+# ---------------------------------------------------------------------------
+# Wave 3b — claim_scope / generality / lifecycle_state soft checks (#21/#22/#25)
+# ---------------------------------------------------------------------------
+
+
+def _wave3b_enums() -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """The (claim_scopes, generality_axes, generality_levels, lifecycle_states)
+    enums, imported defensively so a missing/renamed source module degrades to
+    a built-in copy rather than crashing the lint run."""
+    try:
+        from pbg_superpowers.rigor import (
+            CLAIM_SCOPES, GENERALITY_AXES, GENERALITY_LEVELS,
+        )
+    except Exception:  # noqa: BLE001
+        CLAIM_SCOPES = (
+            "local-implementation", "mechanism", "behavioral", "theoretical", "generality",
+        )
+        GENERALITY_AXES = (
+            "parameter_regime", "initial_conditions", "discretization", "geometry",
+            "alt_implementation", "independent_authoring",
+        )
+        GENERALITY_LEVELS = ("instance_specific", "mechanism", "framework")
+    try:
+        from pbg_superpowers.study_verdict import LIFECYCLE_STATES
+    except Exception:  # noqa: BLE001
+        LIFECYCLE_STATES = (
+            "observation", "candidate-explanation", "tested-vs-alternatives",
+            "provisional-claim", "generalized", "retired", "superseded",
+        )
+    return (tuple(CLAIM_SCOPES), tuple(GENERALITY_AXES),
+            tuple(GENERALITY_LEVELS), tuple(LIFECYCLE_STATES))
+
+
+def _check_finding_scope_generality_lifecycle(ctx: _LintContext) -> None:
+    """Soft (warning-level) validation of the wave-3b per-finding enums and the
+    lifecycle floor (critique #21 / #22 / #25). All additive/optional — a study
+    with none of these fields validates silently.
+
+    - ``claim_scope`` outside the enum → warning.
+    - ``generality.axes_tested`` value outside the enum → warning.
+    - ``generality.level`` outside the enum → warning.
+    - ``lifecycle_state`` outside the enum → warning.
+    - authored ``lifecycle_state`` BELOW the derived floor → warning (#25).
+    """
+    findings = ctx.spec.get("findings") or []
+    if not isinstance(findings, list):
+        return
+    claim_scopes, gen_axes, gen_levels, lifecycle_states = _wave3b_enums()
+
+    # Defensive import of the lifecycle-floor helper.
+    try:
+        from pbg_superpowers.study_verdict import lifecycle_below_floor
+    except Exception:  # noqa: BLE001
+        lifecycle_below_floor = None  # type: ignore
+
+    for idx, f in enumerate(findings):
+        if not isinstance(f, dict):
+            continue
+        fid = f.get("id", f"<index-{idx}>")
+
+        # claim_scope enum (#21)
+        cs = f.get("claim_scope")
+        if isinstance(cs, str) and cs.strip() and cs.strip().lower() not in claim_scopes:
+            ctx.add(
+                level="warning",
+                field_path=f"findings[{idx}].claim_scope",
+                message=(
+                    f"Finding {fid!r} claim_scope {cs.strip()!r} is not a recognised value. "
+                    f"Expected one of {list(claim_scopes)}."
+                ),
+                check="claim_scope_unknown",
+            )
+
+        # generality enums (#22)
+        gen = f.get("generality")
+        if isinstance(gen, dict):
+            axes = gen.get("axes_tested")
+            if isinstance(axes, list):
+                for aidx, ax in enumerate(axes):
+                    if isinstance(ax, str) and ax.strip() and ax.strip() not in gen_axes:
+                        ctx.add(
+                            level="warning",
+                            field_path=f"findings[{idx}].generality.axes_tested[{aidx}]",
+                            message=(
+                                f"Finding {fid!r} generality axis {ax.strip()!r} is not a "
+                                f"recognised value. Expected one of {list(gen_axes)}."
+                            ),
+                            check="generality_axis_unknown",
+                        )
+            lvl = gen.get("level")
+            if isinstance(lvl, str) and lvl.strip() and lvl.strip() not in gen_levels:
+                ctx.add(
+                    level="warning",
+                    field_path=f"findings[{idx}].generality.level",
+                    message=(
+                        f"Finding {fid!r} generality.level {lvl.strip()!r} is not a recognised "
+                        f"value. Expected one of {list(gen_levels)}."
+                    ),
+                    check="generality_level_unknown",
+                )
+
+        # lifecycle_state enum + floor (#25)
+        ls = f.get("lifecycle_state")
+        if isinstance(ls, str) and ls.strip():
+            if ls.strip().lower() not in lifecycle_states:
+                ctx.add(
+                    level="warning",
+                    field_path=f"findings[{idx}].lifecycle_state",
+                    message=(
+                        f"Finding {fid!r} lifecycle_state {ls.strip()!r} is not a recognised value. "
+                        f"Expected one of {list(lifecycle_states)}."
+                    ),
+                    check="lifecycle_state_unknown",
+                )
+            elif lifecycle_below_floor is not None:
+                floor = lifecycle_below_floor(f, ctx.spec)
+                if floor:
+                    ctx.add(
+                        level="warning",
+                        field_path=f"findings[{idx}].lifecycle_state",
+                        message=(
+                            f"Finding {fid!r} authored lifecycle_state {ls.strip()!r} sits below "
+                            f"the derived floor {floor!r} (the rigor signals already justify a more "
+                            "mature state). Raise lifecycle_state to at least the floor."
+                        ),
+                        check="lifecycle_state_below_floor",
+                    )
 
 
 # ---------------------------------------------------------------------------
@@ -2224,6 +2359,8 @@ _CHECK_FUNCTIONS = (
     _check_readout_migration_status,
     # Wave 3a: workflow-typing enums (next_action_type / study_type)
     _check_workflow_typing,
+    # Wave 3b: claim_scope / generality / lifecycle_state enums + floor
+    _check_finding_scope_generality_lifecycle,
 )
 
 
