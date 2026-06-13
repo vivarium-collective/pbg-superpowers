@@ -23,7 +23,8 @@ def test_minimal_study_flags_the_reviewer_gaps():
     assert _sev(sc, "claim_discipline") == WARN      # C3 untiered findings
     assert _sev(sc, "falsifiability") == GAP         # C5 no falsifiability note
     assert _sev(sc, "limitations") == GAP            # C8/C11 no limitations
-    assert sc["score"]["gap"] >= 5
+    assert _sev(sc, "next_steps") == GAP             # Decide-phase: no discovery_implications
+    assert sc["score"]["gap"] >= 6
     assert "rigor dimensions addressed" in sc["summary"]
 
 
@@ -53,10 +54,11 @@ def test_well_defended_study_is_ok():
              "mechanism_origin": "emergent", "evidence": {"from_test": "agency-advantage"}},
         ],
         "falsifiability": "Survival advantage would vanish if the non-sensing control matched it.",
+        "discovery_implications": {"followup_study_proposals": [{"id": "s2", "title": "next"}]},
     }
     sc = study_rigor(spec)
-    for dim in ("replication", "negative_control", "alternatives",
-                "claim_discipline", "falsifiability", "mechanism_origin", "limitations"):
+    for dim in ("replication", "negative_control", "alternatives", "claim_discipline",
+                "falsifiability", "mechanism_origin", "limitations", "next_steps"):
         assert _sev(sc, dim) == OK, f"{dim} should be OK"
     assert sc["score"]["gap"] == 0
 
@@ -134,6 +136,16 @@ def test_investigation_recognizes_adversarial_study():
 
 def test_pure_no_mutation_and_tolerant_of_empty():
     # Empty / None specs must not raise.
-    assert study_rigor({})["score"]["total"] == 7
-    assert study_rigor(None)["score"]["total"] == 7
+    assert study_rigor({})["score"]["total"] == 8
+    assert study_rigor(None)["score"]["total"] == 8
     assert investigation_rigor(None, None)["per_study"] == {}
+
+
+def test_next_steps_dimension():
+    from pbg_superpowers.rigor import study_rigor, GAP, OK
+    assert _sev(study_rigor({}), "next_steps") == GAP
+    assert _sev(study_rigor({"follow_up_studies": ["s2"]}), "next_steps") == OK
+    assert _sev(study_rigor({"discovery_implications": {"followup_study_proposals": [{"id": "x"}]}}),
+                "next_steps") == OK
+    # empty discovery_implications dict is still a gap
+    assert _sev(study_rigor({"discovery_implications": {}}), "next_steps") == GAP

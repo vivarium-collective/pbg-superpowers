@@ -181,8 +181,12 @@ def study_rigor(spec: dict) -> dict:
         dims.append(_dim("negative_control", "Controls & calibration", WARN,
                          f"{len(negs)} control(s) declared but none recorded a discriminating result", ["C1", "C2"]))
 
-    # 3. Alternative hypotheses [C3, C6, C8]
+    # 3. Alternative hypotheses [C3, C6, C8] — also credit the Decide-phase
+    #    synthesis (discovery_implications.alternate_hypotheses).
+    _di = spec.get("discovery_implications") or {}
     alts = [a for a in _as_list(spec.get("alternative_hypotheses")) if isinstance(a, dict)]
+    if isinstance(_di, dict):
+        alts += [a for a in _as_list(_di.get("alternate_hypotheses")) if isinstance(a, dict)]
     excluded = [a for a in alts if (a.get("status") or "").lower() == "excluded"]
     if excluded:
         dims.append(_dim("alternatives", "Alternative hypotheses", OK,
@@ -244,12 +248,27 @@ def study_rigor(spec: dict) -> dict:
         dims.append(_dim("mechanism_origin", "Engineered vs emergent", OK,
                          "interpretation claims declare engineered vs emergent", ["C7"]))
 
-    # 7. Limitations / "what this does not show" [C8, C11]
-    has_lim = _nonempty(spec.get("limitations")) or _nonempty(spec.get("does_not_show"))
+    # 7. Limitations / "what this does not show" [C8, C11] — also credit the
+    #    Decide-phase remaining_uncertainties (the same "what's still open").
+    _di_lim = spec.get("discovery_implications") or {}
+    has_lim = (_nonempty(spec.get("limitations")) or _nonempty(spec.get("does_not_show"))
+               or (isinstance(_di_lim, dict) and _nonempty(_di_lim.get("remaining_uncertainties"))))
     dims.append(_dim("limitations", "Limitations stated", OK if has_lim else GAP,
                      "states what the result does not show" if has_lim
                      else "no limitations / 'what this does not show' — add a short bound on the claim "
                           "(scope/fidelity of the model, what is NOT demonstrated)", ["C8", "C11"]))
+
+    # 8. Next steps / discovery implications [Decide-phase completeness]
+    di = spec.get("discovery_implications")
+    if isinstance(di, dict):
+        has_di = any(_nonempty(v) for v in di.values())
+    else:
+        has_di = _nonempty(di)
+    has_next = has_di or _nonempty(spec.get("follow_up_studies"))
+    dims.append(_dim("next_steps", "Next steps", OK if has_next else GAP,
+                     "declares discovery implications / follow-up studies" if has_next
+                     else "no discovery_implications or follow_up_studies — state what this study "
+                          "changes and what to investigate next (the Decide phase)", ["next-steps"]))
 
     score = {GAP: 0, WARN: 0, OK: 0}
     for d in dims:
