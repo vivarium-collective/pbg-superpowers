@@ -864,3 +864,66 @@ def test_finding_without_statement_fires_for_empty_or_missing(tmp_path):
     assert any("F-empty" in f.message for f in errs)
     assert any("F-missing" in f.message for f in errs)
     assert not any("F-filled" in f.message for f in errs)
+
+
+# ---------------------------------------------------------------------------
+# Wave 3a — workflow-typing enum soft checks (critique #7 / #10)
+# ---------------------------------------------------------------------------
+
+import yaml as _yaml
+
+
+def _ws_with_study(tmp_path, spec):
+    ws = tmp_path / "ws"
+    sd = ws / "studies" / spec.get("name", "s")
+    sd.mkdir(parents=True)
+    (ws / "workspace.yaml").write_text("schema_version: 2\nname: ws\npackage_path: pbg_ws\n")
+    (sd / "study.yaml").write_text(_yaml.safe_dump(spec))
+    return ws
+
+
+def test_next_action_type_missing_warns(tmp_path):
+    ws = _ws_with_study(tmp_path, {
+        "name": "s", "findings": [
+            {"id": "F1", "statement": "x.", "next_action": "Calibrate kS"},
+        ]})
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    fs = by_check.get("next_action_type_missing", [])
+    assert len(fs) == 1
+    assert fs[0].level == "warning"
+
+
+def test_next_action_type_present_silent(tmp_path):
+    ws = _ws_with_study(tmp_path, {
+        "name": "s", "findings": [
+            {"id": "F1", "statement": "x.", "next_action": "Calibrate kS",
+             "next_action_type": "calibrate"},
+        ]})
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    assert by_check.get("next_action_type_missing", []) == []
+    assert by_check.get("next_action_type_unknown", []) == []
+
+
+def test_next_action_type_unknown_warns(tmp_path):
+    ws = _ws_with_study(tmp_path, {
+        "name": "s", "findings": [
+            {"id": "F1", "statement": "x.", "next_action": "do",
+             "next_action_type": "frobnicate"},
+        ]})
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    assert len(by_check.get("next_action_type_unknown", [])) == 1
+
+
+def test_study_type_unknown_warns(tmp_path):
+    ws = _ws_with_study(tmp_path, {"name": "s", "study_type": "speculative"})
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    assert len(by_check.get("study_type_unknown", [])) == 1
+
+
+def test_study_type_known_and_kind_alias_silent(tmp_path):
+    ws = _ws_with_study(tmp_path, {"name": "s", "study_type": "confirmatory"})
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    assert by_check.get("study_type_unknown", []) == []
+    ws2 = _ws_with_study(tmp_path / "b", {"name": "s2", "kind": "adversarial"})
+    by_check2 = _findings_by_check(lint_workspace_report(ws2))
+    assert by_check2.get("study_type_unknown", []) == []

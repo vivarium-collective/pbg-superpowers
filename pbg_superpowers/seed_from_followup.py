@@ -71,6 +71,22 @@ from pbg_superpowers.text_utils import first_sentence
 from pbg_superpowers.workspace_paths import WorkspacePaths
 
 
+# next_action_type vocabulary (critique #7) — an OPTIONAL machine-readable
+# classification of a finding's / proposal's free-text ``next_action``. The
+# free-text field stays as the rationale; this enum makes the action filterable
+# and routes the seed-from-followup flow.
+NEXT_ACTION_TYPES = (
+    "replicate",
+    "calibrate",
+    "ablate",
+    "adversarially_probe",
+    "refine_representation",
+    "split_hypothesis",
+    "retire_hypothesis",
+    "escalate_model",
+)
+
+
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
@@ -176,12 +192,20 @@ class SeedSource:
       finding (no pre-existing ``followup_proposals[]`` row to stamp).
     - ``family`` — the source family the proposal came from (for the
       parent stamp + provenance header).
+    - ``next_action_type`` — the originating finding's ``next_action_type``
+      enum (critique #7), carried through so the child / downstream writer can
+      route or label the action; ``None`` when unset.
+    - ``study_type`` — the intended ``study_type`` of the seeded child (e.g.
+      ``diagnostic`` for the conclusion_logic.diagnose family); ``None`` when
+      unset.
     """
 
     proposal: dict
     finding_id: str | None = None
     synthesized: bool = False
     family: str = ""
+    next_action_type: str | None = None
+    study_type: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +244,22 @@ def find_discovery_proposal(study: dict, proposal_id: str) -> dict | None:
         if isinstance(p, dict) and str(p.get("id")) == str(proposal_id):
             return p
     return None
+
+
+def _diagnose_entries(study: dict) -> list:
+    """The ``conclusion_logic.if_primary_tests_fail.diagnose`` list, if any.
+
+    The 5th seed family (critique #19): when a study FAILS, the author's
+    declared diagnose steps seed diagnostic child studies. Entries may be
+    plain strings or dicts; returned verbatim (order preserved)."""
+    cl = study.get("conclusion_logic")
+    if not isinstance(cl, dict):
+        return []
+    fail = cl.get("if_primary_tests_fail")
+    if not isinstance(fail, dict):
+        return []
+    out = fail.get("diagnose")
+    return out if isinstance(out, list) else []
 
 
 # ---------------------------------------------------------------------------
@@ -487,12 +527,62 @@ def _synthesize_proposal_from_finding(finding: dict, finding_id: str) -> dict:
     }
 
 
+def _finding_next_action_type(finding: dict | None) -> str | None:
+    """The finding's ``next_action_type`` enum value (critique #7), if a
+    non-empty string; else None. Not validated here (the report linter warns on
+    unknown values) — just carried through."""
+    if not isinstance(finding, dict):
+        return None
+    nat = finding.get("next_action_type")
+    return nat.strip() if isinstance(nat, str) and nat.strip() else None
+
+
+def _failing_test_names(study_spec: dict) -> list[str]:
+    """The tests that drove a study's failure verdict (for diagnose lineage)."""
+    try:
+        from .study_verdict import roll_up_verdict
+        return list(roll_up_verdict(study_spec).get("blocked_by") or [])
+    except Exception:  # noqa: BLE001 — defensive
+        return []
+
+
+def _synthesize_proposal_from_diagnose(
+    entry, idx: int, study_spec: dict,
+) -> dict:
+    """Build a proposal stub from a ``conclusion_logic...diagnose[]`` entry.
+
+    The 5th seed family (critique #19). The stub carries ``study_type:
+    diagnostic`` and the parent's failing-test lineage so the seeded child is
+    a diagnostic study wired back to the failure it investigates. A ``diagnose_idx``
+    locates the entry for the parent stamp."""
+    if isinstance(entry, dict):
+        text = (entry.get("hypothesis") or entry.get("text") or entry.get("note")
+                or entry.get("question") or entry.get("action") or "")
+        eid = entry.get("id")
+    else:
+        text = str(entry or "")
+        eid = None
+    text = text.strip()
+    frag = _slug_fragment(text) or f"diagnose-{idx}"
+    return {
+        "id": str(eid) if eid else f"diagnose-{frag}".rstrip("-"),
+        "title": first_sentence(text) or text or f"Diagnose failure {idx}",
+        "motivation": text or "Diagnose the failing primary test(s).",
+        "status": "proposed",
+        "study_type": "diagnostic",
+        "diagnose_idx": idx,
+        "failing_tests": _failing_test_names(study_spec),
+        "synthesized": True,
+    }
+
+
 def resolve_seed_source(
     study_spec: dict,
     *,
     finding_id: str | None = None,
     proposal_id: str | None = None,
     followup_idx: int | None = None,
+    diagnose_idx: int | None = None,
 ) -> SeedSource:
     """Normalize any of the four followup field families into one SeedSource.
 
@@ -507,6 +597,11 @@ def resolve_seed_source(
 
     ``finding_id`` may be combined with ``proposal_id`` to seed from an
     existing proposal while still stamping the finding's lineage.
+
+    ``diagnose_idx`` (critique #19) selects the Nth
+    ``conclusion_logic.if_primary_tests_fail.diagnose[]`` entry → a
+    ``study_type: diagnostic`` child stub stamped with the parent's failing-test
+    lineage.
 
     Raises ``ValueError`` when no selector is given or the selector doesn't
     resolve.
@@ -526,6 +621,8 @@ def resolve_seed_source(
                 f"finding {finding_id!r} not in findings (available: {sorted(avail)})"
             )
 
+    nat = _finding_next_action_type(finding)
+
     # 1. proposal_id — followup_proposals[] preferred, discovery_implications next.
     if proposal_id is not None and str(proposal_id) != "":
         prop = find_proposal(study_spec, proposal_id)
@@ -533,12 +630,14 @@ def resolve_seed_source(
             return SeedSource(
                 proposal=prop, finding_id=finding_id,
                 synthesized=False, family="followup_proposals",
+                next_action_type=nat,
             )
         prop = find_discovery_proposal(study_spec, proposal_id)
         if prop is not None:
             return SeedSource(
                 proposal=prop, finding_id=finding_id, synthesized=False,
                 family="discovery_implications.followup_study_proposals",
+                next_action_type=nat,
             )
         raise ValueError(
             f"proposal {proposal_id!r} not in followup_proposals or "
@@ -559,18 +658,38 @@ def resolve_seed_source(
         return SeedSource(
             proposal=fu, finding_id=finding_id,
             synthesized=False, family="follow_up_studies",
+            next_action_type=nat,
         )
 
-    # 3. finding_id alone — synthesize an inline proposal stub.
+    # 3. diagnose_idx — conclusion_logic.if_primary_tests_fail.diagnose[] (#19).
+    if diagnose_idx is not None:
+        entries = _diagnose_entries(study_spec)
+        if diagnose_idx < 0 or diagnose_idx >= len(entries):
+            raise ValueError(
+                f"diagnose_idx {diagnose_idx} out of range "
+                f"(parent has {len(entries)} conclusion_logic.if_primary_tests_fail.diagnose entries)"
+            )
+        stub = _synthesize_proposal_from_diagnose(
+            entries[diagnose_idx], diagnose_idx, study_spec,
+        )
+        return SeedSource(
+            proposal=stub, finding_id=finding_id, synthesized=True,
+            family="conclusion_logic.if_primary_tests_fail.diagnose",
+            next_action_type=nat, study_type="diagnostic",
+        )
+
+    # 4. finding_id alone — synthesize an inline proposal stub.
     if finding_id is not None:
         stub = _synthesize_proposal_from_finding(finding, finding_id)
         return SeedSource(
             proposal=stub, finding_id=finding_id,
             synthesized=True, family="finding.next_action",
+            next_action_type=nat,
         )
 
     raise ValueError(
-        "resolve_seed_source requires one of: finding_id, proposal_id, followup_idx"
+        "resolve_seed_source requires one of: finding_id, proposal_id, "
+        "followup_idx, diagnose_idx"
     )
 
 
@@ -650,6 +769,19 @@ def _stamp_parent(parent_yaml: Path, seed_source: "SeedSource", new_slug: str) -
                     f["seeded_study"] = new_slug
                     changed = True
                 break
+
+    # 1b. Diagnose family (#19): stamp the originating diagnose[] entry with
+    #     seeded_study (fill-absent) so a re-scan stops flagging the failure.
+    if seed_source.family == "conclusion_logic.if_primary_tests_fail.diagnose":
+        idx = seed_source.proposal.get("diagnose_idx")
+        cl = rt_spec.get("conclusion_logic")
+        fail = cl.get("if_primary_tests_fail") if isinstance(cl, dict) else None
+        diag = fail.get("diagnose") if isinstance(fail, dict) else None
+        if (isinstance(diag, list) and isinstance(idx, int)
+                and 0 <= idx < len(diag) and isinstance(diag[idx], dict)):
+            if not diag[idx].get("seeded_study"):
+                diag[idx]["seeded_study"] = new_slug
+                changed = True
 
     # 2. Stamp a REAL followup_proposals[] entry (skip synthesized stubs —
     #    they were never written to the parent).
@@ -738,6 +870,14 @@ def write_child_study(
             "proposal_id": proposal_id,
             "source": seed_source.family,
         }
+        # Diagnose family (#19): mark the child diagnostic + carry the failing
+        # tests it exists to investigate.
+        study_type = seed_source.study_type or proposal.get("study_type")
+        if study_type:
+            child["study_type"] = study_type
+        failing = proposal.get("failing_tests")
+        if failing:
+            child["seeded_from"]["failing_tests"] = list(failing)
 
     new_dir.mkdir(parents=True, exist_ok=False)
     try:

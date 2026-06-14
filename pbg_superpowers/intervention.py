@@ -18,6 +18,11 @@ Modes (config ``mode``):
 - ``scale``    — multiply the target by ``value`` (factor) each step.
 - ``add``      — add ``value`` each step; with ``per_step: true`` it adds
                  ``value * interval`` (a rate) instead of a fixed bolus.
+- ``decouple`` (alias ``remove``) — freeze the target at its value when the
+                 intervention *first became active*, severing this process's net
+                 contribution without nulling the pool (``delta = frozen - current``).
+- ``invert``   — flip the coupling sign each step: ``delta = -2 * current`` drives
+                 the store toward ``-current``.
 
 ``window: [t0, t1]`` (optional) restricts the intervention to ``t0 <= t < t1``
 (elapsed process time); omitted/empty ⇒ always active.
@@ -40,7 +45,7 @@ class Intervention(Process):
     """Apply a specific perturbation to one target store (see module docstring)."""
 
     config_schema = {
-        'mode': {'_type': 'string', '_default': 'set'},      # set|knockout|scale|add
+        'mode': {'_type': 'string', '_default': 'set'},      # set|knockout|scale|add|decouple(remove)|invert
         'value': {'_type': 'float', '_default': 0.0},
         'window': {'_type': 'list', '_default': []},          # [t0, t1] or []
         'per_step': {'_type': 'boolean', '_default': False},  # add-mode: value*interval
@@ -51,6 +56,9 @@ class Intervention(Process):
         # Elapsed process time, accumulated across update() calls so a `window`
         # can gate the intervention without a global-time wire.
         self._elapsed = 0.0
+        # decouple/remove: the target value captured the first step the
+        # intervention is active; None until then.
+        self._frozen = None
 
     def inputs(self):
         return {'target': 'float'}
@@ -80,6 +88,13 @@ class Intervention(Process):
             delta = current * (value - 1.0)
         elif mode == 'add':
             delta = value * interval if self.config.get('per_step') else value
+        elif mode in ('decouple', 'remove'):
+            # Freeze at the value the target held when first active.
+            if self._frozen is None:
+                self._frozen = current
+            delta = self._frozen - current
+        elif mode == 'invert':
+            delta = -2.0 * current
         else:
             delta = 0.0
 

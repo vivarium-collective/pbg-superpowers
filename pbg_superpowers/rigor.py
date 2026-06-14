@@ -78,6 +78,34 @@ _SEVERITY_RANK = {GAP: 0, WARN: 1, OK: 2}
 # not merely count). Deterministic threshold; tolerant of missing sub-fields.
 _HIGH_CV = 0.5
 
+# study_type vocabulary (critique #10). A study's intent governs how its
+# passing tests are read: an ``exploratory`` study OBSERVES (its passes are not
+# falsification credit); an ``adversarial`` study tries to BREAK the framework
+# (stronger credit); a ``confirmatory`` study tests pre-declared criteria (its
+# pass is downgraded when the criteria were not pre-registered — see #18);
+# ``diagnostic`` studies probe a prior failure; ``standard`` is the default.
+STUDY_TYPES = (
+    "exploratory", "confirmatory", "diagnostic", "adversarial", "standard",
+)
+
+
+def _study_type(spec: dict) -> str:
+    """Return the study's intent type (critique #10), generalizing the old
+    ``_is_adversarial`` helper.
+
+    Reads the explicit ``study_type`` field, falling back to the legacy
+    ``kind`` / ``study_kind`` aliases (so existing ``kind: adversarial`` studies
+    keep working). An unknown / unset value degrades to ``"standard"``.
+    """
+    spec = spec or {}
+    raw = str(
+        spec.get("study_type")
+        or spec.get("kind")
+        or spec.get("study_kind")
+        or ""
+    ).strip().lower()
+    return raw if raw in STUDY_TYPES else "standard"
+
 
 def _as_list(v: Any) -> list:
     return v if isinstance(v, list) else ([] if v is None else [v])
@@ -336,12 +364,39 @@ def study_rigor(spec: dict) -> dict:
                      else "no discovery_implications or follow_up_studies — state what this study "
                           "changes and what to investigate next (the Decide phase)", ["next-steps"]))
 
+    # 9. Pre-registration [C1; confirmatory studies only] (critique #18) — a
+    #    confirmatory study that passed on criteria registered only AFTER the run
+    #    reads as post-hoc; only added for confirmatory studies so the dimension
+    #    count for every other study type is unchanged (back-compat).
+    study_type = _study_type(spec)
+    if study_type == "confirmatory":
+        try:
+            from .study_verdict import preregistration_status, roll_up_verdict
+            prereg = preregistration_status(spec)
+            verdict = roll_up_verdict(spec)
+        except Exception:  # noqa: BLE001 — never let the import sink the scorecard
+            prereg, verdict = {}, {}
+        passed = str((verdict or {}).get("result") or "").lower() == "passed"
+        if not prereg.get("preregistered"):
+            dims.append(_dim("preregistration", "Pre-registration", WARN,
+                             "confirmatory study has no preregistered block — the criteria "
+                             "can't be shown to predate the run (add a preregistered: block "
+                             "with registered_at + thresholds)", ["C1"]))
+        elif passed and prereg.get("registered_before_run") is not True:
+            dims.append(_dim("preregistration", "Pre-registration", WARN,
+                             "confirmatory pass on post-hoc criteria — registered_before_run "
+                             "is not established (pre-register criteria before running)", ["C1"]))
+        else:
+            dims.append(_dim("preregistration", "Pre-registration", OK,
+                             "confirmatory criteria pre-registered before the run", ["C1"]))
+
     score = {GAP: 0, WARN: 0, OK: 0}
     for d in dims:
         score[d["severity"]] = score.get(d["severity"], 0) + 1
     addressed = score[OK]
     total = len(dims)
     return {
+        "study_type": study_type,
         "dimensions": dims,
         "score": {"gap": score[GAP], "warn": score[WARN], "ok": score[OK], "total": total},
         "summary": f"{addressed}/{total} rigor dimensions addressed"
@@ -500,11 +555,8 @@ def investigation_rigor(inv_spec: dict, study_specs: list[dict]) -> dict:
 
     dims: list[dict] = []
 
-    # Adversarial coverage [C10]
-    def _is_adversarial(s):
-        return (str((s or {}).get("kind") or (s or {}).get("study_kind") or "").lower()
-                == "adversarial")
-    adversarial = [s for s in study_specs if _is_adversarial(s)]
+    # Adversarial coverage [C10] — generalized through _study_type (critique #10).
+    adversarial = [s for s in study_specs if _study_type(s) == "adversarial"]
     if adversarial:
         dims.append(_dim("adversarial_coverage", "Adversarial testing", OK,
                          f"{len(adversarial)} adversarial study(ies) designed to break the framework", ["C10", "C12", "C15"]))
@@ -540,10 +592,14 @@ def investigation_rigor(inv_spec: dict, study_specs: list[dict]) -> dict:
                 return True
         return False
 
-    all_passed = bool(study_specs) and all(_passed(s) for s in study_specs)
+    # An exploratory study OBSERVES rather than tests a hypothesis (critique
+    # #10): its passing tests are observations, not falsification credit, so it
+    # is excluded from the "did everything just pass?" reasoning.
+    non_exploratory = [s for s in study_specs if _study_type(s) != "exploratory"]
+    all_passed = bool(non_exploratory) and all(_passed(s) for s in non_exploratory)
     visible_failure = (bool(adversarial)
                        or any(_has_discriminating_negative(s) for s in study_specs)
-                       or (bool(study_specs) and not all_passed))
+                       or (bool(non_exploratory) and not all_passed))
     if visible_failure:
         dims.append(_dim("falsification_exposure", "Falsification exposure", OK,
                          "the framework has been shown to reject at least one system (a discriminating "
@@ -577,9 +633,154 @@ def investigation_rigor(inv_spec: dict, study_specs: list[dict]) -> dict:
     for d in dims:
         score[d["severity"]] = score.get(d["severity"], 0) + 1
     return {
+        # Critique #1: this scorecard measures the METHOD, not the model. Make
+        # that intent explicit and distinct from the per-study model verdicts.
+        "intent": "how well the METHOD defends its claims (method-level, "
+                  "distinct from the per-study model verdicts)",
         "per_study": per_study,
         "dimensions": dims,
         "score": {"gap": score[GAP], "warn": score[WARN], "ok": score[OK], "total": len(dims)},
         "summary": f"{score[OK]}/{len(dims)} investigation rigor dimensions addressed"
                    + (f" · {score[GAP]} gap(s)" if score[GAP] else ""),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Framework-self metrics (critique #26) — aggregate the EXISTING rigor fields
+# across many studies / investigations into a single scorecard. Each metric is
+# a ``{fraction, count, total}`` triple (fraction is None when total == 0).
+# Pure, deterministic, and tolerant of missing inputs.
+# ---------------------------------------------------------------------------
+
+
+def _frac(count: int, total: int) -> dict:
+    return {
+        "fraction": (count / total) if total else None,
+        "count": count,
+        "total": total,
+    }
+
+
+def _has_discriminating_control(spec: dict) -> bool:
+    """≥1 negative/adversarial control that ran and recorded a PASS (reuses the
+    same ``discriminating`` predicate as :func:`study_rigor`)."""
+    for c in _as_list((spec or {}).get("controls")):
+        if (isinstance(c, dict)
+                and (c.get("kind") or "").lower() in ("negative", "adversarial")
+                and str(c.get("result", "")).upper() == "PASS"
+                and _nonempty(c.get("observed"))):
+            return True
+    return False
+
+
+def _study_passed(spec: dict) -> bool:
+    pg = (spec or {}).get("pipeline_gate") or {}
+    ge = (pg.get("gate_evaluator") or {}) if isinstance(pg, dict) else {}
+    res = str(ge.get("result") or (spec or {}).get("gate_status") or "").lower()
+    return res in ("passed", "pass")
+
+
+def _study_exposes_falsification(spec: dict) -> bool:
+    """A study contributes falsification exposure when it is adversarial, carries
+    a discriminating negative control, or (being non-exploratory) did NOT pass."""
+    st = _study_type(spec)
+    if st == "adversarial":
+        return True
+    if _has_discriminating_control(spec):
+        return True
+    if st != "exploratory" and not _study_passed(spec):
+        return True
+    return False
+
+
+def framework_metrics(study_specs: list[dict], inv_specs: list[dict]) -> dict:
+    """Aggregate existing rigor fields across studies/investigations (critique #26).
+
+    ``study_specs`` — member study specs (any order). ``inv_specs`` —
+    investigation specs (for AC coverage). Returns a dict of
+    ``{fraction, count, total}`` metrics plus ``n_studies`` / ``n_investigations``.
+    Pure; tolerant of ``None`` / empty inputs (a metric over an empty set has
+    ``fraction: None``). Reuses the existing predicates so it can't drift from
+    the per-study / per-investigation scorecards.
+    """
+    study_specs = [s for s in (study_specs or []) if isinstance(s, dict)]
+    inv_specs = [i for i in (inv_specs or []) if isinstance(i, dict)]
+    n_studies = len(study_specs)
+
+    # 1. Discriminating negative/adversarial control coverage.
+    n_disc = sum(1 for s in study_specs if _has_discriminating_control(s))
+
+    # 2. Interpretation-tier findings: emergent vs missing mechanism_origin.
+    interp_total = 0
+    emergent = 0
+    missing_origin = 0
+    for s in study_specs:
+        for f in _findings(s):
+            if (f.get("tier") or "").lower() != "interpretation":
+                continue
+            interp_total += 1
+            origin = (f.get("mechanism_origin") or "").strip().lower()
+            if origin == "emergent":
+                emergent += 1
+            elif not origin:
+                missing_origin += 1
+
+    # 3. Threshold-provenance coverage — behavior_tests / tests carrying a
+    #    quantitative band (pass_if or calibration_anchor) that also declare a
+    #    source (cites or calibration_anchor).
+    band_total = 0
+    band_cited = 0
+    for s in study_specs:
+        for section in ("behavior_tests", "tests"):
+            for t in _as_list(s.get(section)):
+                if not isinstance(t, dict):
+                    continue
+                if not (t.get("pass_if") or t.get("calibration_anchor")):
+                    continue
+                band_total += 1
+                if t.get("cites") or t.get("calibration_anchor"):
+                    band_cited += 1
+
+    # 4. Replication coverage — ≥3 replicates (reuse _replicate_count).
+    n_replicated = sum(1 for s in study_specs if _replicate_count(s)[0] >= 3)
+
+    # 5. AC coverage — 1 - |gaps|/|criteria| over all investigations' acceptance
+    #    criteria (a criterion is a gap when it has no ``study:`` link — the same
+    #    predicate linkage_index.ac_gating_matrix uses).
+    ac_total = 0
+    ac_covered = 0
+    for inv in inv_specs:
+        for crit in _as_list(inv.get("acceptance_criteria")):
+            if not isinstance(crit, dict):
+                continue
+            ac_total += 1
+            if crit.get("study"):
+                ac_covered += 1
+
+    # 6. Verdict-divergence rate (reuse study_verdict.diverges_from_authored).
+    n_divergent = 0
+    try:
+        from .study_verdict import diverges_from_authored
+        n_divergent = sum(1 for s in study_specs if diverges_from_authored(s))
+    except Exception:  # noqa: BLE001 — defensive cross-module import
+        pass
+
+    # 7. Falsification-exposure rate.
+    n_exposed = sum(1 for s in study_specs if _study_exposes_falsification(s))
+
+    # 8. Alternatives-excluded rate.
+    n_alts_excluded = sum(1 for s in study_specs if _excluded_alternatives(s))
+
+    return {
+        "n_studies": n_studies,
+        "n_investigations": len(inv_specs),
+        "discriminating_controls": _frac(n_disc, n_studies),
+        "emergent_interpretations": _frac(emergent, interp_total),
+        "missing_mechanism_origin": _frac(missing_origin, interp_total),
+        "threshold_provenance": _frac(band_cited, band_total),
+        "replication_coverage": _frac(n_replicated, n_studies),
+        "ac_coverage": _frac(ac_covered, ac_total),
+        "verdict_divergence": _frac(n_divergent, n_studies),
+        "falsification_exposure": _frac(n_exposed, n_studies),
+        "alternatives_excluded": _frac(n_alts_excluded, n_studies),
     }
