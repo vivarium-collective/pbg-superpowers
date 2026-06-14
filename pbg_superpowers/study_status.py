@@ -142,6 +142,35 @@ def _latest_run(runs: list[dict] | None) -> dict | None:
     return runs[-1] if runs else None
 
 
+def bucket_tests(tests: list[dict], outcomes: dict) -> dict[str, list[str]]:
+    """Bucket each test into pass/fail/skip/pending NAME-lists by the result a
+    report would render for it: ``outcomes[name].result`` lowercased, matched
+    against ``_TEST_PASS`` / ``_TEST_FAIL`` / ``_TEST_SKIP`` (no matching outcome
+    → ``pending``).
+
+    This is the single source of the per-test pass/fail/skip/pending
+    classification shared by :func:`count_test_outcomes` (which takes ``len`` of
+    each list) and :func:`study_verdict.roll_up_verdict` (which uses the names).
+    Callers select the ``outcomes`` source themselves, so this helper stays a
+    pure classification of a given outcomes map.
+    """
+    buckets: dict[str, list[str]] = {"pass": [], "fail": [], "skip": [], "pending": []}
+    for t in tests:
+        name = t.get("name") or ""
+        out = outcomes.get(name)
+        res = out.get("result") if isinstance(out, dict) else out
+        r = str(res or "").strip().lower()
+        if r in _TEST_PASS:
+            buckets["pass"].append(name)
+        elif r in _TEST_FAIL:
+            buckets["fail"].append(name)
+        elif r in _TEST_SKIP:
+            buckets["skip"].append(name)
+        else:
+            buckets["pending"].append(name)
+    return buckets
+
+
 def count_test_outcomes(spec: dict, runs: list[dict] | None) -> dict:
     """Count tests by the result a report WOULD render for each.
 
@@ -153,20 +182,14 @@ def count_test_outcomes(spec: dict, runs: list[dict] | None) -> dict:
     tests = _study_tests(spec)
     chosen = canonical_run(runs if runs is not None else spec.get("runs"))
     outcomes = (chosen or {}).get("outcomes") or {}
-    counts = {"total": len(tests), "pass": 0, "fail": 0, "skip": 0, "pending": 0}
-    for t in tests:
-        out = outcomes.get(t.get("name"))
-        res = out.get("result") if isinstance(out, dict) else out
-        r = str(res or "").strip().lower()
-        if r in _TEST_PASS:
-            counts["pass"] += 1
-        elif r in _TEST_FAIL:
-            counts["fail"] += 1
-        elif r in _TEST_SKIP:
-            counts["skip"] += 1
-        else:
-            counts["pending"] += 1
-    return counts
+    buckets = bucket_tests(tests, outcomes)
+    return {
+        "total": len(tests),
+        "pass": len(buckets["pass"]),
+        "fail": len(buckets["fail"]),
+        "skip": len(buckets["skip"]),
+        "pending": len(buckets["pending"]),
+    }
 
 
 def study_clarity_summary(spec: dict, runs: list[dict] | None = None) -> dict:
