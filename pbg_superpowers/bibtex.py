@@ -29,7 +29,25 @@ _BIB_CANDIDATES = (
 
 
 def bib_file(ws_root: Path) -> Path | None:
-    """The workspace's bibliography file by precedence, or None if none exist."""
+    """The workspace's bibliography file by precedence, or None if none exist.
+
+    Honors the workspace.yaml ``layout.references`` map first — a nested-layout
+    workspace keeps its bib at e.g. ``workspace/references/papers.bib`` (the flat
+    default for ``layout`` is ``<ws_root>/references``, so this also covers the
+    flat convention). Falls back to the historical flat candidates for
+    back-compat / robustness if the layout can't be resolved.
+    """
+    # 1) layout-aware references dir (covers both nested and flat layouts).
+    try:
+        from .paths import workspace_dir
+        ref_dir = Path(workspace_dir("references", root=ws_root))
+        for fname in ("papers.bib", "references.bib"):
+            p = ref_dir / fname
+            if p.is_file():
+                return p
+    except Exception:  # noqa: BLE001 — layout unresolvable → flat fallback below
+        pass
+    # 2) flat-layout back-compat candidates.
     for parts in _BIB_CANDIDATES:
         p = ws_root.joinpath(*parts)
         if p.is_file():
