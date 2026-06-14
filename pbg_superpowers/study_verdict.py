@@ -22,7 +22,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .study_outcomes import canonical_outcomes, canonical_run
-from .study_status import _TEST_FAIL, _TEST_PASS, _TEST_SKIP, _study_tests
+from .study_status import _study_tests, bucket_tests
 
 
 # ---------------------------------------------------------------------------
@@ -71,24 +71,15 @@ def roll_up_verdict(spec: dict) -> dict:
 
     has_any_run = bool((spec.get("runs") or []))
 
-    pass_names: list[str] = []
-    fail_names: list[str] = []
-    skip_names: list[str] = []
-    pending_names: list[str] = []
-
-    for t in tests:
-        name = t.get("name") or ""
-        out = outcomes.get(name)
-        res = out.get("result") if isinstance(out, dict) else out
-        r = str(res or "").strip().lower()
-        if r in _TEST_PASS:
-            pass_names.append(name)
-        elif r in _TEST_FAIL:
-            fail_names.append(name)
-        elif r in _TEST_SKIP:
-            skip_names.append(name)
-        else:
-            pending_names.append(name)
+    # Shared per-test classification (single-sourced in study_status.bucket_tests,
+    # also used by count_test_outcomes). The verdict rule below is what makes this
+    # the COMPUTED verdict — distinct from study_status.study_clarity_summary,
+    # which prefers the AUTHORED gate_status.
+    buckets = bucket_tests(tests, outcomes)
+    pass_names = buckets["pass"]
+    fail_names = buckets["fail"]
+    skip_names = buckets["skip"]
+    pending_names = buckets["pending"]
 
     # Verdict rule — canonical; must mirror server._condition_satisfied exactly.
     # Priority: FAIL > PARTIAL/SKIP (needs_calibration) > PASSED > no-run.
