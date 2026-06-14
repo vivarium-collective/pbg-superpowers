@@ -52,6 +52,7 @@ from typing import Iterable, Iterator
 import yaml
 
 from pbg_superpowers.bibtex import bib_keys
+from pbg_superpowers.rigor import run_is_emitter_backed
 from pbg_superpowers.workspace_paths import WorkspacePaths
 
 
@@ -243,6 +244,88 @@ def apply_overrides(
 
 
 # ---------------------------------------------------------------------------
+# Real-composite resolution (pure helper — registry supplied by the caller)
+# ---------------------------------------------------------------------------
+
+
+def _collect_composite_refs(spec: dict) -> list[str]:
+    """Every composite identifier a study spec REFERENCES, de-duplicated in
+    discovery order.
+
+    Collected from the canonical reference sites:
+
+    * ``baseline[].composite`` (a single dict or a list of dicts),
+    * ``conditions.baseline.composite`` and ``conditions.variants[].composite``,
+    * ``simulation_set[].composite`` and ``simulation_set[].base_model``.
+
+    Variant ``base_composite`` (which names a *baseline* by name, not a
+    registered composite id) is intentionally NOT collected.
+    """
+    refs: list[str] = []
+
+    def _add(v) -> None:
+        if isinstance(v, str) and v.strip():
+            refs.append(v.strip())
+
+    baseline = (spec or {}).get("baseline")
+    for b in (baseline if isinstance(baseline, list) else [baseline]):
+        if isinstance(b, dict):
+            _add(b.get("composite"))
+
+    conditions = (spec or {}).get("conditions")
+    if isinstance(conditions, dict):
+        cb = conditions.get("baseline")
+        for b in (cb if isinstance(cb, list) else [cb]):
+            if isinstance(b, dict):
+                _add(b.get("composite"))
+        variants = conditions.get("variants")
+        if isinstance(variants, list):
+            for v in variants:
+                if isinstance(v, dict):
+                    _add(v.get("composite"))
+
+    sim_set = (spec or {}).get("simulation_set")
+    if isinstance(sim_set, list):
+        for s in sim_set:
+            if isinstance(s, dict):
+                _add(s.get("composite"))
+                _add(s.get("base_model"))
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for r in refs:
+        if r not in seen:
+            seen.add(r)
+            out.append(r)
+    return out
+
+
+def unresolved_composite_refs(spec: dict, known_composite_ids) -> list[str]:
+    """Return the composite references a study DECLARES that are NOT in the
+    caller-supplied set of known (registered) composite ids.
+
+    Contract
+    --------
+    This helper is PURE: it has no access to a composite registry. The canonical
+    signal that a study references a *real* composite is that its
+    ``baseline[].composite`` (and the other reference sites collected by
+    :func:`_collect_composite_refs`) resolves in the workspace registry. Because
+    :mod:`pbg_superpowers.rigor` / this linter run on specs alone and cannot know
+    the registry, the CALLER (the dashboard, which owns ``/api/composites``)
+    passes ``known_composite_ids`` — the set/iterable of every registered
+    composite id — and this function returns every declared reference absent from
+    that set, de-duplicated and in declaration order. An empty result means all
+    referenced composites resolve.
+
+    Passing an empty / ``None`` ``known_composite_ids`` returns ALL declared
+    refs (every reference is "unresolved" against an empty registry) — callers
+    that don't yet have a registry should treat that as "unknown", not "all bad".
+    """
+    known = set(known_composite_ids or ())
+    return [r for r in _collect_composite_refs(spec) if r not in known]
+
+
+# ---------------------------------------------------------------------------
 # Discovery: walk a workspace and yield (slug, spec) pairs
 # ---------------------------------------------------------------------------
 
@@ -286,6 +369,95 @@ def _iter_study_specs(ws_root: Path) -> Iterator[tuple[str, dict]]:
             yield slug, data
 
 
+def _iter_investigation_specs(ws_root: Path) -> Iterator[tuple[str, dict]]:
+    """Yield (slug, parsed-yaml) for every modern v2 investigation under the
+    workspace — ``<ws_root>/investigations/<slug>/investigation.yaml``.
+
+    These carry the investigation-level narrative spine (executive /
+    scientific_argument / biological_story) the report renders, distinct from
+    the per-study specs in :func:`_iter_study_specs`.
+    """
+    wp = WorkspacePaths.load(ws_root)
+    invs_dir = wp.investigations
+    if not invs_dir.is_dir():
+        return
+    for child in sorted(invs_dir.iterdir()):
+        if not child.is_dir():
+            continue
+        spec_path = child / "investigation.yaml"
+        if not spec_path.is_file():
+            continue
+        try:
+            data = yaml.safe_load(spec_path.read_text()) or {}
+        except yaml.YAMLError:
+            continue
+        yield (data.get("name") or child.name), data
+
+
+# Investigation-level narrative spine — REQUIRED report sections (each can be
+# explicitly skipped for a genuinely slim investigation via
+# ``narrative_spine_skip: [...]``). These are the AUTHORED sections of the
+# investigation report; the computed sections (Decisions needed, Suggested
+# additions) are framework signals, not author-required, so they're excluded.
+_REQUIRED_INVESTIGATION_SECTIONS = (
+    ("executive", "Executive summary"),
+    ("scientific_argument", "Scientific argument"),
+    ("biological_story", "Biology — the mechanism"),
+)
+
+
+def _inv_section_present(spec: dict, key: str) -> bool:
+    """True when an investigation has authored content for a narrative section."""
+    v = spec.get(key)
+    if key == "biological_story":
+        return isinstance(v, str) and bool(v.strip())
+    if key == "executive":
+        ex = v if isinstance(v, dict) else {}
+        return bool(_is_nonempty(ex.get("what_is_this")) or _is_nonempty(ex.get("verdict")))
+    if key == "scientific_argument":
+        sa = v if isinstance(v, dict) else {}
+        return bool(_is_nonempty(sa.get("main_claim")))
+    return bool(v)
+
+
+def _check_investigation_narrative_spine(ctx: "_LintContext") -> None:
+    """REQUIRE the investigation-level narrative sections (Executive summary,
+    Scientific argument, Biology) — unless explicitly skipped.
+
+    Default severity is ``warning`` (blocking, publication-gating) so these
+    sections are effectively required. A genuinely slim investigation opts out
+    per-section by listing the section key in ``narrative_spine_skip: [...]``
+    (optionally with a ``narrative_spine_skip_reason``); a skipped section is
+    treated as satisfied. This is the "required, but explicitly skippable"
+    contract.
+    """
+    spec = ctx.spec or {}
+    skip = spec.get("narrative_spine_skip") or []
+    if not isinstance(skip, list):
+        skip = []
+    skip_set = {str(s).strip().lower() for s in skip}
+    for key, label in _REQUIRED_INVESTIGATION_SECTIONS:
+        if key in skip_set or _inv_section_present(spec, key):
+            continue
+        ctx.add(
+            level="warning",
+            field_path=key,
+            message=(
+                f"Investigation is missing the REQUIRED narrative section "
+                f"'{label}' (`{key}`). Author it for a reviewer-ready report, "
+                f"or — for a genuinely slim investigation — explicitly opt out "
+                f"by adding '{key}' to `narrative_spine_skip: [...]` "
+                f"(optionally with `narrative_spine_skip_reason`)."
+            ),
+            check="investigation_narrative_spine_required",
+        )
+
+
+_INVESTIGATION_CHECK_FUNCTIONS = (
+    _check_investigation_narrative_spine,
+)
+
+
 # ---------------------------------------------------------------------------
 # Individual checks
 # ---------------------------------------------------------------------------
@@ -314,6 +486,8 @@ CHECKS = (
     # Forward-drift: declares done/passed but records no runs (dnaa-replication
     # 2026-05-31 — reviewer couldn't tell if studies had actually run)
     "status_claims_done_no_runs_recorded",
+    # Future-proofing: study has runs but none persisted via an emitter
+    "runs_without_emitter",
     # Reviewer-facing clarity strip ambiguities (single-sourced from
     # study_status.study_clarity_summary): ran-but-tests-pending, gate↔test drift
     "reviewer_clarity_ambiguity",
@@ -323,6 +497,9 @@ CHECKS = (
     "viz_stale_vs_latest_run",
     # S3: v4 narrative-spine nudge — info-level reminder of missing dnaa-style sections
     "narrative_spine_completeness",
+    # Investigation-level narrative sections REQUIRED (skippable via
+    # narrative_spine_skip) — warning-level (publication-gating)
+    "investigation_narrative_spine_required",
     # Expert-handoff readiness — every study card in a generated report
     # should show baseline composites, variants planned, simulation
     # runs planned, readouts, runs, tests, and visualizations. When a
@@ -346,6 +523,16 @@ CHECKS = (
     "missing_simulation_set",
     # SP2b-ii: readout migration status — migratable (info) + needs_human (warning)
     "readout_migration_status",
+    # Wave 3a: workflow-typing enums (next_action_type / study_type) — soft
+    "next_action_type_missing",
+    "next_action_type_unknown",
+    "study_type_unknown",
+    # Wave 3b: claim_scope / generality / lifecycle_state enums + floor — soft
+    "claim_scope_unknown",
+    "generality_axis_unknown",
+    "generality_level_unknown",
+    "lifecycle_state_unknown",
+    "lifecycle_state_below_floor",
 )
 
 
@@ -837,6 +1024,242 @@ def _check_finding_references_unknown_expert_doc(ctx: _LintContext) -> None:
             ),
             check="finding_references_unknown_expert_doc",
         )
+
+
+# ---------------------------------------------------------------------------
+# Wave 3a — workflow-typing soft checks (critique #7 / #10)
+# ---------------------------------------------------------------------------
+
+
+def _workflow_typing_enums() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The (next_action_type, study_type) enums, imported defensively so a
+    missing/renamed source module degrades to a built-in copy rather than
+    crashing the lint run."""
+    try:
+        from pbg_superpowers.seed_from_followup import NEXT_ACTION_TYPES
+    except Exception:  # noqa: BLE001
+        NEXT_ACTION_TYPES = (
+            "replicate", "calibrate", "ablate", "adversarially_probe",
+            "refine_representation", "split_hypothesis", "retire_hypothesis",
+            "escalate_model",
+        )
+    try:
+        from pbg_superpowers.rigor import STUDY_TYPES
+    except Exception:  # noqa: BLE001
+        STUDY_TYPES = (
+            "exploratory", "confirmatory", "diagnostic", "adversarial", "standard",
+        )
+    return tuple(NEXT_ACTION_TYPES), tuple(STUDY_TYPES)
+
+
+def _check_workflow_typing(ctx: _LintContext) -> None:
+    """Soft checks for the wave-3a workflow-typing enums (critique #7 / #10).
+
+    All warning-level (additive / optional fields — existing studies with
+    free-text ``next_action`` and no ``study_type`` keep validating):
+
+    - a finding (or followup proposal) sets ``next_action`` but no
+      ``next_action_type`` — mirrors the mechanism_origin gap nudge.
+    - ``next_action_type`` is set to a value outside the enum.
+    - ``study_type`` (or its ``kind`` / ``study_kind`` aliases) is set to a
+      value outside the enum.
+    """
+    spec = ctx.spec
+    next_action_types, study_types = _workflow_typing_enums()
+
+    def _check_action(container: dict, path: str) -> None:
+        na = container.get("next_action")
+        nat = container.get("next_action_type")
+        has_na = isinstance(na, str) and na.strip()
+        has_nat = isinstance(nat, str) and nat.strip()
+        if has_na and not has_nat:
+            ctx.add(
+                level="warning",
+                field_path=f"{path}.next_action_type",
+                message=(
+                    "next_action is set but next_action_type is absent. Add a "
+                    f"machine-readable next_action_type (one of {list(next_action_types)}) "
+                    "so the action is filterable; the free-text next_action stays "
+                    "as the rationale."
+                ),
+                check="next_action_type_missing",
+            )
+        if has_nat and nat.strip() not in next_action_types:
+            ctx.add(
+                level="warning",
+                field_path=f"{path}.next_action_type",
+                message=(
+                    f"next_action_type {nat.strip()!r} is not a recognised value. "
+                    f"Expected one of {list(next_action_types)}."
+                ),
+                check="next_action_type_unknown",
+            )
+
+    findings = spec.get("findings") or []
+    if isinstance(findings, list):
+        for idx, f in enumerate(findings):
+            if isinstance(f, dict):
+                _check_action(f, f"findings[{idx}]")
+
+    # followup proposals — both the v3 list and the discovery_implications nest.
+    for sect in ("followup_proposals", "followup_study_proposals"):
+        items = spec.get(sect) or []
+        if isinstance(items, list):
+            for idx, p in enumerate(items):
+                if isinstance(p, dict):
+                    _check_action(p, f"{sect}[{idx}]")
+    di = spec.get("discovery_implications")
+    if isinstance(di, dict):
+        items = di.get("followup_study_proposals") or []
+        if isinstance(items, list):
+            for idx, p in enumerate(items):
+                if isinstance(p, dict):
+                    _check_action(p, f"discovery_implications.followup_study_proposals[{idx}]")
+
+    # study_type enum (critique #10) — honor the kind / study_kind aliases.
+    raw_st = spec.get("study_type") or spec.get("kind") or spec.get("study_kind")
+    if isinstance(raw_st, str) and raw_st.strip() and raw_st.strip().lower() not in study_types:
+        field = "study_type" if spec.get("study_type") else (
+            "kind" if spec.get("kind") else "study_kind"
+        )
+        ctx.add(
+            level="warning",
+            field_path=field,
+            message=(
+                f"{field} {raw_st.strip()!r} is not a recognised study_type. "
+                f"Expected one of {list(study_types)}."
+            ),
+            check="study_type_unknown",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Wave 3b — claim_scope / generality / lifecycle_state soft checks (#21/#22/#25)
+# ---------------------------------------------------------------------------
+
+
+def _wave3b_enums() -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """The (claim_scopes, generality_axes, generality_levels, lifecycle_states)
+    enums, imported defensively so a missing/renamed source module degrades to
+    a built-in copy rather than crashing the lint run."""
+    try:
+        from pbg_superpowers.rigor import (
+            CLAIM_SCOPES, GENERALITY_AXES, GENERALITY_LEVELS,
+        )
+    except Exception:  # noqa: BLE001
+        CLAIM_SCOPES = (
+            "local-implementation", "mechanism", "behavioral", "theoretical", "generality",
+        )
+        GENERALITY_AXES = (
+            "parameter_regime", "initial_conditions", "discretization", "geometry",
+            "alt_implementation", "independent_authoring",
+        )
+        GENERALITY_LEVELS = ("instance_specific", "mechanism", "framework")
+    try:
+        from pbg_superpowers.study_verdict import LIFECYCLE_STATES
+    except Exception:  # noqa: BLE001
+        LIFECYCLE_STATES = (
+            "observation", "candidate-explanation", "tested-vs-alternatives",
+            "provisional-claim", "generalized", "retired", "superseded",
+        )
+    return (tuple(CLAIM_SCOPES), tuple(GENERALITY_AXES),
+            tuple(GENERALITY_LEVELS), tuple(LIFECYCLE_STATES))
+
+
+def _check_finding_scope_generality_lifecycle(ctx: _LintContext) -> None:
+    """Soft (warning-level) validation of the wave-3b per-finding enums and the
+    lifecycle floor (critique #21 / #22 / #25). All additive/optional — a study
+    with none of these fields validates silently.
+
+    - ``claim_scope`` outside the enum → warning.
+    - ``generality.axes_tested`` value outside the enum → warning.
+    - ``generality.level`` outside the enum → warning.
+    - ``lifecycle_state`` outside the enum → warning.
+    - authored ``lifecycle_state`` BELOW the derived floor → warning (#25).
+    """
+    findings = ctx.spec.get("findings") or []
+    if not isinstance(findings, list):
+        return
+    claim_scopes, gen_axes, gen_levels, lifecycle_states = _wave3b_enums()
+
+    # Defensive import of the lifecycle-floor helper.
+    try:
+        from pbg_superpowers.study_verdict import lifecycle_below_floor
+    except Exception:  # noqa: BLE001
+        lifecycle_below_floor = None  # type: ignore
+
+    for idx, f in enumerate(findings):
+        if not isinstance(f, dict):
+            continue
+        fid = f.get("id", f"<index-{idx}>")
+
+        # claim_scope enum (#21)
+        cs = f.get("claim_scope")
+        if isinstance(cs, str) and cs.strip() and cs.strip().lower() not in claim_scopes:
+            ctx.add(
+                level="warning",
+                field_path=f"findings[{idx}].claim_scope",
+                message=(
+                    f"Finding {fid!r} claim_scope {cs.strip()!r} is not a recognised value. "
+                    f"Expected one of {list(claim_scopes)}."
+                ),
+                check="claim_scope_unknown",
+            )
+
+        # generality enums (#22)
+        gen = f.get("generality")
+        if isinstance(gen, dict):
+            axes = gen.get("axes_tested")
+            if isinstance(axes, list):
+                for aidx, ax in enumerate(axes):
+                    if isinstance(ax, str) and ax.strip() and ax.strip() not in gen_axes:
+                        ctx.add(
+                            level="warning",
+                            field_path=f"findings[{idx}].generality.axes_tested[{aidx}]",
+                            message=(
+                                f"Finding {fid!r} generality axis {ax.strip()!r} is not a "
+                                f"recognised value. Expected one of {list(gen_axes)}."
+                            ),
+                            check="generality_axis_unknown",
+                        )
+            lvl = gen.get("level")
+            if isinstance(lvl, str) and lvl.strip() and lvl.strip() not in gen_levels:
+                ctx.add(
+                    level="warning",
+                    field_path=f"findings[{idx}].generality.level",
+                    message=(
+                        f"Finding {fid!r} generality.level {lvl.strip()!r} is not a recognised "
+                        f"value. Expected one of {list(gen_levels)}."
+                    ),
+                    check="generality_level_unknown",
+                )
+
+        # lifecycle_state enum + floor (#25)
+        ls = f.get("lifecycle_state")
+        if isinstance(ls, str) and ls.strip():
+            if ls.strip().lower() not in lifecycle_states:
+                ctx.add(
+                    level="warning",
+                    field_path=f"findings[{idx}].lifecycle_state",
+                    message=(
+                        f"Finding {fid!r} lifecycle_state {ls.strip()!r} is not a recognised value. "
+                        f"Expected one of {list(lifecycle_states)}."
+                    ),
+                    check="lifecycle_state_unknown",
+                )
+            elif lifecycle_below_floor is not None:
+                floor = lifecycle_below_floor(f, ctx.spec)
+                if floor:
+                    ctx.add(
+                        level="warning",
+                        field_path=f"findings[{idx}].lifecycle_state",
+                        message=(
+                            f"Finding {fid!r} authored lifecycle_state {ls.strip()!r} sits below "
+                            f"the derived floor {floor!r} (the rigor signals already justify a more "
+                            "mature state). Raise lifecycle_state to at least the floor."
+                        ),
+                        check="lifecycle_state_below_floor",
+                    )
 
 
 # ---------------------------------------------------------------------------
@@ -1524,6 +1947,49 @@ def _check_runs_yaml_vs_db_drift(ctx: _LintContext) -> None:
     )
 
 
+def _check_runs_without_emitter(ctx: _LintContext) -> None:
+    """Soft-WARN: a study records runs but none are persisted via an emitter.
+
+    Future-proofing (composites + emitters): every investigation should persist
+    its run trajectories via an emitter (sqlite / parquet / xarray) so results are
+    reproducible from disk, not just summarised. A run record evidences this by
+    carrying an ``emitter`` or a run-db reference (see
+    :func:`pbg_superpowers.rigor.run_is_emitter_backed`) — the same predicate the
+    ``run_persistence`` rigor dimension uses.
+
+    Warning-level (non-blocking). Silent when:
+
+    - the study records no ``runs[]`` (nothing to persist), or
+    - at least one run record IS emitter-backed, or
+    - ``studies/<slug>/runs.db`` exists with rows on disk — the canonical
+      persistence (F2) is present even if the YAML records don't restate it, so
+      warning would be a false positive.
+    """
+    runs = [r for r in (ctx.spec.get("runs") or []) if isinstance(r, dict)]
+    if not runs:
+        return
+    if any(run_is_emitter_backed(r) for r in runs):
+        return
+    # Canonical persistence may live in runs.db even when the YAML records omit
+    # the emitter field — don't warn when the DB has rows on disk.
+    try:
+        if _runs_db_rows(ctx.ws_root, ctx.slug):
+            return
+    except Exception:  # noqa: BLE001 — defensive: a missing/locked DB is not "persisted"
+        pass
+    ctx.add(
+        level="warning",
+        field_path="runs",
+        message=(
+            f"study records {len(runs)} run(s) but none are persisted via an emitter "
+            "(no run carries emitter: sqlite/parquet/xarray or a run-db reference, and "
+            "runs.db has no rows). Persist run trajectories via the workspace emitter so "
+            "results are reproducible from disk, not just summarised."
+        ),
+        check="runs_without_emitter",
+    )
+
+
 # ---------------------------------------------------------------------------
 # v4 narrative-spine completeness check
 # ---------------------------------------------------------------------------
@@ -2095,6 +2561,7 @@ _CHECK_FUNCTIONS = (
     _check_runs_yaml_vs_db_drift,
     _check_status_out_of_date_vs_runs,
     _check_status_claims_done_but_no_runs_recorded,
+    _check_runs_without_emitter,
     _check_reviewer_clarity_ambiguities,
     _check_viz_stale_vs_latest_run,
     _check_narrative_spine_completeness,
@@ -2111,6 +2578,10 @@ _CHECK_FUNCTIONS = (
     _check_speculative_readout_paths,
     # SP2b-ii: readout migration status (migratable + needs_human)
     _check_readout_migration_status,
+    # Wave 3a: workflow-typing enums (next_action_type / study_type)
+    _check_workflow_typing,
+    # Wave 3b: claim_scope / generality / lifecycle_state enums + floor
+    _check_finding_scope_generality_lifecycle,
 )
 
 
@@ -2137,6 +2608,22 @@ def lint_workspace_report(ws_root: Path, *, strict: bool = False) -> list[LintFi
                     level="info",
                     field_path="<linter>",
                     message=f"Linter check {fn.__name__} raised {e!r} on study {slug!r}.",
+                    check="linter_internal_error",
+                )
+        out.extend(ctx.findings)
+
+    # Investigation-level checks (the modern v2 investigation.yaml narrative
+    # spine) — run on investigation specs, not studies.
+    for slug, spec in _iter_investigation_specs(ws_root):
+        ctx = _LintContext(ws_root=ws_root, slug=slug, spec=spec, strict=strict)
+        for fn in _INVESTIGATION_CHECK_FUNCTIONS:
+            try:
+                fn(ctx)
+            except Exception as e:  # noqa: BLE001
+                ctx.add(
+                    level="info",
+                    field_path="<linter>",
+                    message=f"Linter check {fn.__name__} raised {e!r} on investigation {slug!r}.",
                     check="linter_internal_error",
                 )
         out.extend(ctx.findings)

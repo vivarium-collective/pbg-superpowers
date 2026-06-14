@@ -13,7 +13,11 @@ from pathlib import Path
 import pytest
 
 from pbg_superpowers import study_io
-from pbg_superpowers.study_verdict import roll_up_verdict, write_gate_evaluator
+from pbg_superpowers.study_verdict import (
+    diverges_from_authored,
+    roll_up_verdict,
+    write_gate_evaluator,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +132,43 @@ class TestRollUpVerdictBlocked:
         assert v["result"] == "blocked"
         assert "t1" in v["blocked_by"]
         assert "t2" in v["blocked_by"]
+
+
+# ---------------------------------------------------------------------------
+# Public helper: diverges_from_authored (pure, reusable by the spine)
+# ---------------------------------------------------------------------------
+
+class TestDivergesFromAuthored:
+    def test_diverges_when_authored_disagrees(self):
+        spec = _spec(_named("t1"), {"t1": {"result": "FAIL"}})
+        spec["gate_status"] = "passed"
+        assert diverges_from_authored(spec) is True
+
+    def test_agrees_when_authored_matches(self):
+        spec = _spec(_named("t1"), {"t1": {"result": "FAIL"}})
+        spec["gate_status"] = "failed"
+        assert diverges_from_authored(spec) is False
+
+    def test_no_authored_gate_status_is_not_divergent(self):
+        spec = _spec(_named("t1"), {"t1": {"result": "PASS"}})
+        assert diverges_from_authored(spec) is False
+
+    def test_unrecognised_gate_status_is_not_divergent(self):
+        spec = _spec(_named("t1"), {"t1": {"result": "PASS"}})
+        spec["gate_status"] = "whatever"
+        assert diverges_from_authored(spec) is False
+
+    def test_tolerant_of_empty_spec(self):
+        assert diverges_from_authored({}) is False
+        assert diverges_from_authored(None) is False
+
+    def test_matches_write_gate_evaluator(self, tmp_path: Path):
+        # The helper value equals what write_gate_evaluator persists.
+        d = _study_dir(tmp_path, COMMENT_YAML)  # gate_status=passed, t1=FAIL
+        write_gate_evaluator(d)
+        spec = study_io.load_yaml_mapping(d / "study.yaml")
+        persisted = spec["pipeline_gate"]["gate_evaluator"]["diverges_from_authored"]
+        assert diverges_from_authored(spec) == persisted is True
 
 
 # ---------------------------------------------------------------------------
@@ -291,3 +332,64 @@ runs:
         ge = spec["pipeline_gate"]["gate_evaluator"]
         assert "alpha" in ge["blocked_by"]
         assert "beta" not in ge["blocked_by"]
+
+
+# ---------------------------------------------------------------------------
+# Wave 3a — preregistration_status (critique #18)
+# ---------------------------------------------------------------------------
+
+from pbg_superpowers.study_verdict import preregistration_status
+
+
+def test_preregistration_status_absent_block_degrades():
+    res = preregistration_status({"name": "s"})
+    assert res == {"preregistered": False,
+                   "registered_before_run": None,
+                   "criteria_match": None}
+    assert preregistration_status(None)["preregistered"] is False
+
+
+def test_preregistration_registered_before_run_true():
+    spec = {
+        "preregistered": {"registered_at": "2026-01-01"},
+        "runs": [{"name": "r", "status": "complete", "timestamp": "2026-05-01"}],
+    }
+    res = preregistration_status(spec)
+    assert res["preregistered"] is True
+    assert res["registered_before_run"] is True
+
+
+def test_preregistration_registered_after_run_false():
+    spec = {
+        "preregistered": {"registered_at": "2026-06-01"},
+        "runs": [{"name": "r", "status": "complete", "started_at": "2026-05-01"}],
+    }
+    assert preregistration_status(spec)["registered_before_run"] is False
+
+
+def test_preregistration_missing_timestamp_is_none():
+    spec = {
+        "preregistered": {"thresholds": {"t1": {"low": 1}}},  # no registered_at
+        "runs": [{"name": "r", "status": "complete", "timestamp": "2026-05-01"}],
+    }
+    res = preregistration_status(spec)
+    assert res["registered_before_run"] is None  # degrade — no registered_at
+
+
+def test_preregistration_criteria_match():
+    spec = {
+        "preregistered": {"registered_at": "2026-01-01",
+                          "thresholds": {"t1": {"low": 1}, "t2": {"high": 5}}},
+        "behavior_tests": [{"name": "t1", "pass_if": {"low": 1}},
+                           {"name": "t2", "pass_if": {"high": 5}}],
+    }
+    assert preregistration_status(spec)["criteria_match"] is True
+
+
+def test_preregistration_criteria_mismatch():
+    spec = {
+        "preregistered": {"registered_at": "2026-01-01",
+                          "thresholds": {"t1": {"low": 9}}},
+        "behavior_tests": [{"name": "t1", "pass_if": {"low": 1}}],
+    }
+    assert preregistration_status(spec)["criteria_match"] is False

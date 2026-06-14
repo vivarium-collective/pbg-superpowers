@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .study_outcomes import canonical_outcomes
+from .study_outcomes import canonical_outcomes, canonical_run
 from .study_status import _TEST_FAIL, _TEST_PASS, _TEST_SKIP, _study_tests
 
 
@@ -123,6 +123,211 @@ def roll_up_verdict(spec: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Authored-vs-computed divergence (pure helper, reusable by callers/spines)
+# ---------------------------------------------------------------------------
+
+def diverges_from_authored(spec: dict) -> bool:
+    """True when the authored ``gate_status`` disagrees with the computed verdict.
+
+    Pure ``spec -> bool``. Maps the authored ``gate_status`` to the result
+    vocabulary and compares it to ``roll_up_verdict(spec)['result']``. Returns
+    False when there is no recognised authored ``gate_status`` (no comparison
+    possible) or when authored and computed agree.
+
+    This is the single canonical divergence rule used by
+    :func:`write_gate_evaluator`; it is exposed so other code (e.g. the
+    pbg-autopoiesis spine) can compute the same value without a file write.
+    """
+    spec = spec or {}
+    verdict = roll_up_verdict(spec)
+    authored_gate = str(spec.get("gate_status") or "").strip().lower()
+    authored_mapped = _GATE_STATUS_MAP.get(authored_gate)
+    if authored_mapped is None:
+        return False
+    return authored_mapped != verdict["result"]
+
+
+# ---------------------------------------------------------------------------
+# Pre-registration status (critique #18) — pure spec -> dict
+# ---------------------------------------------------------------------------
+
+
+def _run_start_timestamp(run: dict | None) -> str | None:
+    """The canonical run's start time, preferring ``started_at`` then the
+    generic ``timestamp`` (which study_outcomes derives from completed/started)."""
+    if not isinstance(run, dict):
+        return None
+    for k in ("started_at", "timestamp"):
+        v = run.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
+
+def preregistration_status(spec: dict) -> dict:
+    """Whether a study's acceptance criteria were PRE-registered (critique #18).
+
+    Pure ``spec -> {preregistered, registered_before_run, criteria_match}``:
+
+    - ``preregistered`` (bool) — a non-empty ``preregistered:`` block exists.
+    - ``registered_before_run`` (bool | None) — ``preregistered.registered_at``
+      is at or before the canonical run's start time. ``None`` when either
+      timestamp is missing (degrade gracefully — author-supplied ``registered_at``
+      is often absent).
+    - ``criteria_match`` (bool | None) — every name in
+      ``preregistered.thresholds`` resolves to a ``behavior_tests[]`` whose
+      ``pass_if`` equals the pre-registered threshold. ``None`` when no
+      ``thresholds`` were declared.
+
+    Tolerant of a minimal / absent block.
+    """
+    spec = spec or {}
+    prereg = spec.get("preregistered")
+    if not isinstance(prereg, dict) or not prereg:
+        return {
+            "preregistered": False,
+            "registered_before_run": None,
+            "criteria_match": None,
+        }
+
+    out: dict = {
+        "preregistered": True,
+        "registered_before_run": None,
+        "criteria_match": None,
+    }
+
+    # registered_before_run — compare the author-supplied registered_at (ISO
+    # string) to the canonical run's start. ISO-8601 strings order lexically.
+    registered_at = prereg.get("registered_at")
+    started = _run_start_timestamp(canonical_run(spec))
+    if (isinstance(registered_at, str) and registered_at.strip()
+            and isinstance(started, str) and started.strip()):
+        out["registered_before_run"] = registered_at.strip() <= started.strip()
+
+    # criteria_match — pre-registered thresholds vs the actual behavior_tests.
+    thresholds = prereg.get("thresholds")
+    if isinstance(thresholds, dict) and thresholds:
+        actual = {
+            t.get("name"): t.get("pass_if")
+            for t in _study_tests(spec)
+            if isinstance(t, dict) and t.get("name")
+        }
+        match = True
+        for name, predeclared in thresholds.items():
+            if name not in actual or actual.get(name) != predeclared:
+                match = False
+                break
+        out["criteria_match"] = match
+
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Finding lifecycle floor (critique #25)
+# ---------------------------------------------------------------------------
+
+# The maturity ladder a finding climbs (DISTINCT from ``tier``, the claim class,
+# and from ``claim_scope``, the claim breadth). The first five are derivable
+# from rigor signals; ``retired`` / ``superseded`` are terminal states an author
+# sets manually (never auto-derived).
+LIFECYCLE_STATES = (
+    "observation",
+    "candidate-explanation",
+    "tested-vs-alternatives",
+    "provisional-claim",
+    "generalized",
+    "retired",
+    "superseded",
+)
+_LIFECYCLE_RANK = {s: i for i, s in enumerate(LIFECYCLE_STATES)}
+
+
+def lifecycle_floor(finding: dict, spec: dict) -> str:
+    """Derive the MINIMUM lifecycle_state a finding has earned (critique #25).
+
+    Pure ``(finding, spec) -> str``. Reuses the rigor signals already computed:
+
+    - ``observation`` — the default floor.
+    - ``candidate-explanation`` — the finding is an explanatory claim
+      (``tier`` of mechanism/interpretation), not a bare observation.
+    - ``tested-vs-alternatives`` — a competing explanation has been EXCLUDED and
+      its discriminator names this finding's test (reuses the rigor alternatives
+      matcher; degrades to "any excluded alternative in the study").
+    - ``provisional-claim`` — the result REPLICATES with cross-seed agreement
+      (reuses ``rigor._replication_agreement``).
+    - ``generalized`` — a generality / robustness signal is present (critique
+      #22; reuses ``rigor._has_generality_signal``).
+
+    Each level's precondition is checked independently and the HIGHEST satisfied
+    level is returned (the floor). An authored ``lifecycle_state`` may sit ABOVE
+    the floor, but the linter warns when it sits BELOW. ``retired`` /
+    ``superseded`` are never returned (they are author-only terminal states).
+    """
+    finding = finding or {}
+    spec = spec or {}
+    rank = 0  # observation
+
+    tier = str(finding.get("tier") or "").strip().lower()
+    if tier in ("mechanism", "interpretation"):
+        rank = max(rank, _LIFECYCLE_RANK["candidate-explanation"])
+
+    # Defensive import of the rigor predicates (rigor imports study_verdict
+    # lazily, so a module-level import here would risk a cycle).
+    try:
+        from . import rigor as _rigor
+    except Exception:  # noqa: BLE001
+        _rigor = None  # type: ignore
+
+    if _rigor is not None:
+        tokens = _rigor._finding_match_tokens(finding)
+        excluded = _rigor._excluded_alternatives(spec)
+        matched = [a for a in excluded if _rigor._alt_matches(a, tokens)]
+        if matched or (excluded and not tokens):
+            rank = max(rank, _LIFECYCLE_RANK["tested-vs-alternatives"])
+
+        n_rep, _ = _rigor._replicate_count(spec)
+        if n_rep >= 2:
+            disagrees, _ = _rigor._replication_agreement(spec, n_rep)
+            replicated = (n_rep >= 3) and not disagrees
+            if replicated:
+                rank = max(rank, _LIFECYCLE_RANK["provisional-claim"])
+
+        # generalized requires the FINDING's OWN generality claim (#22) — NOT a
+        # study-level sweep (which would lift every finding in the study) and NOT
+        # mere replication (which only earns provisional-claim above). A single
+        # declared axis earns provisional-claim; ≥2 axes or an explicit
+        # framework-level claim earns generalized. A finding the author marked
+        # instance_specific never reaches generalized.
+        faxes = _rigor._finding_generality_axes(finding)
+        gen = finding.get("generality") if isinstance(finding.get("generality"), dict) else {}
+        level = str(gen.get("level") or "").strip().lower()
+        if level != "instance_specific" and (len(faxes) >= 2 or level == "framework"):
+            rank = max(rank, _LIFECYCLE_RANK["generalized"])
+        elif faxes:
+            rank = max(rank, _LIFECYCLE_RANK["provisional-claim"])
+
+    return LIFECYCLE_STATES[rank]
+
+
+def lifecycle_below_floor(finding: dict, spec: dict) -> str | None:
+    """If a finding's authored ``lifecycle_state`` sits BELOW its derived floor,
+    return the floor; otherwise ``None``.
+
+    Returns ``None`` when no ``lifecycle_state`` is authored, when the authored
+    value is unknown (the enum check is a separate concern), or when it is at or
+    above the floor.
+    """
+    finding = finding or {}
+    authored = str(finding.get("lifecycle_state") or "").strip().lower()
+    if authored not in _LIFECYCLE_RANK:
+        return None
+    floor = lifecycle_floor(finding, spec)
+    if _LIFECYCLE_RANK[authored] < _LIFECYCLE_RANK[floor]:
+        return floor
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Task 2: write_gate_evaluator
 # ---------------------------------------------------------------------------
 
@@ -158,14 +363,8 @@ def write_gate_evaluator(study_dir) -> bool:
     spec = study_io.load_yaml_mapping(study_yaml)
     verdict = roll_up_verdict(spec)
 
-    # Authored gate_status → mapped result (for divergence check)
-    authored_gate = str(spec.get("gate_status") or "").strip().lower()
-    authored_mapped = _GATE_STATUS_MAP.get(authored_gate)
-    if authored_mapped is None:
-        # No recognised authored gate_status → divergence is undefined; default False
-        diverges = False
-    else:
-        diverges = authored_mapped != verdict["result"]
+    # Authored gate_status vs computed verdict (single canonical rule).
+    diverges = diverges_from_authored(spec)
 
     new_evaluator: dict = {
         "result": verdict["result"],

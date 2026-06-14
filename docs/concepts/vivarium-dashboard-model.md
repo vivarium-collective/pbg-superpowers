@@ -362,6 +362,27 @@ git grep -n "study: <parent-slug>" -- 'studies/*/study.yaml' | grep seeded_from 
 
 (or load each `study.yaml` and check `seeded_from.study`). This keeps the lineage discoverable without a separate index file.
 
+#### `discovery_implications` — the richer Decide-phase synthesis
+
+`followup_proposals` (above) is the minimal hook. The **richer, rendered** Decide-phase block is the optional top-level `discovery_implications:` mapping — *"where this study's results leave the mechanism model, and what to investigate next."* The dashboard renders it (the study-detail **Discovery implications** section + the investigation report), and `/pbg-study seed-from-followup` seeds children from its `followup_study_proposals`. All sub-fields optional:
+
+```yaml
+discovery_implications:
+  resolved_uncertainties: [<text>, ...]      # what this study settled
+  remaining_uncertainties: [<text>, ...]     # what is still open
+  alternate_hypotheses:                      # competing explanations not yet excluded
+    - hypothesis: <text>
+      why_plausible: <text>
+      mechanism_elements_affected: [<id>, ...]
+      discriminating_observables: [<observable>, ...]   # what would tell them apart
+  followup_study_proposals:                  # richer variant of followup_proposals
+    - id: <slug>
+      title: <text>
+      motivation: <text>
+```
+
+It is **optional and unenforced** — absent → the section is simply omitted (which is why minimal/programmatic studies often lack it). The **rigor scorecard** (`pbg_superpowers.rigor`) flags a study that declares neither `discovery_implications` nor `follow_up_studies` with a `next_steps` gap, so the Decide phase is surfaced as feedback without becoming a hard gate.
+
 ### Baseline
 
 A study's set of runnable composites — **one or more**. Each entry is a runnable composite document with optional parameter defaults.

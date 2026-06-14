@@ -718,3 +718,71 @@ def test_golden_real_study_finding_seeds_to_tmp_copy(tmp_path):
 
     # The REAL workspace is byte-for-byte untouched.
     assert real_parent_yaml.read_bytes() == real_before
+
+
+# ---------------------------------------------------------------------------
+# Wave 3a — next_action_type carry-through (#7) + diagnose family (#19)
+# ---------------------------------------------------------------------------
+
+
+def test_seed_source_carries_next_action_type():
+    study = {"findings": [
+        {"id": "F1", "statement": "x", "next_action": "Calibrate kS",
+         "next_action_type": "calibrate"},
+    ]}
+    src = sff.resolve_seed_source(study, finding_id="F1")
+    assert src.next_action_type == "calibrate"
+    assert src.family == "finding.next_action"
+
+
+def test_resolve_diagnose_family():
+    study = {
+        "name": "p",
+        "behavior_tests": [{"name": "t1"}],
+        "runs": [{"name": "r", "status": "complete", "timestamp": "2026-05-01",
+                  "outcomes": {"t1": {"result": "fail"}}}],
+        "conclusion_logic": {"if_primary_tests_fail": {
+            "diagnose": [{"hypothesis": "membrane leaks too fast"}]}},
+    }
+    src = sff.resolve_seed_source(study, diagnose_idx=0)
+    assert src.family == "conclusion_logic.if_primary_tests_fail.diagnose"
+    assert src.study_type == "diagnostic"
+    assert src.proposal["study_type"] == "diagnostic"
+    assert src.proposal["diagnose_idx"] == 0
+    assert "t1" in src.proposal["failing_tests"]
+
+
+def test_resolve_diagnose_idx_out_of_range():
+    study = {"conclusion_logic": {"if_primary_tests_fail": {"diagnose": []}}}
+    with pytest.raises(ValueError):
+        sff.resolve_seed_source(study, diagnose_idx=0)
+
+
+def test_write_child_study_diagnose_family(tmp_path):
+    ws = tmp_path / "ws"
+    (ws).mkdir()
+    (ws / "workspace.yaml").write_text("schema_version: 2\nname: ws\npackage_path: pbg_ws\n")
+    sd = ws / "studies" / "p"
+    sd.mkdir(parents=True)
+    parent = {
+        "name": "p",
+        "behavior_tests": [{"name": "t1"}],
+        "runs": [{"name": "r", "status": "complete", "timestamp": "2026-05-01",
+                  "outcomes": {"t1": {"result": "fail"}}}],
+        "conclusion_logic": {"if_primary_tests_fail": {
+            "diagnose": [{"hypothesis": "membrane leaks too fast"}]}},
+    }
+    sff.study_io.save_yaml_atomic(sd / "study.yaml", parent)
+
+    src = sff.resolve_seed_source(parent, diagnose_idx=0)
+    res = sff.write_child_study(ws, "p", src, new_slug="p-diag")
+    assert res["parent_stamped"] is True
+
+    child = yaml.safe_load((ws / "studies" / "p-diag" / "study.yaml").read_text())
+    assert child["study_type"] == "diagnostic"
+    assert "t1" in child["seeded_from"]["failing_tests"]
+
+    # parent diagnose[0] now stamped with seeded_study (re-scan stops flagging)
+    reloaded = yaml.safe_load((sd / "study.yaml").read_text())
+    diag = reloaded["conclusion_logic"]["if_primary_tests_fail"]["diagnose"][0]
+    assert diag["seeded_study"] == "p-diag"

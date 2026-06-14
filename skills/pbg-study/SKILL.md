@@ -156,6 +156,39 @@ Studies that share a research arc can be grouped into an **Investigation** (a na
 
 When you cite a paper (`--cite`, `--source`, `cites:`, `literature_anchors[].source`) or lean on a mechanism, that reference/mechanism must be one the **expert actually provided or explicitly approved**. If, while building or evaluating a study, you reach for a paper, parameter, or mechanism the expert did **not** give you, do **not** quietly fold it into `cites:` / `literature_anchors` / the prose as if it were sanctioned. Record it on the parent **investigation** under `proposed_inputs:` with `status: pending`, a `provenance` (which commit / why it surfaced), and a `rationale` (what you used it for), and let the expert Accept or Decline it in the report. On Accept, a `kind: reference` item is promoted into the investigation's `inputs.references` and becomes a real provided reference (then it is fair to cite); a `kind: mechanism` item is marked accepted for a human to integrate. On Decline it is left out. See the `proposed_inputs:` schema in **pbg-investigation**. This guardrail keeps outside claims from entering the record as expert-sanctioned.
 
+## Rigor pass (Evaluate → Decide): fill the required information so the scorecard goes green
+
+Every study should carry the information a skeptical reviewer asks for. The
+dashboard computes an **evidence & rigor scorecard** (`pbg_superpowers.rigor`)
+that reports `ok`/`warn`/`gap` per dimension from declared fields, and the report
+surfaces it — a missing field is a `gap`. Before a study is "done", address each
+dimension (or say why not). Full guide + field shapes:
+[`docs/conventions/rigor-checklist.md`](../../docs/conventions/rigor-checklist.md).
+
+> **Real composites + emitters (both linted).** Every study must reference a
+> **REAL registered composite** — `baseline[].composite` has to resolve in the
+> workspace registry (run `/pbg-catalog` to see what's installed; a typo or a
+> not-yet-built composite shows up as an "error composite…" node and is flagged
+> by `report_linter.unresolved_composite_refs`). And every study's runs must
+> **persist via an emitter** (sqlite / parquet / xarray, or a run-db reference) —
+> a study with runs but no emitter earns a `run_persistence` rigor `gap` and a
+> `runs_without_emitter` lint warning.
+
+In short, ensure the study declares:
+- **a model** — `baseline:` with the composite(s) + params it runs (every study runs ≥1 composite, and the composite must be REAL/registered);
+- **replication** — `robustness:` (≥3 seeds for stochastic; a `parameter_sweep: true` for deterministic);
+- **controls & calibration** — `controls:` with a NEGATIVE control (a system that should fail — build it with the **Intervention process**, `pbg_superpowers.intervention`, to clamp/knockout/scale a store) AND a positive/borderline case;
+- **alternative_hypotheses** — competing explanations + how the evidence (often the control) excludes them;
+- **tiered findings** — each finding `tier: observation|mechanism|interpretation`, with `mechanism_origin: engineered|emergent` on interpretation claims;
+- **falsifiability** — a `falsifiability:` note (what result would overturn the claim);
+- **limitations** — what this does NOT show;
+- **discovery_implications** — resolved/remaining uncertainties + `followup_study_proposals` (each with a real `motivation`, not just a title).
+
+At the investigation level, ensure `competing_frameworks:` is set and at least
+one member study is `kind: adversarial` (a system that should NOT qualify; the
+metric passes by rejecting it). See `pbg-autopoiesis` for the reference shape
+(every study 8/8, investigation 5/5).
+
 ## Sub-commands
 
 ### Design subcommands
