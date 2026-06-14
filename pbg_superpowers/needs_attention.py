@@ -31,6 +31,8 @@ from typing import Any, Callable
 
 from .workspace_paths import WorkspacePaths
 from . import linkage_index
+from . import rigor
+from . import viz_freshness
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +327,169 @@ def scan_investigation(
         "items": items,
         "summary": _summary(items),
     }
+
+
+# ---------------------------------------------------------------------------
+# Open epistemic debts (item 15 — negative knowledge)
+# ---------------------------------------------------------------------------
+#
+# A per-STUDY collector (distinct from the per-investigation scan above). It
+# harvests the "what this study does NOT yet know" signals that already exist —
+# it invents no new store and recomputes nothing it can reuse. Pure spec->list.
+
+_DEBT_SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
+
+# rigor dimension id -> epistemic-debt kind. These are the GAP/WARN dims the
+# contract enumerates (no-replication, no-controls, no-alternatives,
+# not-falsifiable, interpretation-without-origin).
+_RIGOR_DEBT_KIND = {
+    "replication": "claim-untested",
+    "negative_control": "control-absent",
+    "alternatives": "alternative-not-excluded",
+    "falsifiability": "claim-untested",
+    "mechanism_origin": "claim-untested",
+}
+_RIGOR_DEBT_SEVERITY = {rigor.GAP: "high", rigor.WARN: "medium"}
+
+
+def _debt(kind: str, ref: str, note: str, severity: str) -> dict:
+    return {"kind": kind, "ref": ref, "note": note, "severity": severity}
+
+
+def _iter_alternatives(spec: dict) -> list[dict]:
+    out: list[dict] = []
+    di = spec.get("discovery_implications") or {}
+    if isinstance(di, dict):
+        out.extend(a for a in (di.get("alternate_hypotheses") or []) if isinstance(a, dict))
+    out.extend(a for a in (spec.get("alternative_hypotheses") or []) if isinstance(a, dict))
+    return out
+
+
+def _anchor_uncalibrated(anchor: object) -> bool:
+    """A calibration_anchor that carries an uncalibrated marker — explicit
+    ``uncalibrated``/pending status, a ``⚠`` glyph, or no literature target /
+    observed value at all (the band exists but is unanchored)."""
+    if not isinstance(anchor, dict):
+        return False
+    if anchor.get("uncalibrated"):
+        return True
+    status = str(anchor.get("status") or "").lower()
+    if "uncalibrat" in status or "pending" in status:
+        return True
+    if any(isinstance(v, str) and "⚠" in v for v in anchor.values()):
+        return True
+    if anchor.get("literature_target") is None and anchor.get("observed_value") is None:
+        return True
+    return False
+
+
+def _uncalibrated_debts(spec: dict) -> list[dict]:
+    out: list[dict] = []
+    seen: set[str] = set()
+    sources: list[tuple[str, object]] = []
+    for f in (spec.get("findings") or []):
+        if isinstance(f, dict) and "calibration_anchor" in f:
+            sources.append((str(f.get("id") or f.get("statement") or "finding"),
+                            f.get("calibration_anchor")))
+    for section in ("behavior_tests", "tests"):
+        for t in (spec.get(section) or []):
+            if isinstance(t, dict) and "calibration_anchor" in t:
+                sources.append((str(t.get("name") or "test"), t.get("calibration_anchor")))
+    for ref, anchor in sources:
+        if ref not in seen and _anchor_uncalibrated(anchor):
+            seen.add(ref)
+            out.append(_debt(
+                "metric-uncalibrated", ref,
+                f"Calibration anchor for '{ref}' is uncalibrated "
+                "(no literature target / observed value, or marked ⚠).",
+                "medium"))
+    return out
+
+
+def _stale_viz_debts(spec: dict) -> list[dict]:
+    out: list[dict] = []
+    for v in (spec.get("visualizations") or []):
+        if not isinstance(v, dict):
+            continue
+        if str(v.get("freshness") or "").lower() == viz_freshness.STALE or v.get("stale") is True:
+            ref = str(v.get("chart") or v.get("name") or "visualization")
+            out.append(_debt(
+                "viz-stale", ref,
+                f"Visualization '{ref}' is stale relative to its source run "
+                "(re-render to match the latest results).",
+                "low"))
+    return out
+
+
+def open_epistemic_debts(spec: dict) -> list[dict]:
+    """Harvest a study's OPEN epistemic debts (item 15 — negative knowledge).
+
+    Returns a severity-sorted list of ``{"kind", "ref", "note", "severity"}``
+    where ``kind`` is one of ``claim-untested | control-absent |
+    metric-uncalibrated | alternative-not-excluded | region-unexplored |
+    viz-stale``. PURE; reuses :mod:`pbg_superpowers.rigor` +
+    :mod:`pbg_superpowers.viz_freshness` rather than reinventing the harvest, so
+    it can't drift from the scorecard. Tolerant of a minimal/empty spec.
+    """
+    spec = spec or {}
+    debts: list[dict] = []
+
+    # 1. rigor GAP/WARN dimensions (no-replication, no-controls, no-alternatives,
+    #    not-falsifiable, interpretation-without-origin).
+    try:
+        sc = rigor.study_rigor(spec)
+    except Exception:  # noqa: BLE001 — never let the scorecard sink the harvest
+        sc = {"dimensions": []}
+    for d in (sc.get("dimensions") or []):
+        kind = _RIGOR_DEBT_KIND.get(d.get("id"))
+        sev = _RIGOR_DEBT_SEVERITY.get(d.get("severity"))
+        if kind and sev:
+            debts.append(_debt(kind, str(d.get("id")),
+                               d.get("detail") or d.get("label") or "", sev))
+
+    # 2. controls[] that have not produced a discriminating result.
+    for c in (spec.get("controls") or []):
+        if not isinstance(c, dict):
+            continue
+        result = str(c.get("result") or "").upper()
+        if result == "PENDING" or not rigor._nonempty(c.get("observed")):
+            name = str(c.get("name") or c.get("kind") or "control")
+            why = "result PENDING" if result == "PENDING" else "no observed result recorded"
+            debts.append(_debt(
+                "control-absent", name,
+                f"Control '{name}' has not produced a discriminating result ({why}).",
+                "medium"))
+
+    # 3. alternatives left on the table (not-excluded / untested).
+    for a in _iter_alternatives(spec):
+        status = str(a.get("status") or "").lower().replace("_", "-")
+        if status in ("not-excluded", "untested"):
+            claim = str(a.get("claim") or a.get("name") or "alternative")
+            debts.append(_debt(
+                "alternative-not-excluded", claim,
+                f"Alternative explanation not ruled out ({status}): {claim}",
+                "medium"))
+
+    # 4. uncalibrated metrics (calibration_anchor markers).
+    debts.extend(_uncalibrated_debts(spec))
+
+    # 5. stale visualizations (viz-freshness markers).
+    debts.extend(_stale_viz_debts(spec))
+
+    # 6. remaining uncertainties → unexplored regions.
+    di = spec.get("discovery_implications") or {}
+    if isinstance(di, dict):
+        for u in (di.get("remaining_uncertainties") or []):
+            if isinstance(u, dict):
+                text = u.get("note") or u.get("text") or u.get("question") or ""
+            else:
+                text = u
+            text = str(text).strip()
+            if text:
+                debts.append(_debt("region-unexplored", "remaining_uncertainties", text, "low"))
+
+    debts.sort(key=lambda d: (_DEBT_SEVERITY_RANK.get(d["severity"], 99), d["kind"], d["ref"]))
+    return debts
 
 
 def _summary(items: list[dict]) -> dict:
