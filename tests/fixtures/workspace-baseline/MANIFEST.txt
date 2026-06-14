@@ -1,6 +1,8 @@
 ./.claude/settings.json
 ./.dockerignore
 ./.github/workflows/build-and-push.yml
+./.github/workflows/publish-dashboard.yml
+./.github/workflows/publish-reports.yml
 ./.github/workflows/workspace-ci.yml
 ./.gitignore
 ./.pbg/schemas/investigation.schema.json
@@ -21,7 +23,12 @@
 ./scripts/add-dataset.sh
 ./scripts/add-reference.sh
 ./scripts/clone_investigation.py
+./scripts/feature_dashboard_in_readme.py
+./scripts/gh-pages-landing.html
+./scripts/inject_index_fragment.py
 ./scripts/lint-workspace.py
+./scripts/publish_dashboard.sh
+./scripts/publish_investigation_reports.py
 ./scripts/render-dashboard.py
 ./scripts/serve.sh
 ./workspace.yaml
