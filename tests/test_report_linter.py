@@ -1004,3 +1004,60 @@ def test_runs_without_emitter_silent_when_runs_db_has_rows(tmp_path):
     _seed_runs_db(ws, "s", ["r1"])
     by_check = _findings_by_check(lint_workspace_report(ws))
     assert by_check.get("runs_without_emitter", []) == []
+
+
+# ---------------------------------------------------------------------------
+# investigation_narrative_spine_required (REQUIRED, skippable)
+# ---------------------------------------------------------------------------
+
+import yaml as _yaml
+
+
+def _mk_investigation(tmp_path, inv: dict):
+    ws = tmp_path / "ws"
+    d = ws / "investigations" / "demo"
+    d.mkdir(parents=True)
+    (ws / "workspace.yaml").write_text("name: demo\n")
+    (d / "investigation.yaml").write_text(_yaml.safe_dump(inv))
+    return ws
+
+
+def _narrative_findings(ws):
+    return [f for f in lint_workspace_report(ws)
+            if f.check == "investigation_narrative_spine_required"]
+
+
+def test_investigation_narrative_required_fires_when_missing(tmp_path):
+    ws = _mk_investigation(tmp_path, {"name": "demo", "schema_version": 2})
+    f = _narrative_findings(ws)
+    assert {x.field_path for x in f} == {"executive", "scientific_argument", "biological_story"}
+    assert all(x.level == "warning" for x in f)  # required = blocking
+
+
+def test_investigation_narrative_satisfied_when_authored(tmp_path):
+    ws = _mk_investigation(tmp_path, {
+        "name": "demo",
+        "executive": {"what_is_this": "x"},
+        "scientific_argument": {"main_claim": "y"},
+        "biological_story": "z",
+    })
+    assert _narrative_findings(ws) == []
+
+
+def test_investigation_narrative_explicit_skip_suppresses(tmp_path):
+    ws = _mk_investigation(tmp_path, {
+        "name": "demo",
+        "narrative_spine_skip": ["executive", "scientific_argument", "biological_story"],
+        "narrative_spine_skip_reason": "slim single-study screen",
+    })
+    assert _narrative_findings(ws) == []
+
+
+def test_investigation_narrative_partial_skip(tmp_path):
+    ws = _mk_investigation(tmp_path, {
+        "name": "demo",
+        "executive": {"verdict": "passing"},
+        "narrative_spine_skip": ["biological_story"],
+    })
+    f = _narrative_findings(ws)
+    assert {x.field_path for x in f} == {"scientific_argument"}  # only the un-skipped, un-authored one

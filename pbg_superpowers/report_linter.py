@@ -369,6 +369,95 @@ def _iter_study_specs(ws_root: Path) -> Iterator[tuple[str, dict]]:
             yield slug, data
 
 
+def _iter_investigation_specs(ws_root: Path) -> Iterator[tuple[str, dict]]:
+    """Yield (slug, parsed-yaml) for every modern v2 investigation under the
+    workspace — ``<ws_root>/investigations/<slug>/investigation.yaml``.
+
+    These carry the investigation-level narrative spine (executive /
+    scientific_argument / biological_story) the report renders, distinct from
+    the per-study specs in :func:`_iter_study_specs`.
+    """
+    wp = WorkspacePaths.load(ws_root)
+    invs_dir = wp.investigations
+    if not invs_dir.is_dir():
+        return
+    for child in sorted(invs_dir.iterdir()):
+        if not child.is_dir():
+            continue
+        spec_path = child / "investigation.yaml"
+        if not spec_path.is_file():
+            continue
+        try:
+            data = yaml.safe_load(spec_path.read_text()) or {}
+        except yaml.YAMLError:
+            continue
+        yield (data.get("name") or child.name), data
+
+
+# Investigation-level narrative spine — REQUIRED report sections (each can be
+# explicitly skipped for a genuinely slim investigation via
+# ``narrative_spine_skip: [...]``). These are the AUTHORED sections of the
+# investigation report; the computed sections (Decisions needed, Suggested
+# additions) are framework signals, not author-required, so they're excluded.
+_REQUIRED_INVESTIGATION_SECTIONS = (
+    ("executive", "Executive summary"),
+    ("scientific_argument", "Scientific argument"),
+    ("biological_story", "Biology — the mechanism"),
+)
+
+
+def _inv_section_present(spec: dict, key: str) -> bool:
+    """True when an investigation has authored content for a narrative section."""
+    v = spec.get(key)
+    if key == "biological_story":
+        return isinstance(v, str) and bool(v.strip())
+    if key == "executive":
+        ex = v if isinstance(v, dict) else {}
+        return bool(_is_nonempty(ex.get("what_is_this")) or _is_nonempty(ex.get("verdict")))
+    if key == "scientific_argument":
+        sa = v if isinstance(v, dict) else {}
+        return bool(_is_nonempty(sa.get("main_claim")))
+    return bool(v)
+
+
+def _check_investigation_narrative_spine(ctx: "_LintContext") -> None:
+    """REQUIRE the investigation-level narrative sections (Executive summary,
+    Scientific argument, Biology) — unless explicitly skipped.
+
+    Default severity is ``warning`` (blocking, publication-gating) so these
+    sections are effectively required. A genuinely slim investigation opts out
+    per-section by listing the section key in ``narrative_spine_skip: [...]``
+    (optionally with a ``narrative_spine_skip_reason``); a skipped section is
+    treated as satisfied. This is the "required, but explicitly skippable"
+    contract.
+    """
+    spec = ctx.spec or {}
+    skip = spec.get("narrative_spine_skip") or []
+    if not isinstance(skip, list):
+        skip = []
+    skip_set = {str(s).strip().lower() for s in skip}
+    for key, label in _REQUIRED_INVESTIGATION_SECTIONS:
+        if key in skip_set or _inv_section_present(spec, key):
+            continue
+        ctx.add(
+            level="warning",
+            field_path=key,
+            message=(
+                f"Investigation is missing the REQUIRED narrative section "
+                f"'{label}' (`{key}`). Author it for a reviewer-ready report, "
+                f"or — for a genuinely slim investigation — explicitly opt out "
+                f"by adding '{key}' to `narrative_spine_skip: [...]` "
+                f"(optionally with `narrative_spine_skip_reason`)."
+            ),
+            check="investigation_narrative_spine_required",
+        )
+
+
+_INVESTIGATION_CHECK_FUNCTIONS = (
+    _check_investigation_narrative_spine,
+)
+
+
 # ---------------------------------------------------------------------------
 # Individual checks
 # ---------------------------------------------------------------------------
@@ -408,6 +497,9 @@ CHECKS = (
     "viz_stale_vs_latest_run",
     # S3: v4 narrative-spine nudge — info-level reminder of missing dnaa-style sections
     "narrative_spine_completeness",
+    # Investigation-level narrative sections REQUIRED (skippable via
+    # narrative_spine_skip) — warning-level (publication-gating)
+    "investigation_narrative_spine_required",
     # Expert-handoff readiness — every study card in a generated report
     # should show baseline composites, variants planned, simulation
     # runs planned, readouts, runs, tests, and visualizations. When a
@@ -2516,6 +2608,22 @@ def lint_workspace_report(ws_root: Path, *, strict: bool = False) -> list[LintFi
                     level="info",
                     field_path="<linter>",
                     message=f"Linter check {fn.__name__} raised {e!r} on study {slug!r}.",
+                    check="linter_internal_error",
+                )
+        out.extend(ctx.findings)
+
+    # Investigation-level checks (the modern v2 investigation.yaml narrative
+    # spine) — run on investigation specs, not studies.
+    for slug, spec in _iter_investigation_specs(ws_root):
+        ctx = _LintContext(ws_root=ws_root, slug=slug, spec=spec, strict=strict)
+        for fn in _INVESTIGATION_CHECK_FUNCTIONS:
+            try:
+                fn(ctx)
+            except Exception as e:  # noqa: BLE001
+                ctx.add(
+                    level="info",
+                    field_path="<linter>",
+                    message=f"Linter check {fn.__name__} raised {e!r} on investigation {slug!r}.",
                     check="linter_internal_error",
                 )
         out.extend(ctx.findings)

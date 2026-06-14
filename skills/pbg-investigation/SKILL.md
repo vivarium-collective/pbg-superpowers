@@ -661,3 +661,18 @@ def atomic_write_yaml(path: str, data: dict) -> None:
   --name dnaa-replication \
   --studies-prefix dnaa-
 ```
+
+## Required investigation narrative (lint-gated)
+
+Every investigation report must carry three AUTHORED narrative sections —
+`executive`, `scientific_argument`, and `biological_story`. The linter
+(`investigation_narrative_spine_required`) warns for each missing one. A
+genuinely slim investigation may opt out per-section:
+
+```yaml
+narrative_spine_skip: [scientific_argument, biological_story]
+narrative_spine_skip_reason: "single-study screen; full narrative not warranted"
+```
+
+("Decisions needed" and "Suggested additions" are framework-computed signals,
+not author-required.)
