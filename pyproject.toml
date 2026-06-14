@@ -16,6 +16,10 @@ dependencies = [
     # is lightweight (SQLiteEmitter, stdlib); heavy backends stay extras-gated
     # via pbg-emitters[parquet] / [xarray] (see the `evaluator` extra).
     "pbg-emitters",
+    # Default framework processes available in every pbg- workspace (Clock,
+    # Intervention, MathExpression). Auto-register into the core registry via
+    # bigraph-schema package discovery, like pbg-emitters.
+    "pbg-basic-processes",
 ]
 
 [project.optional-dependencies]
@@ -24,6 +28,7 @@ evaluator = ["pbg-emitters[parquet]"]
 
 [tool.uv.sources]
 pbg-emitters = { git = "https://github.com/vivarium-collective/pbg-emitters.git", branch = "main" }
+pbg-basic-processes = { git = "https://github.com/vivarium-collective/pbg-basic-processes.git", branch = "main" }
 
 [project.scripts]
 pbg-scaffold = "pbg_superpowers.scaffold:cli"
