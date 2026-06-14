@@ -24,6 +24,7 @@ from pbg_superpowers.report_linter import (
     load_overrides,
     main,
     override_path,
+    unresolved_composite_refs,
     write_override,
 )
 
@@ -927,3 +928,79 @@ def test_study_type_known_and_kind_alias_silent(tmp_path):
     ws2 = _ws_with_study(tmp_path / "b", {"name": "s2", "kind": "adversarial"})
     by_check2 = _findings_by_check(lint_workspace_report(ws2))
     assert by_check2.get("study_type_unknown", []) == []
+
+
+# ---------------------------------------------------------------------------
+# Real-composite resolution — unresolved_composite_refs (pure helper)
+# ---------------------------------------------------------------------------
+
+
+def test_unresolved_composite_refs_collects_from_all_sites():
+    spec = {
+        "baseline": [{"name": "b", "composite": "pkg.composites.real"}],
+        "conditions": {"baseline": {"composite": "pkg.composites.cond"}},
+        "simulation_set": [{"name": "r", "base_model": "pkg.composites.sim"}],
+    }
+    known = {"pkg.composites.real"}
+    out = unresolved_composite_refs(spec, known)
+    # real resolves; cond + sim do not
+    assert out == ["pkg.composites.cond", "pkg.composites.sim"]
+
+
+def test_unresolved_composite_refs_empty_when_all_resolve():
+    spec = {"baseline": [{"composite": "a"}], "simulation_set": [{"composite": "a"}]}
+    assert unresolved_composite_refs(spec, {"a"}) == []
+
+
+def test_unresolved_composite_refs_dedupes_in_order():
+    spec = {
+        "baseline": [{"composite": "x"}, {"composite": "y"}, {"composite": "x"}],
+    }
+    assert unresolved_composite_refs(spec, set()) == ["x", "y"]
+
+
+def test_unresolved_composite_refs_empty_registry_returns_all():
+    spec = {"baseline": [{"composite": "x"}]}
+    assert unresolved_composite_refs(spec, None) == ["x"]
+    assert unresolved_composite_refs(spec, set()) == ["x"]
+
+
+def test_unresolved_composite_refs_tolerant_of_missing_fields():
+    assert unresolved_composite_refs({}, {"a"}) == []
+    assert unresolved_composite_refs({"baseline": "not-a-list"}, set()) == []
+
+
+# ---------------------------------------------------------------------------
+# runs_without_emitter soft-WARN
+# ---------------------------------------------------------------------------
+
+
+def test_runs_without_emitter_warns(tmp_path):
+    ws = _ws_with_study(tmp_path, {
+        "name": "s", "runs": [{"name": "r1"}, {"name": "r2"}]})
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    fs = by_check.get("runs_without_emitter", [])
+    assert len(fs) == 1
+    assert fs[0].level == "warning"
+
+
+def test_runs_without_emitter_silent_when_emitter_backed(tmp_path):
+    ws = _ws_with_study(tmp_path, {
+        "name": "s", "runs": [{"name": "r1", "emitter": "sqlite"}]})
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    assert by_check.get("runs_without_emitter", []) == []
+
+
+def test_runs_without_emitter_silent_when_no_runs(tmp_path):
+    ws = _ws_with_study(tmp_path, {"name": "s"})
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    assert by_check.get("runs_without_emitter", []) == []
+
+
+def test_runs_without_emitter_silent_when_runs_db_has_rows(tmp_path):
+    # Canonical persistence in runs.db (F2) suppresses the warning even if the
+    # YAML run records don't restate the emitter.
+    ws = _ws_with_study(tmp_path, {"name": "s", "runs": [{"name": "r1"}]})
+    _seed_runs_db(ws, "s", ["r1"])
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    assert by_check.get("runs_without_emitter", []) == []

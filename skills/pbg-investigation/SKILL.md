@@ -101,6 +101,13 @@ the per-study checklist. Full guide:
 [`docs/conventions/rigor-checklist.md`](../../docs/conventions/rigor-checklist.md).
 `pbg-autopoiesis` is the reference (5/5 investigation, every study 8/8).
 
+Every member study must also reference a **REAL registered composite**
+(`baseline[].composite` resolves in the registry — run `/pbg-catalog` to see
+them) and **persist its runs via an emitter** (sqlite / parquet / xarray, or a
+run-db reference). Both are linted: an unresolved composite is flagged via
+`report_linter.unresolved_composite_refs`, and a study with runs but no emitter
+earns a `run_persistence` rigor `gap` + a `runs_without_emitter` warning.
+
 ## Common prelude
 
 All sub-commands:

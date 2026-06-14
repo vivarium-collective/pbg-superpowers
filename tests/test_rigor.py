@@ -150,8 +150,8 @@ def test_investigation_recognizes_adversarial_study():
 
 def test_pure_no_mutation_and_tolerant_of_empty():
     # Empty / None specs must not raise.
-    assert study_rigor({})["score"]["total"] == 11
-    assert study_rigor(None)["score"]["total"] == 11
+    assert study_rigor({})["score"]["total"] == 12
+    assert study_rigor(None)["score"]["total"] == 12
     assert investigation_rigor(None, None)["per_study"] == {}
 
 
@@ -507,3 +507,59 @@ def test_framework_metrics_tolerant_of_empty():
     assert m["n_studies"] == 0
     assert m["discriminating_controls"]["fraction"] is None
     assert framework_metrics(None, None)["n_studies"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Run persistence / emitter coverage (future-proofing: real composites + emitters)
+# ---------------------------------------------------------------------------
+
+from pbg_superpowers.rigor import run_is_emitter_backed, EMITTER_KINDS
+
+
+def test_run_is_emitter_backed_predicate():
+    assert run_is_emitter_backed({"emitter": "sqlite"})
+    assert run_is_emitter_backed({"emitter": "Parquet"})        # case-insensitive
+    assert run_is_emitter_backed({"emitter": {"type": "xarray"}})
+    assert run_is_emitter_backed({"db_path": "studies/s/runs.db"})
+    assert run_is_emitter_backed({"run_db": "x.db"})
+    # not persisted
+    assert not run_is_emitter_backed({"name": "r1"})
+    assert not run_is_emitter_backed({"emitter": "none"})
+    assert not run_is_emitter_backed({"emitter": ""})
+    assert not run_is_emitter_backed("nope")
+    assert set(EMITTER_KINDS) == {"sqlite", "parquet", "xarray"}
+
+
+def test_run_persistence_gap_when_runs_lack_emitter():
+    sc = study_rigor({"name": "s", "runs": [{"name": "r1"}, {"name": "r2"}]})
+    assert _sev(sc, "run_persistence") == GAP
+
+
+def test_run_persistence_ok_when_a_run_is_emitter_backed():
+    sc = study_rigor({"name": "s", "runs": [
+        {"name": "r1"},
+        {"name": "r2", "emitter": "sqlite", "db_path": "studies/s/runs.db"},
+    ]})
+    assert _sev(sc, "run_persistence") == OK
+
+
+def test_run_persistence_ok_when_no_runs_not_applicable():
+    # No runs → not-applicable → OK (doesn't penalize the score).
+    sc = study_rigor({"name": "s"})
+    assert _sev(sc, "run_persistence") == OK
+
+
+def test_emitter_coverage_metric():
+    studies = [
+        {"name": "s1", "runs": [{"name": "r", "emitter": "sqlite"}]},   # backed
+        {"name": "s2", "runs": [{"name": "r"}]},                        # has runs, no emitter
+        {"name": "s3"},                                                 # no runs → not a candidate
+    ]
+    m = framework_metrics(studies, [])
+    # denominator = studies-with-runs (s1, s2) = 2; backed = 1
+    assert m["emitter_coverage"] == {"fraction": 0.5, "count": 1, "total": 2}
+
+
+def test_emitter_coverage_none_when_no_runs_anywhere():
+    m = framework_metrics([{"name": "s"}], [])
+    assert m["emitter_coverage"]["fraction"] is None

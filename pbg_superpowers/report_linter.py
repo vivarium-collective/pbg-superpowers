@@ -52,6 +52,7 @@ from typing import Iterable, Iterator
 import yaml
 
 from pbg_superpowers.bibtex import bib_keys
+from pbg_superpowers.rigor import run_is_emitter_backed
 from pbg_superpowers.workspace_paths import WorkspacePaths
 
 
@@ -243,6 +244,88 @@ def apply_overrides(
 
 
 # ---------------------------------------------------------------------------
+# Real-composite resolution (pure helper — registry supplied by the caller)
+# ---------------------------------------------------------------------------
+
+
+def _collect_composite_refs(spec: dict) -> list[str]:
+    """Every composite identifier a study spec REFERENCES, de-duplicated in
+    discovery order.
+
+    Collected from the canonical reference sites:
+
+    * ``baseline[].composite`` (a single dict or a list of dicts),
+    * ``conditions.baseline.composite`` and ``conditions.variants[].composite``,
+    * ``simulation_set[].composite`` and ``simulation_set[].base_model``.
+
+    Variant ``base_composite`` (which names a *baseline* by name, not a
+    registered composite id) is intentionally NOT collected.
+    """
+    refs: list[str] = []
+
+    def _add(v) -> None:
+        if isinstance(v, str) and v.strip():
+            refs.append(v.strip())
+
+    baseline = (spec or {}).get("baseline")
+    for b in (baseline if isinstance(baseline, list) else [baseline]):
+        if isinstance(b, dict):
+            _add(b.get("composite"))
+
+    conditions = (spec or {}).get("conditions")
+    if isinstance(conditions, dict):
+        cb = conditions.get("baseline")
+        for b in (cb if isinstance(cb, list) else [cb]):
+            if isinstance(b, dict):
+                _add(b.get("composite"))
+        variants = conditions.get("variants")
+        if isinstance(variants, list):
+            for v in variants:
+                if isinstance(v, dict):
+                    _add(v.get("composite"))
+
+    sim_set = (spec or {}).get("simulation_set")
+    if isinstance(sim_set, list):
+        for s in sim_set:
+            if isinstance(s, dict):
+                _add(s.get("composite"))
+                _add(s.get("base_model"))
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for r in refs:
+        if r not in seen:
+            seen.add(r)
+            out.append(r)
+    return out
+
+
+def unresolved_composite_refs(spec: dict, known_composite_ids) -> list[str]:
+    """Return the composite references a study DECLARES that are NOT in the
+    caller-supplied set of known (registered) composite ids.
+
+    Contract
+    --------
+    This helper is PURE: it has no access to a composite registry. The canonical
+    signal that a study references a *real* composite is that its
+    ``baseline[].composite`` (and the other reference sites collected by
+    :func:`_collect_composite_refs`) resolves in the workspace registry. Because
+    :mod:`pbg_superpowers.rigor` / this linter run on specs alone and cannot know
+    the registry, the CALLER (the dashboard, which owns ``/api/composites``)
+    passes ``known_composite_ids`` — the set/iterable of every registered
+    composite id — and this function returns every declared reference absent from
+    that set, de-duplicated and in declaration order. An empty result means all
+    referenced composites resolve.
+
+    Passing an empty / ``None`` ``known_composite_ids`` returns ALL declared
+    refs (every reference is "unresolved" against an empty registry) — callers
+    that don't yet have a registry should treat that as "unknown", not "all bad".
+    """
+    known = set(known_composite_ids or ())
+    return [r for r in _collect_composite_refs(spec) if r not in known]
+
+
+# ---------------------------------------------------------------------------
 # Discovery: walk a workspace and yield (slug, spec) pairs
 # ---------------------------------------------------------------------------
 
@@ -314,6 +397,8 @@ CHECKS = (
     # Forward-drift: declares done/passed but records no runs (dnaa-replication
     # 2026-05-31 — reviewer couldn't tell if studies had actually run)
     "status_claims_done_no_runs_recorded",
+    # Future-proofing: study has runs but none persisted via an emitter
+    "runs_without_emitter",
     # Reviewer-facing clarity strip ambiguities (single-sourced from
     # study_status.study_clarity_summary): ran-but-tests-pending, gate↔test drift
     "reviewer_clarity_ambiguity",
@@ -1770,6 +1855,49 @@ def _check_runs_yaml_vs_db_drift(ctx: _LintContext) -> None:
     )
 
 
+def _check_runs_without_emitter(ctx: _LintContext) -> None:
+    """Soft-WARN: a study records runs but none are persisted via an emitter.
+
+    Future-proofing (composites + emitters): every investigation should persist
+    its run trajectories via an emitter (sqlite / parquet / xarray) so results are
+    reproducible from disk, not just summarised. A run record evidences this by
+    carrying an ``emitter`` or a run-db reference (see
+    :func:`pbg_superpowers.rigor.run_is_emitter_backed`) — the same predicate the
+    ``run_persistence`` rigor dimension uses.
+
+    Warning-level (non-blocking). Silent when:
+
+    - the study records no ``runs[]`` (nothing to persist), or
+    - at least one run record IS emitter-backed, or
+    - ``studies/<slug>/runs.db`` exists with rows on disk — the canonical
+      persistence (F2) is present even if the YAML records don't restate it, so
+      warning would be a false positive.
+    """
+    runs = [r for r in (ctx.spec.get("runs") or []) if isinstance(r, dict)]
+    if not runs:
+        return
+    if any(run_is_emitter_backed(r) for r in runs):
+        return
+    # Canonical persistence may live in runs.db even when the YAML records omit
+    # the emitter field — don't warn when the DB has rows on disk.
+    try:
+        if _runs_db_rows(ctx.ws_root, ctx.slug):
+            return
+    except Exception:  # noqa: BLE001 — defensive: a missing/locked DB is not "persisted"
+        pass
+    ctx.add(
+        level="warning",
+        field_path="runs",
+        message=(
+            f"study records {len(runs)} run(s) but none are persisted via an emitter "
+            "(no run carries emitter: sqlite/parquet/xarray or a run-db reference, and "
+            "runs.db has no rows). Persist run trajectories via the workspace emitter so "
+            "results are reproducible from disk, not just summarised."
+        ),
+        check="runs_without_emitter",
+    )
+
+
 # ---------------------------------------------------------------------------
 # v4 narrative-spine completeness check
 # ---------------------------------------------------------------------------
@@ -2341,6 +2469,7 @@ _CHECK_FUNCTIONS = (
     _check_runs_yaml_vs_db_drift,
     _check_status_out_of_date_vs_runs,
     _check_status_claims_done_but_no_runs_recorded,
+    _check_runs_without_emitter,
     _check_reviewer_clarity_ambiguities,
     _check_viz_stale_vs_latest_run,
     _check_narrative_spine_completeness,

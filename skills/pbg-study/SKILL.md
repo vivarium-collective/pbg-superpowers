@@ -165,8 +165,17 @@ surfaces it — a missing field is a `gap`. Before a study is "done", address ea
 dimension (or say why not). Full guide + field shapes:
 [`docs/conventions/rigor-checklist.md`](../../docs/conventions/rigor-checklist.md).
 
+> **Real composites + emitters (both linted).** Every study must reference a
+> **REAL registered composite** — `baseline[].composite` has to resolve in the
+> workspace registry (run `/pbg-catalog` to see what's installed; a typo or a
+> not-yet-built composite shows up as an "error composite…" node and is flagged
+> by `report_linter.unresolved_composite_refs`). And every study's runs must
+> **persist via an emitter** (sqlite / parquet / xarray, or a run-db reference) —
+> a study with runs but no emitter earns a `run_persistence` rigor `gap` and a
+> `runs_without_emitter` lint warning.
+
 In short, ensure the study declares:
-- **a model** — `baseline:` with the composite(s) + params it runs (every study runs ≥1 composite);
+- **a model** — `baseline:` with the composite(s) + params it runs (every study runs ≥1 composite, and the composite must be REAL/registered);
 - **replication** — `robustness:` (≥3 seeds for stochastic; a `parameter_sweep: true` for deterministic);
 - **controls & calibration** — `controls:` with a NEGATIVE control (a system that should fail — build it with the **Intervention process**, `pbg_superpowers.intervention`, to clamp/knockout/scale a store) AND a positive/borderline case;
 - **alternative_hypotheses** — competing explanations + how the evidence (often the control) excludes them;

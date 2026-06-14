@@ -112,6 +112,41 @@ THRESHOLD_PROVENANCE_KINDS = (
     "theory", "calibration", "literature", "expert", "exploratory", "post_hoc",
 )
 
+# Emitter kinds a run record may declare to evidence that its trajectory was
+# PERSISTED (not just summarised). A run that emits via one of these — or that
+# carries a run-db reference (db_path / run_db / …) — is reproducible from disk.
+EMITTER_KINDS = ("sqlite", "parquet", "xarray")
+
+# Keys on a run record that reference a persisted run database / output file.
+_RUN_DB_REF_KEYS = ("db_path", "run_db", "runs_db", "db_file", "db", "run_db_path")
+
+
+def run_is_emitter_backed(run: Any) -> bool:
+    """True when a single ``runs[]`` record evidences emitter-backed persistence.
+
+    A run is "persisted via an emitter" when its record either:
+
+    * carries an ``emitter`` whose value (a string, or a dict's ``type`` /
+      ``kind``) is one of :data:`EMITTER_KINDS` (sqlite / parquet / xarray), or
+    * carries a non-empty run-db / output reference under any of
+      :data:`_RUN_DB_REF_KEYS` (``db_path`` / ``run_db`` / ``runs_db`` / …).
+
+    Pure and tolerant: a non-dict / malformed record returns ``False``.
+    """
+    if not isinstance(run, dict):
+        return False
+    em = run.get("emitter")
+    if isinstance(em, str) and em.strip().lower() in EMITTER_KINDS:
+        return True
+    if isinstance(em, dict):
+        kind = str(em.get("type") or em.get("kind") or em.get("emitter") or "").strip().lower()
+        if kind in EMITTER_KINDS:
+            return True
+    for k in _RUN_DB_REF_KEYS:
+        if _nonempty(run.get(k)):
+            return True
+    return False
+
 
 def _study_type(spec: dict) -> str:
     """Return the study's intent type (critique #10), generalizing the old
@@ -729,6 +764,27 @@ def study_rigor(spec: dict) -> dict:
                          "no generality axes tested — add findings[].generality.axes_tested or a "
                          "robustness parameter sweep so the claim's breadth is evidenced", ["C22"]))
 
+    # 13. Run persistence / emitter coverage — a run is reproducible only if its
+    #     trajectory was PERSISTED, not merely summarised. A run record evidences
+    #     this by carrying an ``emitter`` (sqlite/parquet/xarray) or a run-db
+    #     reference (see :func:`run_is_emitter_backed`). Not-applicable (OK) when
+    #     the study records no runs; GAP when it has runs but none are
+    #     emitter-backed.
+    runs = [r for r in _as_list(spec.get("runs")) if isinstance(r, dict)]
+    persisted = [r for r in runs if run_is_emitter_backed(r)]
+    if not runs:
+        dims.append(_dim("run_persistence", "Run persistence", OK,
+                         "no runs recorded — nothing to persist via an emitter", ["persistence"]))
+    elif persisted:
+        dims.append(_dim("run_persistence", "Run persistence", OK,
+                         f"{len(persisted)}/{len(runs)} run(s) persisted via an emitter "
+                         "(sqlite/parquet/xarray or a run-db reference)", ["persistence"]))
+    else:
+        dims.append(_dim("run_persistence", "Run persistence", GAP,
+                         f"{len(runs)} run(s) recorded but none carry an emitter "
+                         "(sqlite/parquet/xarray) or a run-db reference — the trajectories are "
+                         "not persisted; runs should emit via the workspace emitter", ["persistence"]))
+
     score = {GAP: 0, WARN: 0, OK: 0}
     for d in dims:
         score[d["severity"]] = score.get(d["severity"], 0) + 1
@@ -1145,6 +1201,20 @@ def framework_metrics(study_specs: list[dict], inv_specs: list[dict]) -> dict:
     # 8. Alternatives-excluded rate.
     n_alts_excluded = sum(1 for s in study_specs if _excluded_alternatives(s))
 
+    # 9. Emitter coverage — of the studies that record runs, the fraction whose
+    #    runs are emitter-backed (≥1 run carries an emitter / run-db reference).
+    #    Denominator is studies-with-runs (a study with no runs is not a
+    #    persistence candidate), mirroring threshold_provenance's band-scoped rate.
+    n_studies_with_runs = 0
+    n_emitter_backed = 0
+    for s in study_specs:
+        runs = [r for r in _as_list(s.get("runs")) if isinstance(r, dict)]
+        if not runs:
+            continue
+        n_studies_with_runs += 1
+        if any(run_is_emitter_backed(r) for r in runs):
+            n_emitter_backed += 1
+
     return {
         "n_studies": n_studies,
         "n_investigations": len(inv_specs),
@@ -1157,4 +1227,5 @@ def framework_metrics(study_specs: list[dict], inv_specs: list[dict]) -> dict:
         "verdict_divergence": _frac(n_divergent, n_studies),
         "falsification_exposure": _frac(n_exposed, n_studies),
         "alternatives_excluded": _frac(n_alts_excluded, n_studies),
+        "emitter_coverage": _frac(n_emitter_backed, n_studies_with_runs),
     }
