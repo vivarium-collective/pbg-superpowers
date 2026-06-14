@@ -24,6 +24,7 @@ from pbg_superpowers.report_linter import (
     load_overrides,
     main,
     override_path,
+    unresolved_composite_refs,
     write_override,
 )
 
@@ -927,3 +928,136 @@ def test_study_type_known_and_kind_alias_silent(tmp_path):
     ws2 = _ws_with_study(tmp_path / "b", {"name": "s2", "kind": "adversarial"})
     by_check2 = _findings_by_check(lint_workspace_report(ws2))
     assert by_check2.get("study_type_unknown", []) == []
+
+
+# ---------------------------------------------------------------------------
+# Real-composite resolution — unresolved_composite_refs (pure helper)
+# ---------------------------------------------------------------------------
+
+
+def test_unresolved_composite_refs_collects_from_all_sites():
+    spec = {
+        "baseline": [{"name": "b", "composite": "pkg.composites.real"}],
+        "conditions": {"baseline": {"composite": "pkg.composites.cond"}},
+        "simulation_set": [{"name": "r", "base_model": "pkg.composites.sim"}],
+    }
+    known = {"pkg.composites.real"}
+    out = unresolved_composite_refs(spec, known)
+    # real resolves; cond + sim do not
+    assert out == ["pkg.composites.cond", "pkg.composites.sim"]
+
+
+def test_unresolved_composite_refs_empty_when_all_resolve():
+    spec = {"baseline": [{"composite": "a"}], "simulation_set": [{"composite": "a"}]}
+    assert unresolved_composite_refs(spec, {"a"}) == []
+
+
+def test_unresolved_composite_refs_dedupes_in_order():
+    spec = {
+        "baseline": [{"composite": "x"}, {"composite": "y"}, {"composite": "x"}],
+    }
+    assert unresolved_composite_refs(spec, set()) == ["x", "y"]
+
+
+def test_unresolved_composite_refs_empty_registry_returns_all():
+    spec = {"baseline": [{"composite": "x"}]}
+    assert unresolved_composite_refs(spec, None) == ["x"]
+    assert unresolved_composite_refs(spec, set()) == ["x"]
+
+
+def test_unresolved_composite_refs_tolerant_of_missing_fields():
+    assert unresolved_composite_refs({}, {"a"}) == []
+    assert unresolved_composite_refs({"baseline": "not-a-list"}, set()) == []
+
+
+# ---------------------------------------------------------------------------
+# runs_without_emitter soft-WARN
+# ---------------------------------------------------------------------------
+
+
+def test_runs_without_emitter_warns(tmp_path):
+    ws = _ws_with_study(tmp_path, {
+        "name": "s", "runs": [{"name": "r1"}, {"name": "r2"}]})
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    fs = by_check.get("runs_without_emitter", [])
+    assert len(fs) == 1
+    assert fs[0].level == "warning"
+
+
+def test_runs_without_emitter_silent_when_emitter_backed(tmp_path):
+    ws = _ws_with_study(tmp_path, {
+        "name": "s", "runs": [{"name": "r1", "emitter": "sqlite"}]})
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    assert by_check.get("runs_without_emitter", []) == []
+
+
+def test_runs_without_emitter_silent_when_no_runs(tmp_path):
+    ws = _ws_with_study(tmp_path, {"name": "s"})
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    assert by_check.get("runs_without_emitter", []) == []
+
+
+def test_runs_without_emitter_silent_when_runs_db_has_rows(tmp_path):
+    # Canonical persistence in runs.db (F2) suppresses the warning even if the
+    # YAML run records don't restate the emitter.
+    ws = _ws_with_study(tmp_path, {"name": "s", "runs": [{"name": "r1"}]})
+    _seed_runs_db(ws, "s", ["r1"])
+    by_check = _findings_by_check(lint_workspace_report(ws))
+    assert by_check.get("runs_without_emitter", []) == []
+
+
+# ---------------------------------------------------------------------------
+# investigation_narrative_spine_required (REQUIRED, skippable)
+# ---------------------------------------------------------------------------
+
+import yaml as _yaml
+
+
+def _mk_investigation(tmp_path, inv: dict):
+    ws = tmp_path / "ws"
+    d = ws / "investigations" / "demo"
+    d.mkdir(parents=True)
+    (ws / "workspace.yaml").write_text("name: demo\n")
+    (d / "investigation.yaml").write_text(_yaml.safe_dump(inv))
+    return ws
+
+
+def _narrative_findings(ws):
+    return [f for f in lint_workspace_report(ws)
+            if f.check == "investigation_narrative_spine_required"]
+
+
+def test_investigation_narrative_required_fires_when_missing(tmp_path):
+    ws = _mk_investigation(tmp_path, {"name": "demo", "schema_version": 2})
+    f = _narrative_findings(ws)
+    assert {x.field_path for x in f} == {"executive", "scientific_argument", "biological_story"}
+    assert all(x.level == "warning" for x in f)  # required = blocking
+
+
+def test_investigation_narrative_satisfied_when_authored(tmp_path):
+    ws = _mk_investigation(tmp_path, {
+        "name": "demo",
+        "executive": {"what_is_this": "x"},
+        "scientific_argument": {"main_claim": "y"},
+        "biological_story": "z",
+    })
+    assert _narrative_findings(ws) == []
+
+
+def test_investigation_narrative_explicit_skip_suppresses(tmp_path):
+    ws = _mk_investigation(tmp_path, {
+        "name": "demo",
+        "narrative_spine_skip": ["executive", "scientific_argument", "biological_story"],
+        "narrative_spine_skip_reason": "slim single-study screen",
+    })
+    assert _narrative_findings(ws) == []
+
+
+def test_investigation_narrative_partial_skip(tmp_path):
+    ws = _mk_investigation(tmp_path, {
+        "name": "demo",
+        "executive": {"verdict": "passing"},
+        "narrative_spine_skip": ["biological_story"],
+    })
+    f = _narrative_findings(ws)
+    assert {x.field_path for x in f} == {"scientific_argument"}  # only the un-skipped, un-authored one

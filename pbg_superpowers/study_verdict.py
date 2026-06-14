@@ -223,6 +223,111 @@ def preregistration_status(spec: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Finding lifecycle floor (critique #25)
+# ---------------------------------------------------------------------------
+
+# The maturity ladder a finding climbs (DISTINCT from ``tier``, the claim class,
+# and from ``claim_scope``, the claim breadth). The first five are derivable
+# from rigor signals; ``retired`` / ``superseded`` are terminal states an author
+# sets manually (never auto-derived).
+LIFECYCLE_STATES = (
+    "observation",
+    "candidate-explanation",
+    "tested-vs-alternatives",
+    "provisional-claim",
+    "generalized",
+    "retired",
+    "superseded",
+)
+_LIFECYCLE_RANK = {s: i for i, s in enumerate(LIFECYCLE_STATES)}
+
+
+def lifecycle_floor(finding: dict, spec: dict) -> str:
+    """Derive the MINIMUM lifecycle_state a finding has earned (critique #25).
+
+    Pure ``(finding, spec) -> str``. Reuses the rigor signals already computed:
+
+    - ``observation`` — the default floor.
+    - ``candidate-explanation`` — the finding is an explanatory claim
+      (``tier`` of mechanism/interpretation), not a bare observation.
+    - ``tested-vs-alternatives`` — a competing explanation has been EXCLUDED and
+      its discriminator names this finding's test (reuses the rigor alternatives
+      matcher; degrades to "any excluded alternative in the study").
+    - ``provisional-claim`` — the result REPLICATES with cross-seed agreement
+      (reuses ``rigor._replication_agreement``).
+    - ``generalized`` — a generality / robustness signal is present (critique
+      #22; reuses ``rigor._has_generality_signal``).
+
+    Each level's precondition is checked independently and the HIGHEST satisfied
+    level is returned (the floor). An authored ``lifecycle_state`` may sit ABOVE
+    the floor, but the linter warns when it sits BELOW. ``retired`` /
+    ``superseded`` are never returned (they are author-only terminal states).
+    """
+    finding = finding or {}
+    spec = spec or {}
+    rank = 0  # observation
+
+    tier = str(finding.get("tier") or "").strip().lower()
+    if tier in ("mechanism", "interpretation"):
+        rank = max(rank, _LIFECYCLE_RANK["candidate-explanation"])
+
+    # Defensive import of the rigor predicates (rigor imports study_verdict
+    # lazily, so a module-level import here would risk a cycle).
+    try:
+        from . import rigor as _rigor
+    except Exception:  # noqa: BLE001
+        _rigor = None  # type: ignore
+
+    if _rigor is not None:
+        tokens = _rigor._finding_match_tokens(finding)
+        excluded = _rigor._excluded_alternatives(spec)
+        matched = [a for a in excluded if _rigor._alt_matches(a, tokens)]
+        if matched or (excluded and not tokens):
+            rank = max(rank, _LIFECYCLE_RANK["tested-vs-alternatives"])
+
+        n_rep, _ = _rigor._replicate_count(spec)
+        if n_rep >= 2:
+            disagrees, _ = _rigor._replication_agreement(spec, n_rep)
+            replicated = (n_rep >= 3) and not disagrees
+            if replicated:
+                rank = max(rank, _LIFECYCLE_RANK["provisional-claim"])
+
+        # generalized requires the FINDING's OWN generality claim (#22) — NOT a
+        # study-level sweep (which would lift every finding in the study) and NOT
+        # mere replication (which only earns provisional-claim above). A single
+        # declared axis earns provisional-claim; ≥2 axes or an explicit
+        # framework-level claim earns generalized. A finding the author marked
+        # instance_specific never reaches generalized.
+        faxes = _rigor._finding_generality_axes(finding)
+        gen = finding.get("generality") if isinstance(finding.get("generality"), dict) else {}
+        level = str(gen.get("level") or "").strip().lower()
+        if level != "instance_specific" and (len(faxes) >= 2 or level == "framework"):
+            rank = max(rank, _LIFECYCLE_RANK["generalized"])
+        elif faxes:
+            rank = max(rank, _LIFECYCLE_RANK["provisional-claim"])
+
+    return LIFECYCLE_STATES[rank]
+
+
+def lifecycle_below_floor(finding: dict, spec: dict) -> str | None:
+    """If a finding's authored ``lifecycle_state`` sits BELOW its derived floor,
+    return the floor; otherwise ``None``.
+
+    Returns ``None`` when no ``lifecycle_state`` is authored, when the authored
+    value is unknown (the enum check is a separate concern), or when it is at or
+    above the floor.
+    """
+    finding = finding or {}
+    authored = str(finding.get("lifecycle_state") or "").strip().lower()
+    if authored not in _LIFECYCLE_RANK:
+        return None
+    floor = lifecycle_floor(finding, spec)
+    if _LIFECYCLE_RANK[authored] < _LIFECYCLE_RANK[floor]:
+        return floor
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Task 2: write_gate_evaluator
 # ---------------------------------------------------------------------------
 

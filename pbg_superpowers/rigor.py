@@ -88,6 +88,65 @@ STUDY_TYPES = (
     "exploratory", "confirmatory", "diagnostic", "adversarial", "standard",
 )
 
+# claim_scope vocabulary (critique #21). The claim CLASS a finding makes —
+# distinct from ``tier`` (observation/mechanism/interpretation) and from
+# ``lifecycle_state`` (maturity). A theoretical / generality scope demands
+# robustness or generality evidence; a single-instance result claiming it earns
+# a WARN (see ``claim_discipline``).
+CLAIM_SCOPES = (
+    "local-implementation", "mechanism", "behavioral", "theoretical", "generality",
+)
+
+# generality vocabulary (critique #22). ``axes_tested`` enumerates the
+# independent dimensions a finding's robustness was probed along; ``level`` is
+# the breadth of the resulting claim.
+GENERALITY_AXES = (
+    "parameter_regime", "initial_conditions", "discretization", "geometry",
+    "alt_implementation", "independent_authoring",
+)
+GENERALITY_LEVELS = ("instance_specific", "mechanism", "framework")
+
+# threshold-provenance vocabulary (critique #9). Where an acceptance threshold
+# came from — distinct from ``cites`` (a literature source link).
+THRESHOLD_PROVENANCE_KINDS = (
+    "theory", "calibration", "literature", "expert", "exploratory", "post_hoc",
+)
+
+# Emitter kinds a run record may declare to evidence that its trajectory was
+# PERSISTED (not just summarised). A run that emits via one of these — or that
+# carries a run-db reference (db_path / run_db / …) — is reproducible from disk.
+EMITTER_KINDS = ("sqlite", "parquet", "xarray")
+
+# Keys on a run record that reference a persisted run database / output file.
+_RUN_DB_REF_KEYS = ("db_path", "run_db", "runs_db", "db_file", "db", "run_db_path")
+
+
+def run_is_emitter_backed(run: Any) -> bool:
+    """True when a single ``runs[]`` record evidences emitter-backed persistence.
+
+    A run is "persisted via an emitter" when its record either:
+
+    * carries an ``emitter`` whose value (a string, or a dict's ``type`` /
+      ``kind``) is one of :data:`EMITTER_KINDS` (sqlite / parquet / xarray), or
+    * carries a non-empty run-db / output reference under any of
+      :data:`_RUN_DB_REF_KEYS` (``db_path`` / ``run_db`` / ``runs_db`` / …).
+
+    Pure and tolerant: a non-dict / malformed record returns ``False``.
+    """
+    if not isinstance(run, dict):
+        return False
+    em = run.get("emitter")
+    if isinstance(em, str) and em.strip().lower() in EMITTER_KINDS:
+        return True
+    if isinstance(em, dict):
+        kind = str(em.get("type") or em.get("kind") or em.get("emitter") or "").strip().lower()
+        if kind in EMITTER_KINDS:
+            return True
+    for k in _RUN_DB_REF_KEYS:
+        if _nonempty(run.get(k)):
+            return True
+    return False
+
 
 def _study_type(spec: dict) -> str:
     """Return the study's intent type (critique #10), generalizing the old
@@ -217,6 +276,243 @@ def _dim(id_: str, label: str, severity: str, detail: str, comments: list[str]) 
             "detail": detail, "comments": comments}
 
 
+# ---------------------------------------------------------------------------
+# Threshold provenance + sensitivity (critique #9)
+# ---------------------------------------------------------------------------
+
+def _study_test_entries(spec: dict) -> list[dict]:
+    """Every behavior_tests[] / tests[] entry (dicts only)."""
+    out: list[dict] = []
+    for section in ("behavior_tests", "tests"):
+        for t in _as_list((spec or {}).get(section)):
+            if isinstance(t, dict):
+                out.append(t)
+    return out
+
+
+def _has_numeric_band(test: dict) -> bool:
+    """True when a test carries a quantitative acceptance band (numeric
+    ``pass_if.low/high/threshold/value`` or ``calibration_anchor.literature_target``)."""
+    if not isinstance(test, dict):
+        return False
+    pass_if = test.get("pass_if")
+    if isinstance(pass_if, dict):
+        for k in ("low", "high", "threshold", "value"):
+            if isinstance(pass_if.get(k), (int, float)) and not isinstance(pass_if.get(k), bool):
+                return True
+    anch = test.get("calibration_anchor")
+    if isinstance(anch, dict) and anch.get("literature_target") is not None:
+        return True
+    return False
+
+
+def _numeric_band_tests(spec: dict) -> list[dict]:
+    return [t for t in _study_test_entries(spec) if _has_numeric_band(t)]
+
+
+def _test_threshold_sourced(test: dict) -> bool:
+    """A numeric-band test is "sourced" when it links a literature source
+    (``cites`` on the test or its ``calibration_anchor``) OR declares an honest
+    ``pass_if.provenance.kind`` (critique #9)."""
+    if not isinstance(test, dict):
+        return False
+    if test.get("cites"):
+        return True
+    anch = test.get("calibration_anchor")
+    if isinstance(anch, dict) and (anch.get("cites") or anch.get("literature_target") is not None):
+        return True
+    pass_if = test.get("pass_if")
+    if isinstance(pass_if, dict):
+        prov = pass_if.get("provenance")
+        if isinstance(prov, dict) and str(prov.get("kind") or "").strip():
+            return True
+    return False
+
+
+def threshold_sensitivity(spec: dict, test_name: str,
+                          deltas: tuple[float, ...] = (-0.2, -0.1, 0.1, 0.2)) -> list[dict]:
+    """Re-evaluate a test's pass predicate against its RECORDED observed value
+    across cutoffs scaled by ``deltas`` (critique #9).
+
+    Pure ``spec -> list[{delta, cutoff, result}]``. Finds the named test, reads
+    its numeric band (via :func:`band_provenance._band_from_pass_if`), reads the
+    canonical run's recorded ``outcomes[test_name].observed`` (falling back to
+    ``measured_value``), then for each delta scales every numeric band bound by
+    ``(1 + delta)`` and re-checks whether the observed value still satisfies the
+    band. Shows how brittle a pass/fail is to the exact cutoff.
+
+    Returns ``[]`` (the guard) when the test is not found, has no numeric band,
+    or has no recorded observed value — there is nothing to re-evaluate.
+    ``cutoff`` is the scaled band dict; ``result`` is ``"PASS"`` / ``"FAIL"``.
+    """
+    spec = spec or {}
+    test = None
+    for t in _study_test_entries(spec):
+        if t.get("name") == test_name:
+            test = t
+            break
+    if test is None:
+        return []
+
+    try:
+        from .band_provenance import _band_from_pass_if
+    except Exception:  # noqa: BLE001 — defensive
+        _band_from_pass_if = None  # type: ignore
+    band = _band_from_pass_if(test.get("pass_if")) if _band_from_pass_if else None
+    pass_if = test.get("pass_if") if isinstance(test.get("pass_if"), dict) else {}
+    op = pass_if.get("op")
+    # Fallback for the {op, value} pass_if shape (which _band_from_pass_if, keyed
+    # on low/high/threshold, does not recognise): treat ``value`` as the cutoff.
+    if not band:
+        val = pass_if.get("value")
+        if isinstance(val, (int, float)) and not isinstance(val, bool):
+            band = {"threshold": val}
+    if not band:
+        return []
+
+    # Recorded observed value from the canonical run's outcomes.
+    try:
+        from .study_outcomes import canonical_outcomes
+        outcomes = canonical_outcomes(spec)
+    except Exception:  # noqa: BLE001 — defensive
+        outcomes = {}
+    out = outcomes.get(test_name) if isinstance(outcomes, dict) else None
+    observed = None
+    if isinstance(out, dict):
+        observed = out.get("observed")
+        if observed is None:
+            observed = out.get("measured_value")
+    try:
+        observed = float(observed)
+    except (TypeError, ValueError):
+        return []
+
+    results: list[dict] = []
+    for d in deltas:
+        scaled = {k: (v * (1 + d)) for k, v in band.items()
+                  if isinstance(v, (int, float)) and not isinstance(v, bool)}
+        results.append({
+            "delta": d,
+            "cutoff": scaled,
+            "result": "PASS" if _observed_satisfies(observed, scaled, op) else "FAIL",
+        })
+    return results
+
+
+def _observed_satisfies(observed: float, band: dict, op: str | None) -> bool:
+    """Pure predicate: does a scalar ``observed`` satisfy a numeric band?
+
+    Handles range bands (low/high), explicit comparator ``op`` against a
+    threshold/value, and a bare threshold (defaults to ``>=``).
+    """
+    if "low" in band and "high" in band:
+        return band["low"] <= observed <= band["high"]
+    ref = band.get("threshold", band.get("value"))
+    o = (op or "").strip()
+    if o in ("<=", "lte"):
+        return ref is not None and observed <= ref
+    if o in (">=", "gte"):
+        return ref is not None and observed >= ref
+    if o == "<":
+        return ref is not None and observed < ref
+    if o == ">":
+        return ref is not None and observed > ref
+    if o in ("==", "eq"):
+        return ref is not None and observed == ref
+    if o in ("!=", "ne"):
+        return ref is not None and observed != ref
+    if "threshold" in band:
+        return observed >= band["threshold"]
+    if "value" in band:
+        return observed == band["value"]
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Metric calibration ladder (critique #20)
+# ---------------------------------------------------------------------------
+
+_LADDER_RUNGS = ("known_fail", "known_pass", "borderline", "stress")
+
+
+def _calibration_ladders(spec: dict) -> list[dict]:
+    """Every declared ``calibration_ladder`` (a single dict or a list)."""
+    raw = (spec or {}).get("calibration_ladder")
+    if isinstance(raw, dict):
+        return [raw]
+    if isinstance(raw, list):
+        return [x for x in raw if isinstance(x, dict)]
+    return []
+
+
+def _ladder_severity(ladder: dict, control_names: set[str]) -> tuple[str, str]:
+    """Classify one calibration ladder → (severity, detail).
+
+    A rung is "filled" when its value is a non-null control reference that
+    resolves to a ``controls[].name``. GAP ≤1 rung, WARN when known_fail +
+    known_pass are filled but no borderline, OK at ≥3 rungs.
+    """
+    metric = ladder.get("metric") or "metric"
+    filled = {
+        rung for rung in _LADDER_RUNGS
+        if isinstance(ladder.get(rung), str) and ladder.get(rung) in control_names
+    }
+    n = len(filled)
+    if n >= 3:
+        return OK, f"{metric}: {n}/4 rungs calibrated ({sorted(filled)})"
+    if "known_fail" in filled and "known_pass" in filled and "borderline" not in filled:
+        return WARN, (f"{metric}: known_fail + known_pass but no borderline — add a borderline "
+                      "case so the metric is calibrated near the cutoff, not just at the extremes")
+    return GAP, (f"{metric}: only {n} rung(s) resolve to a control "
+                 "(need known_fail + known_pass + borderline)")
+
+
+# ---------------------------------------------------------------------------
+# Generality (critique #22)
+# ---------------------------------------------------------------------------
+
+def _study_swept(spec: dict) -> bool:
+    """True when the study declares a parameter sweep (``robustness.swept_param``
+    name or the legacy ``robustness.parameter_sweep`` flag)."""
+    rob = (spec or {}).get("robustness")
+    if not isinstance(rob, dict):
+        return False
+    if str(rob.get("swept_param") or "").strip():
+        return True
+    return bool(rob.get("parameter_sweep"))
+
+
+def _finding_generality_axes(finding: dict) -> set[str]:
+    """Valid ``generality.axes_tested`` enum values declared on a finding."""
+    gen = (finding or {}).get("generality")
+    if not isinstance(gen, dict):
+        return set()
+    return {str(a).strip() for a in _as_list(gen.get("axes_tested"))
+            if str(a).strip() in GENERALITY_AXES}
+
+
+def _study_generality_axes(spec: dict) -> set[str]:
+    """The union of generality axes evidenced across a study's findings, plus
+    ``parameter_regime`` when a robustness sweep is declared."""
+    axes: set[str] = set()
+    for f in _findings(spec):
+        axes |= _finding_generality_axes(f)
+    if _study_swept(spec):
+        axes.add("parameter_regime")
+    return axes
+
+
+def _has_generality_signal(spec: dict, finding: dict) -> bool:
+    """True when a finding has ANY generality/robustness evidence: its own
+    ``generality.axes_tested`` OR a study-level robustness sweep / ≥3 replicates."""
+    if _finding_generality_axes(finding):
+        return True
+    if _study_swept(spec):
+        return True
+    n_rep, sweep = _replicate_count(spec)
+    return sweep or n_rep >= 3
+
+
 def study_rigor(spec: dict) -> dict:
     """Compute the per-study rigor scorecard.
 
@@ -305,21 +601,37 @@ def study_rigor(spec: dict) -> dict:
         dims.append(_dim("alternatives", "Alternative hypotheses", GAP,
                          "no alternative hypotheses declared", ["C6"]))
 
-    # 4. Claim discipline — observation vs mechanism vs interpretation [C3]
+    # 4. Claim discipline — observation vs mechanism vs interpretation [C3].
+    #    Extended (critique #21): a finding whose claim_scope over-reaches
+    #    (theoretical / generality) without robustness or generality evidence is
+    #    a single-instance claim dressed as a general one — downgrade to WARN.
     if not findings:
-        dims.append(_dim("claim_discipline", "Claim discipline", GAP,
-                         "no findings recorded", ["C3"]))
+        cd = _dim("claim_discipline", "Claim discipline", GAP,
+                  "no findings recorded", ["C3"])
     elif not tiered:
-        dims.append(_dim("claim_discipline", "Claim discipline", WARN,
-                         "findings not tiered — label each observation / mechanism / interpretation", ["C3"]))
+        cd = _dim("claim_discipline", "Claim discipline", WARN,
+                  "findings not tiered — label each observation / mechanism / interpretation", ["C3"])
     else:
         interp_no_evidence = [f for f in interp if not f.get("evidence")]
         if interp_no_evidence:
-            dims.append(_dim("claim_discipline", "Claim discipline", GAP,
-                             f"{len(interp_no_evidence)} interpretation finding(s) not linked to evidence", ["C3"]))
+            cd = _dim("claim_discipline", "Claim discipline", GAP,
+                      f"{len(interp_no_evidence)} interpretation finding(s) not linked to evidence", ["C3"])
         else:
-            dims.append(_dim("claim_discipline", "Claim discipline", OK,
-                             "findings tiered; interpretation claims carry evidence", ["C3"]))
+            cd = _dim("claim_discipline", "Claim discipline", OK,
+                      "findings tiered; interpretation claims carry evidence", ["C3"])
+    overreaching = [
+        f for f in findings
+        if (f.get("claim_scope") or "").strip().lower() in ("theoretical", "generality")
+        and not _has_generality_signal(spec, f)
+    ]
+    if overreaching and cd["severity"] == OK:
+        cd = _dim("claim_discipline", "Claim discipline", WARN,
+                  f"{len(overreaching)} finding(s) claim_scope=theoretical/generality but the "
+                  "result is single-instance (no robustness sweep or generality axes) — narrow "
+                  "the scope or add generality evidence", ["C3", "C21"])
+    elif overreaching and cd["severity"] != OK:
+        cd["comments"] = list(cd["comments"]) + ["C21"]
+    dims.append(cd)
 
     # 5. Falsifiability of the bar [C5, C1] — the one authored field is
     #    study.falsifiability (no producer ever writes a per-test could_fail_if).
@@ -389,6 +701,89 @@ def study_rigor(spec: dict) -> dict:
         else:
             dims.append(_dim("preregistration", "Pre-registration", OK,
                              "confirmatory criteria pre-registered before the run", ["C1"]))
+
+    # 10. Threshold provenance (critique #9) — a numeric acceptance band should
+    #     say WHERE its cutoff came from: a literature ``cites`` link OR an
+    #     honest ``pass_if.provenance.kind``. An unsourced band reads as
+    #     tailored-to-succeed.
+    band_tests = _numeric_band_tests(spec)
+    if not band_tests:
+        dims.append(_dim("threshold_provenance", "Threshold provenance", OK,
+                         "no numeric acceptance bands requiring provenance", ["C9", "C5"]))
+    else:
+        unsourced = [t for t in band_tests if not _test_threshold_sourced(t)]
+        if unsourced:
+            dims.append(_dim("threshold_provenance", "Threshold provenance", GAP,
+                             f"{len(unsourced)} of {len(band_tests)} numeric band(s) declare neither "
+                             "cites nor pass_if.provenance.kind — state where the cutoff came from "
+                             "(theory/calibration/literature/expert/exploratory/post_hoc)", ["C9", "C5"]))
+        else:
+            dims.append(_dim("threshold_provenance", "Threshold provenance", OK,
+                             f"all {len(band_tests)} numeric band(s) carry a source (cites or "
+                             "pass_if.provenance.kind)", ["C9", "C5"]))
+
+    # 11. Metric calibration ladder (critique #20) — a metric is calibrated when
+    #     known-fail / known-pass / borderline / stress rungs map to controls
+    #     across its range, not merely a single asserted cutoff.
+    ladders = _calibration_ladders(spec)
+    if not ladders:
+        dims.append(_dim("metric_calibration", "Metric calibration ladder", GAP,
+                         "no calibration_ladder declared — index controls[] by known_fail / "
+                         "known_pass / borderline / stress rungs so the metric is calibrated across "
+                         "its range, not just asserted", ["C4", "C2", "C20"]))
+    else:
+        control_names = {str(c.get("name")) for c in
+                         _as_list(spec.get("controls")) if isinstance(c, dict) and c.get("name")}
+        # Severity = the best (most-filled) ladder, so a single well-calibrated
+        # metric is credited; detail enumerates each.
+        best_sev = GAP
+        details: list[str] = []
+        for lad in ladders:
+            sev, det = _ladder_severity(lad, control_names)
+            details.append(det)
+            if _SEVERITY_RANK[sev] > _SEVERITY_RANK[best_sev]:
+                best_sev = sev
+        dims.append(_dim("metric_calibration", "Metric calibration ladder", best_sev,
+                         "; ".join(details), ["C4", "C2", "C20"]))
+
+    # 12. Generality (critique #22) — how many INDEPENDENT axes the finding's
+    #     robustness was probed along (parameter regime, initial conditions,
+    #     discretization, geometry, alt implementation, independent authoring).
+    axes = _study_generality_axes(spec)
+    if len(axes) >= 2:
+        dims.append(_dim("generality", "Generality", OK,
+                         f"{len(axes)} independent generality axis(es) tested: {sorted(axes)}",
+                         ["C22"]))
+    elif len(axes) == 1:
+        dims.append(_dim("generality", "Generality", WARN,
+                         f"only one generality axis tested ({sorted(axes)[0]}) — a single sweep is not "
+                         "generality; vary initial conditions / discretization / implementation too",
+                         ["C22"]))
+    else:
+        dims.append(_dim("generality", "Generality", GAP,
+                         "no generality axes tested — add findings[].generality.axes_tested or a "
+                         "robustness parameter sweep so the claim's breadth is evidenced", ["C22"]))
+
+    # 13. Run persistence / emitter coverage — a run is reproducible only if its
+    #     trajectory was PERSISTED, not merely summarised. A run record evidences
+    #     this by carrying an ``emitter`` (sqlite/parquet/xarray) or a run-db
+    #     reference (see :func:`run_is_emitter_backed`). Not-applicable (OK) when
+    #     the study records no runs; GAP when it has runs but none are
+    #     emitter-backed.
+    runs = [r for r in _as_list(spec.get("runs")) if isinstance(r, dict)]
+    persisted = [r for r in runs if run_is_emitter_backed(r)]
+    if not runs:
+        dims.append(_dim("run_persistence", "Run persistence", OK,
+                         "no runs recorded — nothing to persist via an emitter", ["persistence"]))
+    elif persisted:
+        dims.append(_dim("run_persistence", "Run persistence", OK,
+                         f"{len(persisted)}/{len(runs)} run(s) persisted via an emitter "
+                         "(sqlite/parquet/xarray or a run-db reference)", ["persistence"]))
+    else:
+        dims.append(_dim("run_persistence", "Run persistence", GAP,
+                         f"{len(runs)} run(s) recorded but none carry an emitter "
+                         "(sqlite/parquet/xarray) or a run-db reference — the trajectories are "
+                         "not persisted; runs should emit via the workspace emitter", ["persistence"]))
 
     score = {GAP: 0, WARN: 0, OK: 0}
     for d in dims:
@@ -620,6 +1015,39 @@ def investigation_rigor(inv_spec: dict, study_specs: list[dict]) -> dict:
                          "no competing theoretical frameworks compared (viability theory, organizational / "
                          "constraint closure, active inference) — show the findings uniquely support this lens", ["C13"]))
 
+    # Hypothesis competition (critique #6 + #16) — did the investigation put
+    # forward ≥2 competing hypotheses AND accumulate evidence against each? An
+    # investigation with one (or zero) hypotheses is not adjudicating between
+    # rival explanations. Uses the deterministic support roll-up (defensive
+    # import so a missing module degrades to GAP, not a crash).
+    hyps = [h for h in _as_list(inv_spec.get("hypotheses")) if isinstance(h, dict)]
+    if not hyps:
+        dims.append(_dim("hypothesis_competition", "Hypothesis competition", GAP,
+                         "no competing hypotheses[] declared — state ≥2 rival explanations with "
+                         "predictions so the evidence can adjudicate between them", ["C6", "C16"]))
+    else:
+        n_with_support = 0
+        try:
+            from .hypotheses import compute_support_log
+            for h in hyps:
+                if compute_support_log(h, study_specs):
+                    n_with_support += 1
+        except Exception:  # noqa: BLE001 — defensive cross-module import
+            n_with_support = 0
+        if len(hyps) >= 2 and n_with_support >= 2:
+            dims.append(_dim("hypothesis_competition", "Hypothesis competition", OK,
+                             f"{len(hyps)} competing hypotheses, {n_with_support} with evidence "
+                             "in their support_log", ["C6", "C16"]))
+        elif len(hyps) >= 2:
+            dims.append(_dim("hypothesis_competition", "Hypothesis competition", WARN,
+                             f"{len(hyps)} hypotheses declared but only {n_with_support} carry "
+                             "support_log evidence — link study findings / alternate_hypotheses to them",
+                             ["C6", "C16"]))
+        else:
+            dims.append(_dim("hypothesis_competition", "Hypothesis competition", WARN,
+                             "only one hypothesis declared — add a competitor so the evidence "
+                             "adjudicates between rivals", ["C6", "C16"]))
+
     # Aggregate the worst per-study gap count as an investigation signal.
     study_gaps = sum(sc["score"]["gap"] for sc in per_study.values())
     if study_gaps:
@@ -738,7 +1166,9 @@ def framework_metrics(study_specs: list[dict], inv_specs: list[dict]) -> dict:
                 if not (t.get("pass_if") or t.get("calibration_anchor")):
                     continue
                 band_total += 1
-                if t.get("cites") or t.get("calibration_anchor"):
+                # A band is "sourced" by a literature link (cites /
+                # calibration_anchor) OR an honest pass_if.provenance.kind (#9).
+                if _test_threshold_sourced(t):
                     band_cited += 1
 
     # 4. Replication coverage — ≥3 replicates (reuse _replicate_count).
@@ -771,6 +1201,20 @@ def framework_metrics(study_specs: list[dict], inv_specs: list[dict]) -> dict:
     # 8. Alternatives-excluded rate.
     n_alts_excluded = sum(1 for s in study_specs if _excluded_alternatives(s))
 
+    # 9. Emitter coverage — of the studies that record runs, the fraction whose
+    #    runs are emitter-backed (≥1 run carries an emitter / run-db reference).
+    #    Denominator is studies-with-runs (a study with no runs is not a
+    #    persistence candidate), mirroring threshold_provenance's band-scoped rate.
+    n_studies_with_runs = 0
+    n_emitter_backed = 0
+    for s in study_specs:
+        runs = [r for r in _as_list(s.get("runs")) if isinstance(r, dict)]
+        if not runs:
+            continue
+        n_studies_with_runs += 1
+        if any(run_is_emitter_backed(r) for r in runs):
+            n_emitter_backed += 1
+
     return {
         "n_studies": n_studies,
         "n_investigations": len(inv_specs),
@@ -783,4 +1227,5 @@ def framework_metrics(study_specs: list[dict], inv_specs: list[dict]) -> dict:
         "verdict_divergence": _frac(n_divergent, n_studies),
         "falsification_exposure": _frac(n_exposed, n_studies),
         "alternatives_excluded": _frac(n_alts_excluded, n_studies),
+        "emitter_coverage": _frac(n_emitter_backed, n_studies_with_runs),
     }
