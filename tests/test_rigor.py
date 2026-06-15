@@ -1,6 +1,7 @@
 """Tests for the evidence & rigor scorecard (pbg_superpowers.rigor)."""
 from pbg_superpowers.rigor import (
-    study_rigor, investigation_rigor, finding_evidential_weight, GAP, WARN, OK,
+    study_rigor, investigation_rigor, finding_evidential_weight,
+    is_descriptive_study, GAP, WARN, OK, NA,
 )
 
 
@@ -563,3 +564,122 @@ def test_emitter_coverage_metric():
 def test_emitter_coverage_none_when_no_runs_anywhere():
     m = framework_metrics([{"name": "s"}], [])
     assert m["emitter_coverage"]["fraction"] is None
+
+
+# ---------------------------------------------------------------------------
+# Mode-awareness: a DESCRIPTIVE / informational study (a catalog / inventory /
+# reference with no hypothesis to test) must NOT report the hypothesis-test
+# dimensions as gaps — they are relabelled not_applicable and excluded from the
+# score. Mirrors the real units-atlas study (report.verdict: informational,
+# gate_status: not_applicable, tests: []).
+# ---------------------------------------------------------------------------
+
+_HYP_DIMS = ("replication", "negative_control", "alternatives", "falsifiability",
+             "mechanism_origin", "claim_discipline", "metric_calibration",
+             "generality", "threshold_provenance")
+
+
+def test_informational_study_has_no_spurious_hypothesis_gaps():
+    # Mirrors the real units-atlas study: a units catalog with no hypothesis.
+    spec = {
+        "name": "units-atlas-01",
+        "gate_status": "not_applicable",
+        "tests": [],
+        "report": {"verdict": "informational"},
+        "findings": [{"statement": "27 unit-bearing readouts across six dimensions."}],
+    }
+    assert is_descriptive_study(spec) is True
+    sc = study_rigor(spec)
+    assert sc["mode"] == "descriptive"
+    assert sc["descriptive"] is True
+    # Every hypothesis-test dimension is not_applicable, NOT a gap — this is the
+    # category-inappropriate noise the fix removes.
+    for dim_id in _HYP_DIMS:
+        sev = _sev(sc, dim_id)
+        assert sev == NA, f"{dim_id} should be NA, got {sev}"
+        assert sev != GAP
+    assert sc["score"]["na"] >= 7
+    assert "hypothesis-test rigor not applicable" in sc["summary"]
+
+
+def test_complete_descriptive_study_scores_clean():
+    # A descriptive deliverable that states its limitations + next steps scores
+    # zero gaps — no pile of hypothesis-test gaps drags it down.
+    spec = {
+        "name": "units-atlas-01",
+        "report": {"verdict": "informational"},
+        "gate_status": "not_applicable",
+        "tests": [],
+        "limitations": "Descriptive reference, not a hypothesis test — no pass/fail gate.",
+        "discovery_implications": {"remaining_uncertainties": "magnitude columns pending a run"},
+    }
+    sc = study_rigor(spec)
+    assert sc["score"]["gap"] == 0
+    # Only the reference-meaningful dimensions are scored.
+    assert _sev(sc, "limitations") == OK
+    assert _sev(sc, "next_steps") == OK
+
+
+def test_descriptive_detected_via_gate_status_alone():
+    # No authored verdict, but gate_status=not_applicable + no acceptance bar.
+    spec = {"name": "ref", "gate_status": "not_applicable"}
+    assert is_descriptive_study(spec) is True
+    sc = study_rigor(spec)
+    # No hypothesis-test dimension is reported as a gap.
+    for dim_id in _HYP_DIMS:
+        assert _sev(sc, dim_id) == NA
+
+
+def test_gate_not_applicable_but_has_tests_is_not_descriptive():
+    # An acceptance bar present means there IS a hypothesis — not descriptive.
+    spec = {"name": "s", "gate_status": "not_applicable",
+            "tests": [{"name": "t1", "pass_if": {"threshold": 1.0}}]}
+    assert is_descriptive_study(spec) is False
+    assert study_rigor(spec)["mode"] == "hypothesis"
+
+
+# ---------------------------------------------------------------------------
+# A HYPOTHESIS study with declared rigor fields is CREDITED (not gapped) — the
+# crediting logic reads the documented field names. Confirms the data agent's
+# authored fields land.
+# ---------------------------------------------------------------------------
+
+def test_hypothesis_study_with_declared_fields_is_credited():
+    spec = {
+        "name": "study-h",
+        # replication: robustness.{n_replicates,seeds,parameter_sweep}
+        "robustness": {"n_replicates": 5, "seeds": [0, 1, 2, 3, 4],
+                       "parameter_sweep": True, "swept_param": "k"},
+        # controls: controls[].{kind,result,observed}
+        "controls": [
+            {"name": "external", "kind": "negative", "observed": "fail", "result": "PASS"},
+            {"name": "borderline", "kind": "borderline", "observed": "near", "result": "PASS"},
+        ],
+        # alternatives: alternative_hypotheses[].status == excluded
+        "alternative_hypotheses": [
+            {"claim": "plain movement", "discriminated_by": "control", "status": "excluded"},
+        ],
+        # falsifiability: study.falsifiability (string)
+        "falsifiability": "Closure fails if the membrane is supplied externally.",
+        # findings[].{tier,mechanism_origin,evidence,generality.axes_tested}
+        "findings": [
+            {"statement": "obs", "tier": "observation", "evidence": {"from_test": "t"}},
+            {"statement": "interp", "tier": "interpretation", "mechanism_origin": "emergent",
+             "evidence": {"from_test": "t"},
+             "generality": {"axes_tested": ["initial_conditions"]}},
+        ],
+        # limitations + next steps
+        "limitations": "Only the geometric boundary is modelled.",
+        "discovery_implications": {"remaining_uncertainties": "transport not modelled"},
+    }
+    assert is_descriptive_study(spec) is False
+    sc = study_rigor(spec)
+    assert sc["mode"] == "hypothesis"
+    assert _sev(sc, "replication") == OK
+    assert _sev(sc, "negative_control") == OK
+    assert _sev(sc, "alternatives") == OK
+    assert _sev(sc, "falsifiability") == OK
+    assert _sev(sc, "mechanism_origin") == OK
+    assert _sev(sc, "limitations") == OK
+    # Nothing relabelled away on a hypothesis study.
+    assert sc["score"]["na"] == 0
