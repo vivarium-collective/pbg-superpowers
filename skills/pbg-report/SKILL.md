@@ -1,6 +1,6 @@
 ---
 name: pbg-report
-description: Regenerate the workspace dashboard + per-investigation reports. Runs a reviewer-readiness audit FIRST (Pass A — verdict ↔ chart drift, stale framings, demoted-chart citations, uncommitted state, suggested follow-ups), THEN the structural lint (Pass B — schema correctness, status contradictions, placeholders), then renders. Use BEFORE sending the report to an external reviewer. Idempotent.
+description: Regenerate the workspace dashboard + per-investigation reports. Runs a reviewer-readiness audit FIRST (Pass A — verdict ↔ chart drift, stale framings, demoted-chart citations, uncommitted state, suggested follow-ups, AND required proposals for new visualizations a reviewer should consider), THEN the structural lint (Pass B — schema correctness, status contradictions, placeholders), then renders. Use BEFORE sending the report to an external reviewer. Idempotent.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: [model-name | --all | --audit | --lint | --force | --skip-audit]
@@ -113,6 +113,40 @@ Mine these sources:
 4. **Stale review-thread topics** — when on a PR-attached branch: `gh pr view <N> --json reviews,comments`. For each unresolved thread topic, see whether commits since address it; flag any that DON'T match a recent commit.
 5. **Run outcomes** — scan `$STUDIES_DIR/*/study.yaml` `runs:` for any outcome other than `completed`. Flag.
 
+### A8. Propose new visualizations — REQUIRED
+
+Every reviewer-facing render must propose **at least 2 new visualizations per
+investigation** that do not yet exist and would make a finding clearer, more
+convincing, or more explorable. This is not optional: a report whose findings
+are under-visualized is not reviewer-ready. Be inventive — the point is to give
+the reviewer concrete, creative options to consider, not to restate the charts
+already present.
+
+For each proposal, surface:
+- **Title + form** — what it shows and the chart type (favor interactive Plotly;
+  reach for the richer forms in `/pbg-viz`'s creativity table — phase portraits,
+  heatmaps of report-card axes, Sankey mass-balance, sunburst inventories,
+  variance-band population traces, animated multi-gen accumulation, etc.).
+- **Which finding it sharpens** — the verdict line or study claim it supports,
+  and what becomes undeniable that prose alone leaves fuzzy.
+- **Data source** — the run/observable/CSV it would draw from (so the reviewer
+  knows it's buildable, not hypothetical).
+- **Effort** — `single-file edit` / `~5 min` / `multi-hour sim` / `blocked-on-X`.
+
+Mine for proposals: findings asserted in prose with no chart; behavior-test
+observables nothing visualizes (A6.3); report-card / multi-axis results shown
+only as a table; multi-seed or population results shown only as a mean;
+relationships between two observables only ever plotted separately; any "we
+found X" that a reader has to take on faith.
+
+**Take the initiative.** When a proposal is cheap (`single-file edit` / `~5 min`)
+and the data is already on disk, **build it now** rather than only listing it —
+invoke `/pbg-viz` or add it to the investigation's figure generator, place the
+output where the report discovers it, and move the item from "proposed" to
+"added this pass" in the output. Only leave a proposal un-built when it needs a
+new/long simulation or is blocked. Never silently skip the proposal step because
+"the charts look fine" — propose anyway; there is always a sharper view.
+
 ### A7. Output format
 
 ```
@@ -133,6 +167,11 @@ Findings (severity, scope, message, suggested fix):
 Suggested follow-ups before sending to reviewer:
   1. <title> — <one-line evidence change> — <effort>
   2. ...
+
+Proposed visualizations (≥2 per investigation; A8):
+  1. <title + form> — sharpens <finding> — from <data source> — <effort>
+  2. ...
+  Built this pass: <list any cheap ones you drew on the spot, with paths>
 
 Render anyway? (Pass B and render are next.)
 ```
@@ -281,7 +320,12 @@ python -c "..." # render_*_report(..., today='2026-05-09')
 ## Safety
 
 - Never modifies `workspace.yaml`, `decisions.yaml`, or any other persistent state — read-only consumer.
-- Pass A is read-only: it can SUGGEST follow-ups but never executes them.
+- Pass A is read-only with ONE deliberate exception: the A8 initiative to
+  *build* a cheap, already-buildable visualization (a new figure file + its
+  generator entry). It SUGGESTS follow-ups/experiments but never runs sims or
+  edits study verdicts. Any figure it draws is additive (a new chart file),
+  surfaced in the output as "Built this pass", and committed like any other
+  chart — it never rewrites or deletes existing figures.
 - Refuses to run if `workspace.yaml` is malformed.
 - Per-model rendering catches `build_core()` failures, logs them, and emits a stub deep-dive panel rather than crashing the entire report.
 
