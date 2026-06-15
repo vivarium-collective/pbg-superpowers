@@ -73,6 +73,36 @@ WARN = "warn"
 OK = "ok"
 _SEVERITY_RANK = {GAP: 0, WARN: 1, OK: 2}
 
+# A fourth, non-scoring severity (mode-awareness, below): a dimension that does
+# not APPLY to this study's kind. It is neither a gap nor credit — it is excluded
+# from the gap/warn/ok score and the addressed/total roll-up entirely. Used for
+# the hypothesis-test dimensions on a descriptive / informational study.
+NA = "not_applicable"
+
+# Dimensions that presuppose a HYPOTHESIS UNDER TEST. On a descriptive /
+# informational study (a catalog / inventory / reference with no pass-fail claim
+# to defend) these are category-inappropriate — asking a units catalog for
+# "replication across seeds" or "negative controls" is noise that makes finished
+# reference work read as deficient. For such studies they are relabelled
+# :data:`NA` ("not applicable — descriptive reference") instead of counting as
+# gaps. The dimensions left applicable (limitations / completeness, next steps,
+# run persistence) ARE meaningful for a reference deliverable.
+_HYPOTHESIS_TEST_DIMS = frozenset({
+    "replication",
+    "negative_control",
+    "alternatives",
+    "claim_discipline",
+    "falsifiability",
+    "mechanism_origin",
+    "preregistration",
+    "threshold_provenance",
+    "metric_calibration",
+    "generality",
+})
+
+# Authored verdict values that mark a study as descriptive (no hypothesis test).
+_DESCRIPTIVE_VERDICTS = ("informational", "descriptive")
+
 # Above this coefficient of variation, per-measure spread across seeds is
 # treated as cross-seed disagreement (item 14 — replication scores AGREEMENT,
 # not merely count). Deterministic threshold; tolerant of missing sub-fields.
@@ -513,11 +543,76 @@ def _has_generality_signal(spec: dict, finding: dict) -> bool:
     return sweep or n_rep >= 3
 
 
+def _authored_verdict(spec: dict) -> str:
+    """The study's authored verdict, searched across its canonical locations:
+    top-level ``verdict``, ``report.verdict``, then any
+    ``conclusion_verdicts[].verdict``. Lower-cased; ``""`` when none authored.
+    """
+    spec = spec or {}
+    v = str(spec.get("verdict") or "").strip().lower()
+    if v:
+        return v
+    rep = spec.get("report")
+    if isinstance(rep, dict):
+        v = str(rep.get("verdict") or "").strip().lower()
+        if v:
+            return v
+    for cv in _as_list(spec.get("conclusion_verdicts")):
+        if isinstance(cv, dict):
+            v = str(cv.get("verdict") or "").strip().lower()
+            if v:
+                return v
+    return ""
+
+
+def _has_acceptance(spec: dict) -> bool:
+    """True when the study declares ANY acceptance bar — a non-empty
+    ``behavior_tests`` / ``tests`` / ``acceptance_criteria``. An empty ``[]``
+    (the explicit "no tests" of a reference study) does not count."""
+    spec = spec or {}
+    for key in ("behavior_tests", "tests", "acceptance_criteria"):
+        if _nonempty(spec.get(key)):
+            return True
+    return False
+
+
+def is_descriptive_study(spec: dict) -> bool:
+    """True when a study is DESCRIPTIVE / informational — a catalog, inventory or
+    reference with no hypothesis to test — so the hypothesis-test rigor
+    dimensions don't apply (mode-awareness).
+
+    Two deterministic signals, either sufficient:
+
+    * an authored ``verdict`` of ``informational`` / ``descriptive`` (read from
+      top-level ``verdict`` / ``report.verdict`` / ``conclusion_verdicts``), OR
+    * an authored ``gate_status`` of ``not_applicable`` combined with no
+      acceptance bar (empty / absent ``tests`` / ``behavior_tests`` /
+      ``acceptance_criteria``).
+
+    Pure and tolerant of a malformed / minimal spec.
+    """
+    spec = spec or {}
+    if _authored_verdict(spec) in _DESCRIPTIVE_VERDICTS:
+        return True
+    gate = str(spec.get("gate_status") or "").strip().lower()
+    if gate == "not_applicable" and not _has_acceptance(spec):
+        return True
+    return False
+
+
 def study_rigor(spec: dict) -> dict:
     """Compute the per-study rigor scorecard.
 
-    Returns ``{dimensions: [...], score: {gap,warn,ok,total}, summary: str}``.
-    Pure; tolerant of a minimal spec (every absent field yields a ``gap``).
+    Returns ``{mode, descriptive, dimensions: [...],
+    score: {gap,warn,ok,na,total}, summary: str}``. Pure; tolerant of a minimal
+    spec (every absent field yields a ``gap``).
+
+    MODE-AWARE: a descriptive / informational study (see
+    :func:`is_descriptive_study`) has no hypothesis to defend, so the
+    hypothesis-test dimensions (replication, controls, alternatives,
+    falsifiability, …) are relabelled :data:`NA` ("not applicable — descriptive
+    reference") and excluded from the gap/warn/ok score, rather than reported as
+    a pile of category-inappropriate gaps.
     """
     spec = spec or {}
     findings = _findings(spec)
@@ -785,17 +880,45 @@ def study_rigor(spec: dict) -> dict:
                          "(sqlite/parquet/xarray) or a run-db reference — the trajectories are "
                          "not persisted; runs should emit via the workspace emitter", ["persistence"]))
 
+    # Mode-awareness: for a descriptive / informational study the hypothesis-test
+    # dimensions don't apply — relabel them NA so they neither score as gaps nor
+    # inflate the "addressed" count. The dimensions that ARE meaningful for a
+    # reference deliverable (limitations / completeness, next steps, run
+    # persistence) keep their computed severity.
+    descriptive = is_descriptive_study(spec)
+    if descriptive:
+        for d in dims:
+            if d["id"] in _HYPOTHESIS_TEST_DIMS:
+                d["severity"] = NA
+                d["detail"] = ("not applicable — descriptive reference (no hypothesis "
+                               "under test); hypothesis-test rigor is not scored")
+
     score = {GAP: 0, WARN: 0, OK: 0}
+    na = 0
     for d in dims:
+        if d["severity"] == NA:
+            na += 1
+            continue
         score[d["severity"]] = score.get(d["severity"], 0) + 1
     addressed = score[OK]
-    total = len(dims)
+    total = len(dims) - na  # applicable (scored) dimensions only
+    if descriptive:
+        summary = "descriptive reference — hypothesis-test rigor not applicable"
+        if total:
+            summary += f"; {addressed}/{total} reference dimension(s) addressed"
+        if score[GAP]:
+            summary += f" · {score[GAP]} gap(s)"
+    else:
+        summary = (f"{addressed}/{total} rigor dimensions addressed"
+                   + (f" · {score[GAP]} gap(s)" if score[GAP] else ""))
     return {
         "study_type": study_type,
+        "mode": "descriptive" if descriptive else "hypothesis",
+        "descriptive": descriptive,
         "dimensions": dims,
-        "score": {"gap": score[GAP], "warn": score[WARN], "ok": score[OK], "total": total},
-        "summary": f"{addressed}/{total} rigor dimensions addressed"
-                   + (f" · {score[GAP]} gap(s)" if score[GAP] else ""),
+        "score": {"gap": score[GAP], "warn": score[WARN], "ok": score[OK],
+                  "na": na, "total": total},
+        "summary": summary,
     }
 
 
