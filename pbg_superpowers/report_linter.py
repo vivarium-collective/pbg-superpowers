@@ -2310,19 +2310,39 @@ def _check_missing_visualizations(ctx: _LintContext) -> None:
     """
     if ctx.slug == "<workspace>":
         return
+    # A study "has a visualization" via any of the surfaces the dashboard
+    # actually renders: declared visualizations[], declared
+    # embed_visualizations[], or auto-discovered HTML in the canonical
+    # reports/figures/<slug>/ (and studies/<slug>/{charts,viz}/).
     viz = ctx.spec.get("visualizations") or []
     if isinstance(viz, list) and len(viz) > 0:
+        return
+    embeds = ctx.spec.get("embed_visualizations") or []
+    if isinstance(embeds, list) and len(embeds) > 0:
+        return
+    wp = WorkspacePaths.load(ctx.ws_root)
+    on_disk = (
+        any((wp.reports / "figures" / ctx.slug).glob("*.html"))
+        if (wp.reports / "figures" / ctx.slug).is_dir() else False
+    )
+    for sub in ("charts", "viz"):
+        d = wp.studies / ctx.slug / sub
+        if d.is_dir() and any(d.iterdir()):
+            on_disk = True
+    if on_disk:
         return
     ctx.add(
         level="warning",
         field_path="visualizations",
         message=(
-            "Study has no visualizations[] declared. Add ≥1 entry so the "
-            "expert reviewer sees concrete figures — real charts for "
-            "completed runs, or PLANNED-mockup viz (with synthetic data + "
-            "explanatory caption) for studies still in design. The "
-            "dashboard renders viz inline in the study card, so this is "
-            "the most visible expert-facing surface."
+            "Study has no visualization on any rendered surface — no "
+            "visualizations[] / embed_visualizations[] declared and no figure in "
+            "reports/figures/<slug>/ or studies/<slug>/{charts,viz}/. Add ≥1 so "
+            "the expert reviewer sees concrete figures — real charts for completed "
+            "runs, or PLANNED-mockup viz (with synthetic data + explanatory "
+            "caption) for studies still in design. The dashboard renders viz "
+            "inline in the study card, so this is the most visible expert-facing "
+            "surface."
         ),
         check="missing_visualizations",
     )
@@ -2535,6 +2555,104 @@ def _check_speculative_readout_paths(ctx: _LintContext) -> None:
             )
 
 
+def _check_visualization_files(ctx: _LintContext) -> None:
+    """Guard against the silent "figure exists but never renders" failure.
+
+    The dashboard auto-discovers a study's interactive figures ONLY from the
+    canonical ``<ws_root>/reports/figures/<slug>/*.html``. Three ways an author
+    silently ends up with an invisible figure, each caught here as a warning:
+
+      1. A declared ``embed_visualizations[].url`` whose file does not exist
+         under the workspace.
+      2. A declared ``visualizations[].address: image:<path>`` whose file does
+         not exist relative to the study directory.
+      3. An HTML figure parked in the look-alike
+         ``<ws_root>/workspace/reports/figures/<slug>/`` (a common mistake) that
+         the canonical auto-discovery will never see.
+
+    All warning-level: a figure that doesn't render is a quality gap, not a
+    schema error, and the author may be mid-authoring.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    wp = WorkspacePaths.load(ctx.ws_root)
+    slug = ctx.slug
+    canonical = wp.reports / "figures" / slug
+
+    # 1. embed_visualizations[].url must resolve to a real file.
+    embeds = ctx.spec.get("embed_visualizations") or []
+    if isinstance(embeds, list):
+        for i, emb in enumerate(embeds):
+            if not isinstance(emb, dict):
+                continue
+            url = str(emb.get("url") or "").strip()
+            if not url or url.startswith(("http://", "https://")):
+                continue  # remote/external — not ours to verify
+            target = ctx.ws_root / url.lstrip("/")
+            if not target.is_file():
+                ctx.add(
+                    level="warning",
+                    field_path=f"embed_visualizations[{i}].url",
+                    message=(
+                        f"Embed {emb.get('name') or url!r} points at {url!r}, which "
+                        f"does not exist under the workspace — the figure will not "
+                        f"render. Write it to reports/figures/{slug}/<name>.html "
+                        f"(the canonical, auto-discovered location)."
+                    ),
+                    check="viz_file_missing",
+                )
+
+    # 2. visualizations[].address: image:<path> must resolve (relative to study dir).
+    study_dir = wp.studies / slug
+    viz = ctx.spec.get("visualizations") or []
+    if isinstance(viz, list):
+        for i, v in enumerate(viz):
+            if not isinstance(v, dict):
+                continue
+            addr = str(v.get("address") or "").strip()
+            if not addr.startswith("image:"):
+                continue  # local:/dotted addresses handled elsewhere
+            relp = addr[len("image:"):].strip()
+            if not relp or relp.startswith(("http://", "https://", "/")):
+                continue
+            if not (study_dir / relp).is_file():
+                ctx.add(
+                    level="warning",
+                    field_path=f"visualizations[{i}].address",
+                    message=(
+                        f"Visualization {v.get('name') or addr!r} references {addr!r}, "
+                        f"but no file exists at {relp!r} relative to the study "
+                        f"directory — it will not render."
+                    ),
+                    check="viz_file_missing",
+                )
+
+    # 3. Misplaced figures: HTML under the look-alike workspace/reports/figures/
+    #    that the canonical auto-discovery will never surface.
+    alt = ctx.ws_root / "workspace" / "reports" / "figures" / slug
+    try:
+        same = alt.resolve() == canonical.resolve()
+    except OSError:
+        same = False
+    if alt.is_dir() and not same:
+        orphans = [
+            p.name for p in sorted(alt.glob("*.html"))
+            if not (canonical / p.name).is_file()
+        ]
+        if orphans:
+            ctx.add(
+                level="warning",
+                field_path="reports/figures",
+                message=(
+                    f"Figure(s) {', '.join(orphans)} live in the non-canonical "
+                    f"workspace/reports/figures/{slug}/ — the dashboard does NOT "
+                    f"auto-discover there, so they will not render. Move them to "
+                    f"reports/figures/{slug}/."
+                ),
+                check="viz_misplaced",
+            )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -2556,6 +2674,7 @@ _CHECK_FUNCTIONS = (
     _check_band_test_missing_cites,
     _check_band_cites_unknown_bib_key,
     _check_visualization_addresses,
+    _check_visualization_files,
     _check_dag_edges_legacy_and_canonical_both_set,
     _check_status_legacy_only,
     _check_runs_yaml_vs_db_drift,
