@@ -1061,3 +1061,74 @@ def test_investigation_narrative_partial_skip(tmp_path):
     })
     f = _narrative_findings(ws)
     assert {x.field_path for x in f} == {"scientific_argument"}  # only the un-skipped, un-authored one
+
+
+# ---------------------------------------------------------------------------
+# Visualization file existence + misplacement guard (_check_visualization_files)
+# ---------------------------------------------------------------------------
+
+
+def _min_viz_ws(root: Path, study_yaml: str, *, figures=None, alt_figures=None) -> Path:
+    """Minimal workspace: one study + optional figures at the canonical
+    (reports/figures/<slug>/) and/or look-alike (workspace/reports/figures/)
+    locations."""
+    (root / "studies" / "s1").mkdir(parents=True)
+    (root / "workspace.yaml").write_text(
+        "schema_version: 2\nname: t\ncreated: '2026-06-16'\npackage_path: pkg\n")
+    (root / "studies" / "s1" / "study.yaml").write_text(study_yaml)
+    for loc, names in (("reports/figures/s1", figures), ("workspace/reports/figures/s1", alt_figures)):
+        if names:
+            d = root / loc
+            d.mkdir(parents=True, exist_ok=True)
+            for n in names:
+                (d / n).write_text("<html></html>")
+    return root
+
+
+def test_viz_embed_missing_file_fires(tmp_path):
+    ws = _min_viz_ws(tmp_path / "ws",
+                     "name: s1\nembed_visualizations:\n"
+                     "  - name: f\n    url: /reports/figures/s1/missing.html\n")
+    checks = _findings_by_check(lint_workspace_report(ws))
+    assert "viz_file_missing" in checks
+
+
+def test_viz_embed_present_file_clean(tmp_path):
+    ws = _min_viz_ws(tmp_path / "ws",
+                     "name: s1\nembed_visualizations:\n"
+                     "  - name: f\n    url: /reports/figures/s1/there.html\n",
+                     figures=["there.html"])
+    checks = _findings_by_check(lint_workspace_report(ws))
+    assert "viz_file_missing" not in checks
+    assert "viz_misplaced" not in checks
+
+
+def test_viz_image_address_missing_file_fires(tmp_path):
+    ws = _min_viz_ws(tmp_path / "ws",
+                     "name: s1\nvisualizations:\n"
+                     "  - name: f\n    address: image:charts/nope.png\n")
+    checks = _findings_by_check(lint_workspace_report(ws))
+    assert "viz_file_missing" in checks
+
+
+def test_viz_misplaced_in_workspace_reports_fires(tmp_path):
+    # Figure parked in workspace/reports/figures/<slug>/ (not canonical) -> warn.
+    ws = _min_viz_ws(tmp_path / "ws", "name: s1\n", alt_figures=["orphan.html"])
+    checks = _findings_by_check(lint_workspace_report(ws))
+    assert "viz_misplaced" in checks
+    assert any("orphan.html" in f.message for f in checks["viz_misplaced"])
+
+
+def test_missing_visualizations_satisfied_by_embed_or_ondisk(tmp_path):
+    # embed_visualizations[] alone satisfies the "has a viz" check.
+    ws1 = _min_viz_ws(tmp_path / "w1",
+                      "name: s1\nembed_visualizations:\n"
+                      "  - name: f\n    url: /reports/figures/s1/there.html\n",
+                      figures=["there.html"])
+    assert "missing_visualizations" not in _findings_by_check(lint_workspace_report(ws1))
+    # on-disk canonical figure alone also satisfies it.
+    ws2 = _min_viz_ws(tmp_path / "w2", "name: s1\n", figures=["auto.html"])
+    assert "missing_visualizations" not in _findings_by_check(lint_workspace_report(ws2))
+    # nothing at all -> the warning fires.
+    ws3 = _min_viz_ws(tmp_path / "w3", "name: s1\n")
+    assert "missing_visualizations" in _findings_by_check(lint_workspace_report(ws3))
