@@ -98,6 +98,29 @@ in the HTML so the figure is self-explanatory out of context. Color with intent
 data). Downsample very long trajectories to ~500–1000 points so the file stays
 light without losing the shape.
 
+**Make it legible — encode the interpretable thing, not a raw number.** A figure
+that's informative in principle still fails if the reader can't decode it at a
+glance. Hard-won rules:
+
+- **Never clamp a wide-range metric to a floor/ceiling as the bar height.**
+  Plotting e.g. median R² clamped to −1 collapses every bad group to one
+  identical bar — the reader learns nothing and the value labels collide with
+  the axis. Pick a *bounded, monotonic* proxy that the reader intuitively
+  understands (e.g. "fraction of columns with R² > 0.5", a 0–100 % bar), or a
+  symlog axis, and carry the raw value as a text annotation / hover so nothing
+  is hidden. The bar should answer the question directly ("how much of this is
+  good?"), not encode a statistic whose range is pathological.
+- **Keep labels and annotations inside the frame.** `textposition="outside"` on
+  a bar that runs to the axis edge (or a downward/negative bar) clips the label.
+  Leave axis headroom (e.g. range `[0, 1.18]`) and position labels where they
+  stay visible.
+- **One figure, one reading.** If you have to squint to tell categories or
+  series apart, the encoding is wrong — change the metric, scale, or chart type,
+  don't just add a legend.
+- **Honest scales.** A log/clamped/normalized axis must not *hide* that values
+  are extreme — surface the true magnitude in text or hover so the figure can't
+  be misread as better (or worse) than it is.
+
 **Propose, don't just fulfill.** If the literal request would produce a weak
 figure, build the better one and say why in your success message ("requested a
 cell_mass line; rendered it as a multi-gen accumulation with division markers and
