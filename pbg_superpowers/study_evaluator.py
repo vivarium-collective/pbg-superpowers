@@ -409,11 +409,18 @@ def _eval_expression(expr: str, token_series: dict[str, pl.DataFrame]) -> pl.Dat
     for i, token in enumerate(keys):
         subst = subst.replace(token, f"_v{i}")
 
-    # Align all series on (generation, abs_time) via inner join
-    first = token_series[keys[0]]
+    # Align all series on (generation, abs_time) via inner join.
+    # Deduplicate the join keys first: a lineage can carry a 1-tick birth-stub
+    # agent (the "d?1" slot) that repeats a (generation, abs_time) key, which
+    # would otherwise blow the inner join up many-to-many (e.g. 47240 -> 49322
+    # rows) and inject misaligned/NaN values into the expression.
+    def _dedup(df: pl.DataFrame) -> pl.DataFrame:
+        return df.unique(subset=["generation", "abs_time"], keep="first", maintain_order=True)
+
+    first = _dedup(token_series[keys[0]])
     joined = first.rename({"value": "_v0"})
     for i, token in enumerate(keys[1:], 1):
-        other = token_series[token].select(
+        other = _dedup(token_series[token]).select(
             ["generation", "abs_time", pl.col("value").alias(f"_v{i}")]
         )
         joined = joined.join(other, on=["generation", "abs_time"], how="inner")
@@ -608,16 +615,42 @@ def _op_supported(op: str) -> bool:
     return op in _SUPPORTED_OPS
 
 
+def _clean_floats(s: "pl.Series") -> list[float]:
+    """Cast to float and drop nulls + NaN (NaN = undefined tick, e.g. a 0/0
+    ratio at cell birth — it must NOT poison a mean/comparison reduction;
+    polars' .mean() skips nulls but propagates float-NaN)."""
+    s = s.cast(pl.Float64)
+    return s.drop_nulls().drop_nans().to_list()
+
+
+def _complete_generations(gen_counts: dict[int, int]) -> set[int]:
+    """Return the generations to keep for a per-generation reduction, dropping
+    INCOMPLETE generations (e.g. a truncated final generation, or a 1-tick
+    birth-stub) whose tick count is < 50% of the median generation length.
+
+    A partial generation is not a complete cell cycle, so it must not drag a
+    per-generation steady-state average out of band. With <3 generations there
+    is nothing reliable to compare against, so all are kept.
+    """
+    if len(gen_counts) < 3:
+        return set(gen_counts)
+    import statistics
+    med = statistics.median(gen_counts.values())
+    if med <= 0:
+        return set(gen_counts)
+    return {g for g, n in gen_counts.items() if n >= 0.5 * med}
+
+
 def _flat_values(data: Any, window_kind: str) -> list[float]:
-    """Extract a flat list of float values from a windowed result."""
+    """Extract a flat list of float values from a windowed result (NaN/null-free)."""
     if window_kind == "flat":
-        return data["value"].cast(pl.Float64).to_list()
+        return _clean_floats(data["value"])
     if window_kind == "per_gen_scalar":
-        return list(data.values())
+        return [v for v in data.values() if v is not None and v == v]  # nan != nan
     if window_kind == "per_gen_all":
         vals: list[float] = []
         for df in data.values():
-            vals.extend(df["value"].cast(pl.Float64).to_list())
+            vals.extend(_clean_floats(df["value"]))
         return vals
     return []
 
@@ -660,13 +693,18 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str) -> dict:
         if window_kind == "per_gen_scalar":
             gen_vals: dict[int, float] = data
         elif window_kind == "per_gen_all":
-            gen_vals = {g: float(df["value"].cast(pl.Float64).mean())
-                        for g, df in data.items()}
+            counts = {int(g): df.height for g, df in data.items()}
+            keep = _complete_generations(counts)
+            gen_vals = {int(g): float(pl.Series(_clean_floats(df["value"])).mean())
+                        for g, df in data.items() if int(g) in keep}
         elif window_kind == "flat":
+            counts = {int(g): data.filter(pl.col("generation") == g).height
+                      for g in data["generation"].unique().to_list()}
+            keep = _complete_generations(counts)
             gen_vals = {}
-            for g in sorted(data["generation"].unique().to_list()):
+            for g in sorted(keep):
                 sub = data.filter(pl.col("generation") == g)
-                gen_vals[int(g)] = float(sub["value"].cast(pl.Float64).mean())
+                gen_vals[int(g)] = float(pl.Series(_clean_floats(sub["value"])).mean())
         else:
             return _agent(f"unexpected window kind for {op}: {window_kind!r}")
 
