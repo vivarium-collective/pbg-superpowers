@@ -608,6 +608,8 @@ _SUPPORTED_OPS: frozenset[str] = frozenset({
     "median_within_tolerance",
     "periodic_doubling_every_generation",
     "exactly_one_initiation_per_generation",
+    "max_le", "max_lt", "min_ge", "min_gt",
+    "rises_within_cycle",
 })
 
 
@@ -823,8 +825,14 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str) -> dict:
         if not gen_data:
             return _needs_rerun("no generation data for periodic_doubling")
 
+        # Drop incomplete generations (e.g. a truncated final cycle) — they did
+        # not complete a doubling and would spuriously fail the test.
+        keep_pd = _complete_generations({int(g): df.height for g, df in gen_data.items()})
+
         per_gen_ratios: dict[int, float] = {}
         for g, df in gen_data.items():
+            if int(g) not in keep_pd:
+                continue
             arr = df["value"].cast(pl.Float64).to_numpy()
             if len(arr) < 2:
                 continue
@@ -883,6 +891,85 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str) -> dict:
             operator=label,
             detail=("all gens have exactly 1 initiation" if all_pass_2
                     else f"gens with != 1 initiation: {failing_2}"),
+        )
+
+    # -- extreme-value comparators (max_le / max_lt / min_ge / min_gt) --
+    # Reduce by MAX or MIN over the window (not the mean), so a test can assert
+    # "the value NEVER exceeds / drops below X" — e.g. oriC never re-initiates
+    # (max number_of_oric <= 2). The mean-based ops can't express this.
+    if op in ("max_le", "max_lt", "min_ge", "min_gt"):
+        vals = _flat_values(data, window_kind)
+        if not vals:
+            return _needs_rerun(f"empty series for {op}")
+        target = float(pass_if.get("value", pass_if.get("threshold", 0)))
+        reducer, cmp = {
+            "max_le": (max, lambda a, b: a <= b),
+            "max_lt": (max, lambda a, b: a < b),
+            "min_ge": (min, lambda a, b: a >= b),
+            "min_gt": (min, lambda a, b: a > b),
+        }[op]
+        measured = float(reducer(vals))
+        sym = {"max_le": "<=", "max_lt": "<", "min_ge": ">=", "min_gt": ">"}[op]
+        red = "max" if op.startswith("max") else "min"
+        ok = cmp(measured, target)
+        return _code_outcome(
+            result="PASS" if ok else "FAIL",
+            measured_value=round(measured, 6),
+            operator=label,
+            detail=f"{red}={measured:.4g} {sym} {target}" + ("" if ok else " (violated)"),
+        )
+
+    # -- rises_within_cycle --
+    # Per-generation trend test: the value is LOW early in the cycle and RISES to
+    # a within-cycle PEAK (e.g. oriC-low box occupancy fills gradually toward
+    # initiation, rather than being pre-filled at birth). The peak can occur
+    # mid-cycle (at initiation) with a fall afterwards (de-occupancy), so the
+    # comparison is early-third mean vs the cycle PEAK, not the late-third.
+    # Passes when a majority of complete generations rise by at least `min_rise`.
+    if op == "rises_within_cycle":
+        if window_kind == "per_gen_all":
+            gen_data_3: dict[int, pl.DataFrame] = data
+        elif window_kind == "flat":
+            try:
+                from pbg_emitters import by_generation  # noqa: PLC0415
+            except ImportError as _ie:
+                raise ImportError(
+                    "by_generation requires the evaluator extra: "
+                    "pip install 'pbg-superpowers[evaluator]'"
+                ) from _ie
+            gen_data_3 = by_generation(data)
+        else:
+            return _agent(f"rises_within_cycle requires per-gen data, got: {window_kind!r}")
+        if not gen_data_3:
+            return _needs_rerun("no generation data for rises_within_cycle")
+        counts3 = {int(g): df.height for g, df in gen_data_3.items()}
+        keep3 = _complete_generations(counts3)
+        min_rise = float(pass_if.get("min_rise", 0.02))
+        min_frac = float(pass_if.get("min_fraction", 0.6))
+        per_gen_rise: dict[int, float] = {}
+        for g, df in gen_data_3.items():
+            if int(g) not in keep3:
+                continue
+            sub = df.sort("abs_time") if "abs_time" in df.columns else df
+            arr = _clean_floats(sub["value"])
+            n = len(arr)
+            if n < 3:
+                continue
+            early = sum(arr[: n // 3]) / max(1, n // 3)
+            peak = max(arr)   # the within-cycle maximum (rise-to-peak, may fall after)
+            per_gen_rise[int(g)] = peak - early
+        if not per_gen_rise:
+            return _needs_rerun("insufficient per-gen data for rises_within_cycle")
+        rising = {g: d for g, d in per_gen_rise.items() if d >= min_rise}
+        frac = len(rising) / len(per_gen_rise)
+        ok = frac >= min_frac
+        return _code_outcome(
+            result="PASS" if ok else "FAIL",
+            measured_value={g: round(d, 4) for g, d in per_gen_rise.items()},
+            operator=label,
+            detail=(f"{len(rising)}/{len(per_gen_rise)} gens rise >= {min_rise} "
+                    f"(late-third - early-third); fraction {frac:.2f} "
+                    f"{'>=' if ok else '<'} {min_frac}"),
         )
 
     # Should never reach here — _op_supported guards above
