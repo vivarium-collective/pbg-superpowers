@@ -205,7 +205,7 @@ def set_band_provenance(
     ryaml.preserve_quotes = True
     ryaml.width = 4096  # avoid line-wrap reflow on long prose values
 
-    original_text = study_yaml.read_text()
+    original_text = study_yaml.read_text(encoding="utf-8")
     rt_spec = ryaml.load(original_text)
     if rt_spec is None:
         return False

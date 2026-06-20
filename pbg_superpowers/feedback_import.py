@@ -31,7 +31,7 @@ def _read_feedback_yaml(path: Path) -> dict:
     if not path.is_file():
         raise click.ClickException(f"feedback file not found: {path}")
     try:
-        data = yaml.safe_load(path.read_text())
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as e:
         raise click.ClickException(f"{path} is not valid yaml: {e}") from e
     if not isinstance(data, dict):
@@ -91,7 +91,7 @@ def load_investigation_feedback(workspace: Path | str, investigation: str) -> di
     by_section: dict[str, list[dict]] = {}
     for path in _feedback_files(inv_dir):
         try:
-            data = yaml.safe_load(path.read_text())
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
         except (yaml.YAMLError, OSError):
             continue
         if not isinstance(data, dict):

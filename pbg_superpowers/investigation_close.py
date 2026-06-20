@@ -222,7 +222,7 @@ def derive_contributors(
         sessions_by_agent: OrderedDict[str, list[str]] = OrderedDict()
         for sf in sorted(sessions_dir.glob("*.json")):
             try:
-                data = json.loads(sf.read_text())
+                data = json.loads(sf.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
             aname = (data.get("agent_name") or "").strip()

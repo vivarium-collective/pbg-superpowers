@@ -159,7 +159,7 @@ def load_overrides(ws_root: Path) -> set[str]:
     if not path.is_file():
         return set()
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return set()
     overrides = data.get("overrides") or []
@@ -182,7 +182,7 @@ def write_override(
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.is_file():
         try:
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             data = {"schema_version": 1, "overrides": []}
     else:
@@ -348,7 +348,7 @@ def _iter_study_specs(ws_root: Path) -> Iterator[tuple[str, dict]]:
             if not spec_path.is_file():
                 continue
             try:
-                data = yaml.safe_load(spec_path.read_text()) or {}
+                data = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
             except yaml.YAMLError:
                 continue
             slug = data.get("name") or child.name
@@ -362,7 +362,7 @@ def _iter_study_specs(ws_root: Path) -> Iterator[tuple[str, dict]]:
             if not spec_path.is_file():
                 continue
             try:
-                data = yaml.safe_load(spec_path.read_text()) or {}
+                data = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
             except yaml.YAMLError:
                 continue
             slug = data.get("name") or child.name
@@ -388,7 +388,7 @@ def _iter_investigation_specs(ws_root: Path) -> Iterator[tuple[str, dict]]:
         if not spec_path.is_file():
             continue
         try:
-            data = yaml.safe_load(spec_path.read_text()) or {}
+            data = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError:
             continue
         yield (data.get("name") or child.name), data
@@ -866,7 +866,7 @@ def _expert_doc_names_for_workspace(ws_root: Path) -> set[str]:
     if not ws_yaml.is_file():
         return set()
     try:
-        data = yaml.safe_load(ws_yaml.read_text()) or {}
+        data = yaml.safe_load(ws_yaml.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError:
         return set()
     docs = data.get("expert_docs") or []
@@ -1437,7 +1437,7 @@ def _viz_classes_in_workspace(ws_root: Path) -> set[str]:
     for d in candidates:
         for py in d.rglob("*.py"):
             try:
-                src = py.read_text()
+                src = py.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
             for m in _VIZ_CLASS_RE.finditer(src):

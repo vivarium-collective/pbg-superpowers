@@ -177,7 +177,7 @@ def _inplace_merge_pyproject(existing_path: Path, template_deps: list[str]) -> l
     manually" hint instead of risking a corrupting edit.
     """
     import tomllib
-    existing_text = existing_path.read_text()
+    existing_text = existing_path.read_text(encoding="utf-8")
     try:
         existing_parsed = tomllib.loads(existing_text)
     except tomllib.TOMLDecodeError as e:
@@ -223,7 +223,7 @@ def _inplace_merge_gitignore(existing_path: Path, template_lines: list[str]) -> 
     """Append any template .gitignore lines not already present in the
     existing .gitignore. Returns the count of lines added."""
     if existing_path.exists():
-        existing = existing_path.read_text().splitlines()
+        existing = existing_path.read_text(encoding="utf-8").splitlines()
     else:
         existing = []
     existing_set = {ln.strip() for ln in existing if ln.strip()}
@@ -233,7 +233,7 @@ def _inplace_merge_gitignore(existing_path: Path, template_lines: list[str]) -> 
     if not to_add:
         return 0
     sep = "\n" if (existing and existing[-1].strip()) else ""
-    new_text = existing_path.read_text() if existing_path.exists() else ""
+    new_text = existing_path.read_text(encoding="utf-8") if existing_path.exists() else ""
     new_text += sep + "\n# Added by pbg-superpowers in-place scaffolder\n"
     new_text += "\n".join(to_add) + "\n"
     existing_path.write_text(new_text)
@@ -247,7 +247,7 @@ def _inplace_autopin_vivarium(pyproject_path: Path) -> str | None:
 
     Returns the absolute path that got pinned, or None if no pin was made
     (either because the sibling is absent or the section already exists)."""
-    text = pyproject_path.read_text()
+    text = pyproject_path.read_text(encoding="utf-8")
     if "[tool.uv.sources]" in text:
         return None  # don't clobber user-set sources
     env_path = os.environ.get("VIVARIUM_DASHBOARD_PATH")
@@ -369,7 +369,7 @@ def scaffold_workspace_in_place(
             if "scripts/" in str(j2.relative_to(workspace_root)) + "/":
                 continue
             out = j2.with_suffix("")  # strip .j2
-            out.write_text(_render_text(j2.read_text(), subs))
+            out.write_text(_render_text(j2.read_text(encoding="utf-8"), subs))
             j2.unlink()
 
         # Merge pyproject.toml deps from the template's pyproject (which we
@@ -377,7 +377,7 @@ def scaffold_workspace_in_place(
         template_pyproject = staging / "pyproject.toml.j2"
         added_deps: list[str] = []
         if template_pyproject.is_file():
-            tpl_text = _render_text(template_pyproject.read_text(), subs)
+            tpl_text = _render_text(template_pyproject.read_text(encoding="utf-8"), subs)
             tpl_deps = _inplace_extract_template_deps(tpl_text)
             existing_pyproject = workspace_root / "pyproject.toml"
             if existing_pyproject.is_file():
@@ -391,7 +391,7 @@ def scaffold_workspace_in_place(
         template_gitignore = staging / ".gitignore"
         added_ignore_lines = 0
         if template_gitignore.is_file():
-            tpl_lines = template_gitignore.read_text().splitlines()
+            tpl_lines = template_gitignore.read_text(encoding="utf-8").splitlines()
             added_ignore_lines = _inplace_merge_gitignore(
                 workspace_root / ".gitignore", tpl_lines)
 
@@ -529,7 +529,7 @@ def _render_template_tree(src: Path, dst: Path, substitutions: dict) -> None:
         out_path = dst / out_rel
         out_path.parent.mkdir(parents=True, exist_ok=True)
         if src_file.suffix == ".j2":
-            out_path.write_text(_render_text(src_file.read_text(), substitutions))
+            out_path.write_text(_render_text(src_file.read_text(encoding="utf-8"), substitutions))
         else:
             shutil.copy2(src_file, out_path)
 

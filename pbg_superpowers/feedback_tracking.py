@@ -94,7 +94,7 @@ def study_feedback_tracked(
             continue
         for path in _feedback_files(inv_dir):
             try:
-                data = yaml.safe_load(path.read_text())
+                data = yaml.safe_load(path.read_text(encoding="utf-8"))
             except (yaml.YAMLError, OSError):
                 continue
             if not isinstance(data, dict):

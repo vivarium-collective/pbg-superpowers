@@ -279,7 +279,7 @@ def _write_simset_preserving_comments(
     ryaml.preserve_quotes = True
     ryaml.width = 4096  # avoid line-wrap reflow on long prose values
 
-    rt_spec = ryaml.load(study_yaml.read_text())
+    rt_spec = ryaml.load(study_yaml.read_text(encoding="utf-8"))
     if rt_spec is None:
         rt_spec = {}
 

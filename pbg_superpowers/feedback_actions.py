@@ -126,7 +126,7 @@ def study_feedback_actions(
             continue
         for path in _feedback_files(inv_dir):
             try:
-                data = yaml.safe_load(path.read_text())
+                data = yaml.safe_load(path.read_text(encoding="utf-8"))
             except (yaml.YAMLError, OSError):
                 continue
             if not isinstance(data, dict):
@@ -203,7 +203,7 @@ def _ruamel() -> YAML:
 
 def _load_rt(path: Path):
     y = _ruamel()
-    data = y.load(path.read_text())
+    data = y.load(path.read_text(encoding="utf-8"))
     return y, (data if data is not None else {})
 
 
@@ -238,7 +238,7 @@ def _find_item_file(workspace: Path | str, item_id: str) -> tuple[Path, dict, st
     """
     for path in _iter_feedback_files(workspace):
         try:
-            data = yaml.safe_load(path.read_text())
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
         except (yaml.YAMLError, OSError):
             continue
         if not isinstance(data, dict):

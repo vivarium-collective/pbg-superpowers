@@ -193,7 +193,7 @@ def write_investigation_acceptance(inv_dir, workspace=None) -> bool:
     ryaml.preserve_quotes = True
     ryaml.width = 4096
 
-    rt_spec = ryaml.load(inv_yaml.read_text())
+    rt_spec = ryaml.load(inv_yaml.read_text(encoding="utf-8"))
     if rt_spec is None:
         rt_spec = {}
 

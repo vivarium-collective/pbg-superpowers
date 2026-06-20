@@ -112,10 +112,10 @@ def render_workspace_report(
                         write_override(ws_root, f)
     today = today or date.today().isoformat()
     wp = WorkspacePaths.load(ws_root)
-    ws = yaml.safe_load((ws_root / "workspace.yaml").read_text())
+    ws = yaml.safe_load((ws_root / "workspace.yaml").read_text(encoding="utf-8"))
     decisions_file = wp.docs / "decisions.yaml"
     decisions = (
-        (yaml.safe_load(decisions_file.read_text()) or {}).get("decisions", [])
+        (yaml.safe_load(decisions_file.read_text(encoding="utf-8")) or {}).get("decisions", [])
         if decisions_file.exists() else []
     )
     env = _env(resource_dir("templates") / "workspace" / "reports")
@@ -175,7 +175,7 @@ def _harvest_findings(ws_root: Path) -> list[dict]:
         if not sy.is_file():
             continue
         try:
-            study = yaml.safe_load(sy.read_text()) or {}
+            study = yaml.safe_load(sy.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError:
             continue
         slug = study.get("name") or sd.name
@@ -248,7 +248,7 @@ def render_workspace_findings_index(
     Linked from ``reports/index.html`` via the "Findings index" panel.
     """
     today = today or date.today().isoformat()
-    ws = yaml.safe_load((ws_root / "workspace.yaml").read_text())
+    ws = yaml.safe_load((ws_root / "workspace.yaml").read_text(encoding="utf-8"))
     findings = _harvest_findings(ws_root)
 
     by_status: dict[str, list[dict]] = defaultdict(list)
@@ -285,7 +285,7 @@ def render_model_report(
 ) -> Path:
     """Build models/<model>/reports/index.html from workspace.yaml entry + registry + doc."""
     today = today or date.today().isoformat()
-    ws = yaml.safe_load((ws_root / "workspace.yaml").read_text())
+    ws = yaml.safe_load((ws_root / "workspace.yaml").read_text(encoding="utf-8"))
     model = ws["models"][model_name]
     env = _env(resource_dir("templates") / "model" / "reports")
     tpl = env.get_template("index.html.j2")
