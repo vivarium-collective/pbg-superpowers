@@ -123,7 +123,9 @@ def _load_study_observable_meta(study_yaml_path: str | None) -> dict[str, dict]:
     if not p.is_file():
         return {}
     try:
-        spec = yaml.safe_load(p.read_text()) or {}
+        # study.yaml is UTF-8 (often non-ASCII prose); decode explicitly so a
+        # bare-CLI render under an ASCII locale doesn't crash on read.
+        spec = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError:
         return {}
     out: dict[str, dict] = {}

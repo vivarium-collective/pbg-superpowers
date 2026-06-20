@@ -188,6 +188,35 @@ def test_load_study_observable_meta_returns_units(tmp_path):
     assert meta["ATP"]["units"] == "fraction"
 
 
+def test_load_study_observable_meta_reads_non_ascii_under_ascii_locale(tmp_path, monkeypatch):
+    """study.yaml is UTF-8; the loader must decode it explicitly so a bare-CLI
+    render under an ASCII default locale doesn't crash on non-ASCII prose."""
+    yp = tmp_path / "studies" / "s" / "study.yaml"
+    yp.parent.mkdir(parents=True)
+    yp.write_text(
+        "observables:\n"
+        "  - name: area\n"
+        "    units: µm²\n"            # µm²
+        "    description: grows → large\n"  # grows → large
+        "    store_path: area\n",
+        encoding="utf-8",
+    )
+    # Emulate an ASCII-default-locale machine: Path.read_text() with no explicit
+    # encoding decodes as ASCII (and would raise on the µ/→ bytes). The fix
+    # passes encoding="utf-8", so parsing must still succeed.
+    import pathlib
+    _real_read_text = pathlib.Path.read_text
+
+    def _ascii_default(self, encoding=None, errors=None, newline=None):
+        return _real_read_text(self, encoding=encoding or "ascii", errors=errors)
+
+    monkeypatch.setattr(pathlib.Path, "read_text", _ascii_default)
+
+    meta = _load_study_observable_meta(str(yp))
+    assert meta["area"]["units"] == "µm²"
+    assert "→" in meta["area"]["description"]
+
+
 def test_load_study_observable_meta_returns_empty_for_missing_file(tmp_path):
     assert _load_study_observable_meta(str(tmp_path / "missing.yaml")) == {}
     assert _load_study_observable_meta(None) == {}
