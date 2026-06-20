@@ -264,7 +264,7 @@ def migrate_study_file(study_dir: Path | str, write: bool = False) -> dict:
     # ruamel default (0-offset) — keeps the readouts block's original shape.
     ryaml.indent(mapping=2, sequence=4, offset=2)
 
-    rt_spec = ryaml.load(study_yaml.read_text())
+    rt_spec = ryaml.load(study_yaml.read_text(encoding="utf-8"))
     if rt_spec is None:
         rt_spec = {}
 

@@ -25,7 +25,7 @@ import yaml
 
 def load_spec(path: Path) -> dict:
     """Parse a composite spec file (YAML or JSON). Returns the spec dict."""
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     suffix = path.suffix.lower()
     if suffix == ".json":
         return json.loads(text)

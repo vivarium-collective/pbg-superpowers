@@ -26,14 +26,14 @@ def load_yaml(path: Path | str) -> dict:
     Lenient: does not assert the top level is a mapping (matches the old
     ``study_findings.load_study`` / ``study_verify._load_yaml`` behavior).
     """
-    return yaml.safe_load(Path(path).read_text()) or {}
+    return yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
 
 
 def load_yaml_mapping(path: Path | str) -> dict:
     """Like :func:`load_yaml`, but raise ``ValueError`` if the top level is
     not a mapping (matches the old ``study_narrative._load`` /
     ``investigation_close._load_yaml`` guard)."""
-    data = yaml.safe_load(Path(path).read_text()) or {}
+    data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         raise ValueError(f"{path}: top-level YAML is not a mapping")
     return data

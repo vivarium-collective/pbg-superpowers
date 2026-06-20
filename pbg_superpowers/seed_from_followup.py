@@ -754,7 +754,7 @@ def _stamp_parent(parent_yaml: Path, seed_source: "SeedSource", new_slug: str) -
     ryaml.preserve_quotes = True
     ryaml.width = 4096
 
-    rt_spec = ryaml.load(parent_yaml.read_text())
+    rt_spec = ryaml.load(parent_yaml.read_text(encoding="utf-8"))
     if rt_spec is None:
         rt_spec = {}
 
@@ -926,7 +926,7 @@ def apply_from_finding(
     parent_yaml = Path(parent_yaml)
     if not parent_yaml.is_file():
         raise FileNotFoundError(parent_yaml)
-    parent_study = yaml.safe_load(parent_yaml.read_text()) or {}
+    parent_study = yaml.safe_load(parent_yaml.read_text(encoding="utf-8")) or {}
     parent_slug = parent_study.get("name") or parent_yaml.parent.name
 
     finding = find_finding(parent_study, finding_id)

@@ -89,7 +89,7 @@ def _read_preferred_port(workspace: Path) -> int | None:
     if not path.is_file():
         return None
     try:
-        return int(path.read_text().strip())
+        return int(path.read_text(encoding="utf-8").strip())
     except (ValueError, OSError):
         return None
 
@@ -159,7 +159,7 @@ def _read_info(workspace: Path) -> dict | None:
     if not p.is_file():
         return None
     try:
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
 
@@ -169,7 +169,7 @@ def _read_pid(workspace: Path) -> int | None:
     if not p.is_file():
         return None
     try:
-        return int(p.read_text().strip())
+        return int(p.read_text(encoding="utf-8").strip())
     except (ValueError, OSError):
         return None
 
@@ -338,7 +338,7 @@ def _find_main_worktree(workspace: Path) -> Path | None:
     if not git_path.is_file():
         return None
     try:
-        content = git_path.read_text().strip()
+        content = git_path.read_text(encoding="utf-8").strip()
     except OSError:
         return None
     prefix = "gitdir:"
@@ -621,7 +621,7 @@ def start(workspace: Path, port: int | None = None,
         if _http_ok(info["url"]):
             break
         if proc.poll() is not None:
-            tail = log.read_text()[-1500:] if log.is_file() else "(no log)"
+            tail = log.read_text(encoding="utf-8")[-1500:] if log.is_file() else "(no log)"
             _clear_state(workspace)
             raise RuntimeError(
                 f"vivarium-dashboard exited immediately. Last log lines:\n{tail}"

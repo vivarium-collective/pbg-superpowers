@@ -171,7 +171,7 @@ def read_generation(ws_root: Path | str, generation_id: str) -> Generation | Non
     if not path.is_file():
         return None
     try:
-        return Generation.from_dict(json.loads(path.read_text()))
+        return Generation.from_dict(json.loads(path.read_text(encoding="utf-8")))
     except (json.JSONDecodeError, OSError, KeyError):
         return None
 
@@ -182,7 +182,7 @@ def current_generation_id(ws_root: Path | str) -> str | None:
     if not ptr.is_file():
         return None
     try:
-        value = ptr.read_text().strip()
+        value = ptr.read_text(encoding="utf-8").strip()
     except OSError:
         return None
     return value or None

@@ -174,7 +174,7 @@ def main() -> int:
     existing_by_name: dict[str, dict] = {}
     if out_path.is_file():
         try:
-            for e in json.loads(out_path.read_text()):
+            for e in json.loads(out_path.read_text(encoding="utf-8")):
                 if isinstance(e, dict) and e.get("name"):
                     existing_by_name[e["name"]] = e
         except (json.JSONDecodeError, OSError):

@@ -49,7 +49,7 @@ def _load_catalog() -> dict:
     if not p.is_file():
         return {"version": SCHEMA_VERSION, "workspaces": []}
     try:
-        data = json.loads(p.read_text())
+        data = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(data, dict) or not isinstance(data.get("workspaces"), list):
             return {"version": SCHEMA_VERSION, "workspaces": []}
         return data
@@ -115,7 +115,7 @@ def add(path: str | Path, name: str | None = None, package: str | None = None) -
 
     if name is None or package is None:
         import yaml  # local import keeps the module light at import time
-        data = yaml.safe_load((target / "workspace.yaml").read_text()) or {}
+        data = yaml.safe_load((target / "workspace.yaml").read_text(encoding="utf-8")) or {}
         name = name or data.get("name") or target.name
         package = package or data.get("package")
 
@@ -168,7 +168,7 @@ def _server_filename(name: str, path: Path) -> str:
     existing = _servers_dir() / base
     if existing.is_file():
         try:
-            data = json.loads(existing.read_text())
+            data = json.loads(existing.read_text(encoding="utf-8"))
             if data.get("path") == str(path):
                 return base
         except (json.JSONDecodeError, OSError):
@@ -209,7 +209,7 @@ def unregister_server(path) -> bool:
     found = False
     for f in _servers_dir().glob("*.json"):
         try:
-            data = json.loads(f.read_text())
+            data = json.loads(f.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             continue
         if data.get("path") == target_str:
@@ -243,7 +243,7 @@ def find_entry(path) -> dict | None:
         return None
     for f in _servers_dir().glob("*.json"):
         try:
-            data = json.loads(f.read_text())
+            data = json.loads(f.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             continue
         if data.get("path") == target_str:
@@ -276,7 +276,7 @@ def list_servers() -> list[dict]:
     out: list[dict] = []
     for f in _servers_dir().glob("*.json"):
         try:
-            data = json.loads(f.read_text())
+            data = json.loads(f.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             continue
         if not isinstance(data, dict):

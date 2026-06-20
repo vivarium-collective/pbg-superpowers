@@ -74,7 +74,7 @@ def audit_repo(repo_path: Path, run_install: bool = True) -> AuditReport:
         report.add("pyproject.toml", "FAIL", "missing", fix="Add a pyproject.toml with [project] table.")
         return report
     try:
-        pyproject = tomllib.loads(pyproject_path.read_text())
+        pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
     except Exception as e:
         report.add("pyproject.toml", "FAIL", f"parse error: {e}")
         return report
@@ -144,7 +144,7 @@ def audit_repo(repo_path: Path, run_install: bool = True) -> AuditReport:
     for pkg_dir in package_dirs:
         for py in pkg_dir.rglob("*.py"):
             try:
-                text = py.read_text()
+                text = py.read_text(encoding="utf-8")
             except (UnicodeDecodeError, OSError):
                 continue
             # Crude pattern — looks for class X(Process) or class X(Step) anywhere

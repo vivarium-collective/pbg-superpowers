@@ -100,7 +100,7 @@ def _load_expert_docs(ws_root: Path) -> list[dict]:
     if not ws_yaml.is_file():
         return []
     try:
-        data = yaml.safe_load(ws_yaml.read_text()) or {}
+        data = yaml.safe_load(ws_yaml.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as e:
         _log.warning("expert_search: workspace.yaml parse error (%s)", e)
         return []
