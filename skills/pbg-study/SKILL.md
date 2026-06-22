@@ -51,6 +51,9 @@ A Study is a self-contained research unit holding one-or-more baseline composite
    study. Default to: steady-state framing where early transients distort a metric
    (use the steady-state window/average, not the warm-up); axis labels with units;
    and run-config provenance (record the exact parameter set used for each run).
+5. **CALIBRATE WITH A SWEEP, not one value at a time.** To put a knob in a band,
+   use `pbg_superpowers.calibration_sweep` (grid × multiseed in one pass → the
+   recommended in-band point with provenance) instead of iterating single values.
 
 ## Common prelude
 

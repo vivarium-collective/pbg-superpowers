@@ -41,6 +41,20 @@ from pathlib import Path
 
 import yaml
 
+from . import chart_store
+
+_CHART_SUFFIXES = (".png", ".svg", ".html", ".pdf")
+
+
+def _chart_mtimes(figdir: Path) -> dict[Path, float]:
+    """Snapshot {chart_file: mtime} under figdir (empty if it doesn't exist)."""
+    out: dict[Path, float] = {}
+    if figdir.is_dir():
+        for p in figdir.iterdir():
+            if p.is_file() and p.suffix.lower() in _CHART_SUFFIXES:
+                out[p] = p.stat().st_mtime
+    return out
+
 
 def find_workspace_root(start: Path | None = None) -> Path:
     """Nearest ancestor (inclusive) containing ``workspace.yaml``; else ``start``."""
@@ -104,6 +118,8 @@ def refresh_study_figures(ws_root: Path, slug: str,
         # `python` PATH happens to resolve to (a recurring v2ecoli footgun).
         "py": sys.executable,
     }
+    figdir = ws_root / "reports" / "figures" / slug
+    before = {} if dry_run else _chart_mtimes(figdir)
     ran: list[str] = []
     failed: list[str] = []
     for raw in cmds:
@@ -125,6 +141,18 @@ def refresh_study_figures(ws_root: Path, slug: str,
             sys.stderr.write(
                 f"figure_refresh[{slug}] FAILED ({r.returncode}): {cmd}\n"
                 f"{(r.stderr or '')[-800:]}\n")
+    if not dry_run and ran:
+        # Tag the chart files this run actually (re-)wrote so a later canonical
+        # run can prune the superseded ones (chart_store; best-effort, never
+        # blocks a refresh). Only newly-written/changed files are tagged.
+        try:
+            after = _chart_mtimes(figdir)
+            produced = [p for p, m in after.items()
+                        if p not in before or m > before[p]]
+            if produced:
+                chart_store.tag_charts(figdir, run.name, produced)
+        except Exception:
+            pass
     return {"slug": slug, "run": str(run), "ran": ran, "failed": failed,
             "skipped": None}
 

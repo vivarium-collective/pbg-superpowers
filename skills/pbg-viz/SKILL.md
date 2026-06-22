@@ -36,8 +36,9 @@ by default so they don't have to:
   reading, plot the steady-state window (or per-regime average) and say so in the
   caption, instead of letting the transient dominate the scale.
 
-If the workspace provides a shared plot-style helper, prefer it over re-deriving
-these conventions per script.
+Prefer the framework house style `pbg_superpowers.plot_style` (`PALETTE`,
+`stitch_minutes`, `gen_boundaries`, `wrap`, `style_axes`, `mark_lineages`,
+`house_layout`) over re-deriving these conventions per script.
 
 ## Output contract
 

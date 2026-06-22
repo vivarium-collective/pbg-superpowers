@@ -83,6 +83,8 @@ Check: `ls "$STUDIES_DIR"/<study>/charts/*.png` and count distinct chart basenam
 
 - **warning** — a study's `charts/` dir holds figures from **more than one run/seed** (e.g. a `seed0` reproduction + `step2/step3` sixpanels alongside the `seed1` canonical). Reviewers read this as "which run is real?" and routinely ask to "keep only the latest." Recommend deleting the superseded **files** (not just the `visualizations:` entries), and rewriting any prose/`provenance` references that point at the deleted files so the report has no dead paths. When a new canonical run lands, prune the old run's files in the same edit.
 
+Prefer the programmatic check when charts carry run tags (written by `figure_refresh`/`refresh_viz`): `pbg_superpowers.chart_store.classify_charts(study_dir)` buckets charts into `canonical` / `referenced` / `superseded` / `untagged`, and `prune(study_dir, dry_run=True)` lists exactly the superseded files (a chart tagged to a non-canonical, non-pinned run). Report those as the warning here; only delete on an explicit refresh/regen with `prune(study_dir, dry_run=False)` (it spares `untagged` files and is a no-op when no canonical run resolves).
+
 ### A4. Numerical-claim consistency
 
 For each chart referenced from the verdict, read its `<basename>.meta.json` sibling (same dir). Extract numeric values + units from the meta's `interpretation:` and `caption:` fields. Grep the verdict text for the same units (g/L, mM, orders, hours, mg/L, etc.). Flag when a verdict number doesn't match its chart-meta within 5% (or isn't an obvious round-number of it).
