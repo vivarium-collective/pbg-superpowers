@@ -19,6 +19,26 @@ workspace has no figure that would make it land, **take the initiative and build
 one** rather than waiting to be asked. See "Make it creative, interactive, and
 informative" below before you write a single trace.
 
+<!-- Plotting conventions distilled from a cross-study expert-feedback friction review. General. -->
+## Time-series & multi-regime conventions
+
+Beyond the legibility rules below, reviewers repeatedly ask for these — apply them
+by default so they don't have to:
+
+- **Interpretable axis units.** Put time in real units (minutes/hours), not raw
+  ticks/steps. If the time signal resets per segment (e.g. a per-generation clock),
+  **stitch it into one continuous axis** rather than overlaying segments on top of
+  each other.
+- **Mark meaningful boundaries.** Draw light reference lines at the events/regime
+  changes a reader needs (cell divisions, interventions, phase transitions) and
+  label them once — don't rely on stray gridlines.
+- **Focus on the informative window.** When early transients/warm-up distort the
+  reading, plot the steady-state window (or per-regime average) and say so in the
+  caption, instead of letting the transient dominate the scale.
+
+If the workspace provides a shared plot-style helper, prefer it over re-deriving
+these conventions per script.
+
 ## Output contract
 
 Write exactly one file to `<workspace_pkg>/visualizations/<snake_name>.py`

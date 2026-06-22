@@ -26,6 +26,32 @@ This block governs the paths below: where older text says `studies/<slug>/` or `
 
 A Study is a self-contained research unit holding one-or-more baseline composites, variants (parameter perturbations), interventions (text-described conditions), runs, and visualizations. The **Build** phase between Design and Simulate doesn't have pbg-study subcommands directly — it's handled by `/pbg-expert` (heavy mode → sibling repo) or `/pbg-expert --lightweight` (in-workspace, single-tool or composite form), or by hand-edited code in `pbg_<workspace>/processes/`.
 
+<!-- House rules distilled from a cross-study expert-feedback friction review. General to any investigation. -->
+## House rules (expert-feedback guardrails)
+
+1. **BIAS TO EXECUTE.** Once a plan/design is approved, run the full loop before
+   handing back: run the canonical simulation → record `runs[].outcomes` → run the
+   study's behavior tests → report. Don't stop at a plan, an observer, or a stub,
+   and never leave tests pending for the reviewer to request — testing is part of
+   the run, not a follow-up.
+2. **PROVIDED-MECHANISMS-ONLY (honesty).** Never introduce mechanisms, parameters,
+   or outside literature that weren't explicitly provided in order to force a target
+   result. If the target isn't met with the provided model, report it as an
+   **HONEST OPEN QUESTION** — do not patch it into a pass. (The classic rejection is
+   an un-provided literature value, or an extra cap/sink/term added solely to hit a
+   number.) See the **Reference / mechanism discipline** section below for how to
+   record an un-provided input as a `pending` proposal instead of silently using it.
+3. **FRESHNESS on every re-run.** When a new canonical run lands, replace/**DELETE**
+   superseded charts and findings — don't accumulate stale output. But **PRESERVE
+   valuable rich views**: distinguish "stale old-run output" (drop it) from "good
+   presentation" (keep it, re-render against the new run). To actually drop a chart
+   you must **delete the file** — charts auto-discover from the dir, so an orphaned
+   file reappears.
+4. **SELF-SERVE the standard asks** — don't make the reviewer request them every
+   study. Default to: steady-state framing where early transients distort a metric
+   (use the steady-state window/average, not the warm-up); axis labels with units;
+   and run-config provenance (record the exact parameter set used for each run).
+
 ## Common prelude
 
 All sub-commands:

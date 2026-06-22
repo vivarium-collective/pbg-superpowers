@@ -11,6 +11,14 @@ argument-hint: <composite-id> [--steps N] [--emit p1,p2,...]
 Run a composite (spec or generator) for `N` steps and print a summary of
 the emitted observables. Wraps `/api/composite-test-run`.
 
+<!-- Cross-skill house rule from a study-feedback friction review. General. -->
+## House rule: bias to execute
+
+Once a plan or design is approved, **run it** and return the emitted results — not
+a description of what you would run, an observer, or a stub. When this run is part
+of a study, recording `runs[].outcomes`, running the study's behavior tests, and
+reporting are owned by `/pbg-study` (see its "bias to execute" house rule).
+
 ## Inputs
 
 - `<composite-id>` (required) — the dotted reference
