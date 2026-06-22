@@ -8,6 +8,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from . import chart_store
 from .viz_freshness import stamp_meta
 
 
@@ -48,5 +49,12 @@ def refresh_study_viz(study_dir, spec: dict, latest: dict | None) -> list[dict]:
                    source_run_id=run_id,
                    generation_id=(latest or {}).get("generation_id"),
                    rendered_at=time.time(), command=filled)
+        if run_id:
+            # Record which run produced this chart so a later canonical run can
+            # prune it as superseded (chart_store; best-effort, never blocks).
+            try:
+                chart_store.tag_chart(chart, run_id)
+            except Exception:
+                pass
         results.append({"name": name, "chart": chart_rel, "status": "rendered"})
     return results
