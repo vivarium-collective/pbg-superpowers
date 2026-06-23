@@ -1,0 +1,51 @@
+name: pypi-installable
+
+# Reusable pre-flight check shared across the framework's PUBLISHABLE packages.
+#
+# It catches — on every PR, long before a release tag — the class of failure that
+# shipped a broken pbg-superpowers 0.14.0: a package that depends (via a
+# [tool.uv.sources] git override) on something NOT published to PyPI. uv.sources
+# is workspace-local and is NOT written into the built wheel, so the published
+# wheel declares a bare `Requires-Dist` that downstream consumers cannot resolve.
+#
+# The check builds the wheel and installs it in a clean environment using PyPI
+# ALONE (no uv.sources, no git). If any runtime dependency is missing from PyPI,
+# the install fails here instead of at someone else's `pip install`.
+#
+# Use from a publishable repo with a 4-line caller:
+#   jobs:
+#     pypi-installable:
+#       uses: vivarium-collective/pbg-superpowers/.github/workflows/pypi-installable.yml@main
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        type: string
+        default: '3.12'
+
+jobs:
+  installable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Build the wheel
+        run: uv build -o dist_preflight
+
+      - name: Install from PyPI alone (no uv.sources, no git)
+        run: |
+          python -m venv /tmp/preflight
+          /tmp/preflight/bin/pip install --quiet --upgrade pip
+          if /tmp/preflight/bin/pip install --index-url https://pypi.org/simple/ dist_preflight/*.whl 2>preflight.log; then
+            echo "✅ installable from PyPI alone — all runtime dependencies are published."
+          else
+            echo "----- pip output -----"; tail -25 preflight.log
+            echo "::error::This package is NOT installable from PyPI alone. A runtime dependency is missing from PyPI — usually a [tool.uv.sources] git dependency that has not been released. Publish that dependency to PyPI (or make it an optional extra) before this package can ship a working release."
+            exit 1
+          fi
