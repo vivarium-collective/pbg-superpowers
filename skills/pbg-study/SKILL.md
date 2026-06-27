@@ -233,7 +233,7 @@ Create a new Study seeded with one baseline composite. The dashboard's seed endp
 
 ★ sections are the ones to author first — they render at the top of the rendered study page. All v4 fields are optional per `study.schema.json`, so the scaffold is lint-clean on day one and the user opts in by uncommenting + filling sections. See `template/NEXT_STEPS.md` in pbg-template for the full walking guide.
 
-POST `/api/investigation-create` (legacy route name; aliased to `/api/study-create`):
+POST `/api/study-create`:
 
 ```json
 {"name": "<study-name>", "source": "<composite-id>"}
@@ -1061,15 +1061,14 @@ case "$sub" in
   new)
     # Args: <study-name> <composite-id> — emits the v4-shape study.yaml
     # with the 14-section narrative spine commented in as TODO placeholders.
-    # The endpoint is /api/investigation-create (legacy route name; aliased
-    # to /api/study-create in ENDPOINT_ALIASES). The body's `name` field
+    # The endpoint is /api/study-create. The body's `name` field
     # is the new study's slug; `source` is the composite ref.
     SNAME="$1"; CID="$2"
     [ -n "$SNAME" ] && [ -n "$CID" ] || { echo "Usage: /pbg-study new <study-name> <composite-id>" >&2; exit 1; }
     BODY=$(SNAME="$SNAME" CID="$CID" python3 -c "
 import json, os
 print(json.dumps({'name': os.environ['SNAME'], 'source': os.environ['CID']}))")
-    post "/api/investigation-create" "$BODY"
+    post "/api/study-create" "$BODY"
     ;;
 
   set-objective)

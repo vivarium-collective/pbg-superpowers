@@ -86,7 +86,7 @@ An Investigation slug is also a **git branch name** and a **worktree directory n
 
 ## Write strategy
 
-The vivarium-dashboard exposes POST `/api/iset-create` for the initial scaffold (it emits a v2-shape `investigation.yaml` with the narrative spine commented in as TODO placeholders — executive, scientific_argument, biological_story, at_a_glance, glossary, guidelines). Update subcommands write YAML directly to disk using an atomic tmp-file + rename pattern, because the dashboard doesn't yet expose mutation endpoints for the narrative-spine fields. Read paths use GET `/api/investigation-summaries` and GET `/api/investigation/<name>`.
+The vivarium-dashboard exposes POST `/api/investigation-create` for the initial scaffold (it emits a v2-shape `investigation.yaml` with the narrative spine commented in as TODO placeholders — executive, scientific_argument, biological_story, at_a_glance, glossary, guidelines). Update subcommands write YAML directly to disk using an atomic tmp-file + rename pattern, because the dashboard doesn't yet expose mutation endpoints for the narrative-spine fields. Read paths use GET `/api/investigation-summaries` and GET `/api/investigation/<name>`.
 
 ## Rigor (investigation level)
 
@@ -142,7 +142,7 @@ Create `$INVESTIGATIONS_DIR/<slug>/investigation.yaml` with placeholder fields, 
 3. Check no git branch named `<slug>` exists (`git show-ref --verify --quiet refs/heads/<slug>`). Fail with: "Branch '<slug>' already exists. Pick a different slug or rename the existing branch." if it does.
 4. Create branch `<slug>` from current HEAD and switch to it: `git checkout -b <slug>`.
 5. Create the `$INVESTIGATIONS_DIR/<slug>/` directory if absent.
-6. Write `investigation.yaml` as a v2-shape scaffold with the narrative spine commented in as TODO placeholders. Prefer the dashboard's `/api/iset-create` endpoint when a server is running (it uses the canonical scaffolder); fall back to writing the body directly when offline:
+6. Write `investigation.yaml` as a v2-shape scaffold with the narrative spine commented in as TODO placeholders. Prefer the dashboard's `/api/investigation-create` endpoint when a server is running (it uses the canonical scaffolder); fall back to writing the body directly when offline:
 
 ```yaml
 # <slug>/investigation.yaml — schema v2
