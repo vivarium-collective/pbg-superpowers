@@ -303,7 +303,7 @@ The narrative spine is grouped into 4 layers. The 6 fields marked ★ are the on
 
 ### v2 narrative spine for Investigations (canonical-optional extensions) {#v2-narrative-spine-investigation}
 
-The investigation schema (`schema_version: 2`) adds a parallel narrative spine that mirrors the per-study spine at a level up. All fields are optional — a v1 spec validates unchanged — but every new investigation scaffolded via `/pbg-investigation new` (or POST `/api/iset-create`) lands with them commented in as TODOs.
+The investigation schema (`schema_version: 2`) adds a parallel narrative spine that mirrors the per-study spine at a level up. All fields are optional — a v1 spec validates unchanged — but every new investigation scaffolded via `/pbg-investigation new` (or POST `/api/investigation-create`) lands with them commented in as TODOs.
 
 - `executive: {what_is_this, verdict, verdict_status, verdict_detail, decisions_needed: [{question, context}]}` — the **state-first opening** AND the report's Executive summary (single source — keep them in sync). `verdict_status` ∈ `in-progress | passed | complete | blocked | failed | planning`. See [The Investigation graph](#the-investigation-graph-discourse-graph).
 - `scientific_argument: {main_claim, evidence_for: [...], evidence_against: [...], key_figures: [...], caveats: [...], interpretation_ref}` — the chain of reasoning, distinct from the bottom-line verdict.
@@ -421,7 +421,7 @@ An Investigation is a **named collection of studies** with an explicit cross-stu
   - `GET /api/iset-list` — summaries (name, title, status, n_studies).
   - `GET /api/iset/<name>` — full investigation + resolved studies (each carrying normalized `parent_studies` for DAG layout).
   - `GET /api/investigation-registry` — cross-worktree view: this server's "current" Investigation + every OTHER live server's `{slug, worktree_path, url, effective_status, pid}`. Powers the left-rail Investigation switcher across worktrees. (Pass C, 2026-05-17.)
-  - `POST /api/iset-create {name, overview?, parent_studies?}` — scaffolds a new investigation. Emits the v2 narrative-spine YAML (via `vivarium_dashboard.lib.scaffold_yaml.v2_investigation_scaffold`) with the 9 narrative sections (`executive` / `scientific_argument` / `biological_story` / `lead` / `at_a_glance` / `how_to_read` / `glossary` / `guidelines`) commented in as TODO placeholders.
+  - `POST /api/investigation-create {name, overview?, parent_studies?}` — scaffolds a new investigation. Emits the v2 narrative-spine YAML (via `vivarium_dashboard.lib.scaffold_yaml.v2_investigation_scaffold`) with the 9 narrative sections (`executive` / `scientific_argument` / `biological_story` / `lead` / `at_a_glance` / `how_to_read` / `glossary` / `guidelines`) commented in as TODO placeholders.
   - `POST /api/iset-clone {source, target, ...}` — shells out to the workspace's `scripts/clone_investigation.py` (workspace-owned because clone rules are workspace-specific).
   - For update operations (acceptance criteria, narrative-spine field edits) the skills still write YAML directly with atomic tmp-file + rename — `/api/iset-update` is not yet wired.
 - **Dashboard render**: Investigations tab cards → DAG canvas on click; rail sidebar groups studies under their investigation header; "Ungrouped" bucket for studies not in any investigation; topological order within each group.
