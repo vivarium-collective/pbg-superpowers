@@ -86,7 +86,7 @@ An Investigation slug is also a **git branch name** and a **worktree directory n
 
 ## Write strategy
 
-The vivarium-dashboard exposes POST `/api/iset-create` for the initial scaffold (it emits a v2-shape `investigation.yaml` with the narrative spine commented in as TODO placeholders — executive, scientific_argument, biological_story, at_a_glance, glossary, guidelines). Update subcommands write YAML directly to disk using an atomic tmp-file + rename pattern, because the dashboard doesn't yet expose mutation endpoints for the narrative-spine fields. Read paths use GET `/api/iset-list` and GET `/api/iset/<name>`.
+The vivarium-dashboard exposes POST `/api/iset-create` for the initial scaffold (it emits a v2-shape `investigation.yaml` with the narrative spine commented in as TODO placeholders — executive, scientific_argument, biological_story, at_a_glance, glossary, guidelines). Update subcommands write YAML directly to disk using an atomic tmp-file + rename pattern, because the dashboard doesn't yet expose mutation endpoints for the narrative-spine fields. Read paths use GET `/api/investigation-summaries` and GET `/api/investigation/<name>`.
 
 ## Rigor (investigation level)
 
@@ -123,7 +123,7 @@ All sub-commands:
    This exports `$INVESTIGATIONS_DIR`, `$STUDIES_DIR`, `$REPORTS_DIR`, etc. (each = absolute path). Use these variables for the studies/investigations/references/reports paths below — do NOT hardcode `investigations/`, `studies/`, `reports/`. (The hidden `.pbg/` machine-state dir stays at the workspace root by default — use it literally.)
 4. Investigation files live at `$INVESTIGATIONS_DIR/<slug>/investigation.yaml`.
 
-No server-info check is required for read/write operations (files are written directly). Server is only used if you add a `list` display that needs resolved-study data from `/api/iset-list`.
+No server-info check is required for read/write operations (files are written directly). Server is only used if you add a `list` display that needs resolved-study data from `/api/investigation-summaries`.
 
 ## Slug validation
 
