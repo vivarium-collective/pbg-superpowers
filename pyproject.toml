@@ -16,15 +16,16 @@ dependencies = [
     # is lightweight (SQLiteEmitter, stdlib); heavy backends stay extras-gated
     # via pbg-emitters[parquet] / [xarray] (see the `evaluator` extra).
     "pbg-emitters",
-    # Default framework processes available in every pbg- workspace (Clock,
-    # Intervention, MathExpression). Auto-register into the core registry via
-    # bigraph-schema package discovery, like pbg-emitters.
-    "pbg-basic-processes",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.4", "pytest-cov>=4.1", "pytest-timeout>=2.1"]
 evaluator = ["pbg-emitters[parquet]"]
+# Default framework processes (Clock, Intervention, MathExpression).
+# Auto-register into the core registry via bigraph-schema package discovery.
+# Listed as optional until pbg-basic-processes is published to PyPI; local dev
+# installs resolve it via [tool.uv.sources] below.
+processes = ["pbg-basic-processes"]
 
 [tool.uv.sources]
 pbg-emitters = { git = "https://github.com/vivarium-collective/pbg-emitters.git", branch = "main" }
