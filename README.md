@@ -18,6 +18,8 @@ Two parts — the Claude Code plugin (the skills) and the Python package the ski
 
 Verify with `/help` — the `/pbg-*` skills should be listed. For local development, point Claude at a working tree with `claude --plugin-dir /path/to/pbg-superpowers` and `pip install -e .`.
 
+**investigation-contracts** is not yet on PyPI; install it editable from its repo until published: `pip install -e /path/to/investigation-contracts`.
+
 ## Getting Started
 
 Two supported paths. Both end at the same dashboard over the same workspace files — choose based on whether you want Claude in the loop.
