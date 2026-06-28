@@ -1,0 +1,14 @@
+name: preflight
+
+# Run the shared PyPI-installable pre-flight check on this repo's PRs + main.
+# (The reusable workflow lives in this same repo; downstream framework packages
+# reference it the same way via vivarium-collective/pbg-superpowers@main.)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  pypi-installable:
+    uses: ./.github/workflows/pypi-installable.yml
