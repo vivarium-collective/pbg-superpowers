@@ -16,6 +16,7 @@ dependencies = [
     # is lightweight (SQLiteEmitter, stdlib); heavy backends stay extras-gated
     # via pbg-emitters[parquet] / [xarray] (see the `evaluator` extra).
     "pbg-emitters",
+    "investigation-contracts",
 ]
 
 [project.optional-dependencies]
