@@ -9,14 +9,30 @@ processes are CODE (subclasses of Edge), but composites are DATA (declarative
 state documents). Discovering them by file glob avoids running arbitrary
 Python at discovery time and makes them easy to inspect, diff, render, and
 version-control.
+
+Task 8: substitution, type normalisation, and composite construction delegate
+to the unified engine in process_bigraph.composite_spec; this module keeps only
+file I/O (load_spec) and pbg-superpowers-specific wrapping behaviour
+(validate_spec, build_composite_from_spec with install_default_emitters).
 """
 from __future__ import annotations
 import json
-import re
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+# ---------------------------------------------------------------------------
+# Unified engine — single source for substitution + type vocabulary
+# ---------------------------------------------------------------------------
+
+# Re-export so callers `from pbg_superpowers.composite_spec import substitute_parameters`
+# still work while the implementation is single-sourced from process-bigraph.
+from process_bigraph.composite_spec import (  # noqa: F401  (re-export)
+    substitute_parameters,
+    normalize_type,
+    CANONICAL_TYPES,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -54,8 +70,13 @@ def validate_spec(spec: dict) -> None:
     for pname, pdef in params.items():
         if not isinstance(pdef, dict):
             raise ValueError(f"parameter '{pname}' must be a dict")
-        if "type" in pdef and pdef["type"] not in ("float", "int", "string", "str", "bool"):
-            raise ValueError(f"parameter '{pname}': type must be one of float|int|string|bool")
+        # Widened: accept the full canonical+alias vocabulary via normalize_type
+        # (previously only allowed float|int|string|str|bool).
+        if "type" in pdef and normalize_type(pdef["type"]) not in CANONICAL_TYPES:
+            raise ValueError(
+                f"parameter '{pname}': type must be one of {sorted(CANONICAL_TYPES)} "
+                f"(or a recognised alias); got {pdef['type']!r}"
+            )
 
     requires = spec.get("requires") or {}
     if requires and not isinstance(requires, dict):
@@ -74,86 +95,24 @@ def validate_spec(spec: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Parameter substitution
-# ---------------------------------------------------------------------------
-
-_FULL_PLACEHOLDER = re.compile(r"^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$")
-_INLINE_PLACEHOLDER = re.compile(r"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
-
-
-def _cast(value: Any, declared_type: str | None) -> Any:
-    """Cast a raw parameter value to the declared type."""
-    if declared_type is None:
-        return value
-    if declared_type == "float":
-        return float(value)
-    if declared_type == "int":
-        return int(value)
-    if declared_type in ("string", "str"):
-        return str(value)
-    if declared_type == "bool":
-        if isinstance(value, str):
-            return value.strip().lower() in ("true", "1", "yes")
-        return bool(value)
-    return value
-
-
-def _resolve_value(value: Any, params: dict[str, dict], overrides: dict[str, Any]) -> Any:
-    """Walk a leaf value; substitute ${name} placeholders."""
-    if not isinstance(value, str):
-        return value
-
-    # Full-string placeholder: substitute with typed value
-    m = _FULL_PLACEHOLDER.match(value)
-    if m:
-        pname = m.group(1)
-        if pname not in params:
-            raise KeyError(f"parameter '{pname}' referenced in state but not declared in spec.parameters")
-        pdef = params[pname]
-        raw = overrides.get(pname, pdef.get("default"))
-        if raw is None and "default" not in pdef:
-            raise KeyError(f"parameter '{pname}' has no default and no override provided")
-        return _cast(raw, pdef.get("type"))
-
-    # Inline placeholders: string interpolation
-    if _INLINE_PLACEHOLDER.search(value):
-        def repl(match: re.Match) -> str:
-            pname = match.group(1)
-            if pname not in params:
-                raise KeyError(f"parameter '{pname}' referenced in state but not declared in spec.parameters")
-            pdef = params[pname]
-            raw = overrides.get(pname, pdef.get("default"))
-            return str(raw)
-        return _INLINE_PLACEHOLDER.sub(repl, value)
-
-    return value
-
-
-def substitute_parameters(state: Any, params: dict[str, dict], overrides: dict[str, Any] | None = None) -> Any:
-    """Recursively walk a state structure, substituting ${name} placeholders.
-
-    Returns a new structure; does not mutate the input.
-    """
-    overrides = overrides or {}
-    if isinstance(state, dict):
-        return {k: substitute_parameters(v, params, overrides) for k, v in state.items()}
-    if isinstance(state, list):
-        return [substitute_parameters(v, params, overrides) for v in state]
-    return _resolve_value(state, params, overrides)
-
-
-# ---------------------------------------------------------------------------
 # Composite construction
 # ---------------------------------------------------------------------------
 
 def build_composite_from_spec(spec: dict, overrides: dict[str, Any] | None = None, core=None):
     """Construct a process_bigraph.Composite from a parsed spec.
 
+    Delegates document production (substitution + schema resolution) to the
+    unified CompositeSpec engine in process_bigraph.composite_spec, then
+    installs the declared default emitters via install_default_emitters so
+    composites built outside the dashboard's observable-injection flow still
+    ship with their sink.
+
     overrides: optional dict of parameter overrides (keys match spec.parameters).
     core:      optional Core; if None, calls allocate_core().
     """
     validate_spec(spec)
     from process_bigraph import Composite, allocate_core
+    from process_bigraph.composite_spec import CompositeSpec
 
     if core is None:
         core = allocate_core()
@@ -169,8 +128,18 @@ def build_composite_from_spec(spec: dict, overrides: dict[str, Any] | None = Non
             f"Install the package(s) that provide them."
         )
 
-    params = spec.get("parameters") or {}
-    state = substitute_parameters(spec.get("state") or {}, params, overrides)
+    # Build the document via the unified engine.
+    cspec = CompositeSpec(
+        id=spec.get("id") or f"spec.{spec.get('name')}",
+        name=spec.get("name"),
+        state=spec.get("state") or {},
+        schema=dict(spec.get("schema") or {}),
+        parameters=dict(spec.get("parameters") or {}),
+        requires=requires,
+        emitters=list(spec.get("emitters") or []),
+    )
+    doc = cspec.to_document(overrides)
+    state = doc["state"]
 
     # Install the composite's declared default emitter(s) (spec.emitters), so a
     # composite built outside the dashboard's observable-injection flow still
@@ -179,4 +148,4 @@ def build_composite_from_spec(spec: dict, overrides: dict[str, Any] | None = Non
     from pbg_superpowers.composite_generator import install_default_emitters
     state = install_default_emitters(state, spec, core=core)
 
-    return Composite({"state": state}, core=core)
+    return Composite({"schema": doc.get("schema") or {}, "state": state}, core=core)
