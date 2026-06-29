@@ -31,6 +31,7 @@ processes = ["pbg-basic-processes"]
 [tool.uv.sources]
 pbg-emitters = { git = "https://github.com/vivarium-collective/pbg-emitters.git", branch = "main" }
 pbg-basic-processes = { git = "https://github.com/vivarium-collective/pbg-basic-processes.git", branch = "main" }
+investigation-contracts = { git = "https://github.com/vivarium-collective/investigation-contracts.git", branch = "main" }
 
 [project.scripts]
 pbg-scaffold = "pbg_superpowers.scaffold:cli"
