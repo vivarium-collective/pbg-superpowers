@@ -67,10 +67,18 @@ def test_scaffold_workspace_yaml_validates(tmp_path, plugin_root):
 
 
 def test_scaffold_does_not_leak_template_dev_infra(tmp_path, plugin_root):
-    """Regression: pbg-template's own dev infra must never appear in a workspace."""
+    """Regression: pbg-template's own dev infra must never appear in a workspace.
+
+    Note: a workspace IS allowed to ship a curated ``tests/`` directory — the
+    template intentionally scaffolds ``tests/test_core_registration.py`` (PR #39)
+    so every new workspace verifies its own process registration. The guard is
+    *not* "no tests/ at all" (that blanket-banned the curated test and falsely
+    failed); it's "pbg-template's own large dev pytest suite must not leak".
+    So we allowlist the curated scaffolded test files and reject anything else
+    under ``tests/``.
+    """
     target = _scaffold(tmp_path, plugin_root)
     must_not_exist = [
-        "tests",                          # pbg-template's own pytest suite
         "docs/superpowers",               # pbg-template's design docs
         ".superpowers/brainstorm",        # transient session cruft
         "use-this-template-init.sh",      # GitHub-flow entry point, plugin path skips it
@@ -78,6 +86,21 @@ def test_scaffold_does_not_leak_template_dev_infra(tmp_path, plugin_root):
     ]
     for p in must_not_exist:
         assert not (target / p).exists(), f"leaked dev infra: {p}"
+
+    # The scaffolded tests/ dir (if present) may contain ONLY the curated files
+    # the template intentionally ships — not pbg-template's own dev test suite
+    # (test_scaffold*.py, test_inplace*.py, conftest.py, etc.).
+    allowed_scaffolded_tests = {"test_core_registration.py"}
+    tests_dir = target / "tests"
+    if tests_dir.is_dir():
+        leaked = sorted(
+            str(p.relative_to(tests_dir))
+            for p in tests_dir.rglob("*")
+            if p.is_file()
+            and "__pycache__" not in p.relative_to(tests_dir).parts
+            and p.name not in allowed_scaffolded_tests
+        )
+        assert not leaked, f"leaked pbg-template dev tests into scaffold: {leaked}"
 
 
 def test_lint_passes_on_freshly_scaffolded(tmp_path, plugin_root):

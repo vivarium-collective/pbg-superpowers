@@ -16,7 +16,6 @@ dependencies = [
     # is lightweight (SQLiteEmitter, stdlib); heavy backends stay extras-gated
     # via pbg-emitters[parquet] / [xarray] (see the `evaluator` extra).
     "pbg-emitters",
-    "investigation-contracts",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +26,11 @@ evaluator = ["pbg-emitters[parquet]"]
 # Listed as optional until pbg-basic-processes is published to PyPI; local dev
 # installs resolve it via [tool.uv.sources] below.
 processes = ["pbg-basic-processes"]
+# Agentic-spine event reactor (event_client.py / RFC-0002 Phase A). Used only by
+# the optional EventClient; gated as an extra because investigation-contracts is
+# a first-party git dependency not published to PyPI. Local dev installs resolve
+# it via [tool.uv.sources] below.
+events = ["investigation-contracts"]
 
 [tool.uv.sources]
 pbg-emitters = { git = "https://github.com/vivarium-collective/pbg-emitters.git", branch = "main" }
