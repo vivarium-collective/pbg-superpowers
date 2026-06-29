@@ -48,5 +48,15 @@ def test_scaffold_matches_manifest(tmp_path, plugin_root, fixtures_dir):
     assert not extras and not missing, (
         f"workspace tree drifted from snapshot.\n"
         f"  unexpected files: {sorted(extras)}\n"
-        f"  missing files:    {sorted(missing)}"
+        f"  missing files:    {sorted(missing)}\n"
+        f"\n"
+        f"This snapshot mirrors pbg-template's tree. To resolve:\n"
+        f"  - If pbg-template changed intentionally, bump the pin in\n"
+        f"    tests/fixtures/workspace-baseline/PBG_TEMPLATE_REF to the new\n"
+        f"    commit, then regenerate the manifest in the SAME PR:\n"
+        f"        PBG_TEMPLATE=<path-to-pbg-template> \\\n"
+        f"          python scripts/update-scaffold-snapshot.py\n"
+        f"    Review the diff and commit MANIFEST.txt + PBG_TEMPLATE_REF.\n"
+        f"  - CI pins pbg-template to PBG_TEMPLATE_REF, so this should only\n"
+        f"    drift when you change the template payload or the scaffolder."
     )

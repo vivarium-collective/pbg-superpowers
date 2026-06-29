@@ -24,11 +24,23 @@ jobs:
           # The integration tests skip cleanly when ~/code/pbg-template isn't
           # present, but in CI we want to actually run them. Clone the template
           # to the expected path before pytest collects.
+          #
+          # Cross-repo drift guard: the golden scaffold snapshot mirrors
+          # pbg-template's tree, so an *unrelated* push to pbg-template@main
+          # used to silently redden pbg-superpowers@main. We instead pin the
+          # exact pbg-template commit the manifest was generated against,
+          # recorded in tests/fixtures/workspace-baseline/PBG_TEMPLATE_REF.
+          # Bumping the template is now an intentional PR here that updates the
+          # pin AND regenerates MANIFEST.txt together.
           PBG_TEMPLATE_REPO: https://github.com/vivarium-collective/pbg-template.git
         run: |
           mkdir -p ~/code
+          PBG_TEMPLATE_REF="$(cat tests/fixtures/workspace-baseline/PBG_TEMPLATE_REF)"
           if [ ! -d ~/code/pbg-template ]; then
-            git clone --depth 1 "$PBG_TEMPLATE_REPO" ~/code/pbg-template || true
+            git clone "$PBG_TEMPLATE_REPO" ~/code/pbg-template
           fi
+          git -C ~/code/pbg-template fetch --depth 1 origin "$PBG_TEMPLATE_REF"
+          git -C ~/code/pbg-template checkout --detach "$PBG_TEMPLATE_REF"
+          echo "pinned pbg-template @ $(git -C ~/code/pbg-template rev-parse HEAD)"
           source .venv/bin/activate
           pytest -v

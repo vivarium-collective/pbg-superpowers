@@ -22,6 +22,7 @@
 ./scripts/_migrate_v1_to_v2.py
 ./scripts/add-dataset.sh
 ./scripts/add-reference.sh
+./scripts/check-no-local-paths.sh
 ./scripts/clone_investigation.py
 ./scripts/feature_dashboard_in_readme.py
 ./scripts/gh-pages-landing.html
@@ -31,6 +32,7 @@
 ./scripts/publish_investigation_reports.py
 ./scripts/render-dashboard.py
 ./scripts/serve.sh
+./tests/test_core_registration.py
 ./workspace.yaml
 ./workspace/datasets/README.md
 ./workspace/experiments/README.md
