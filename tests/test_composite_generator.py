@@ -412,7 +412,8 @@ def test_discover_generators_finds_decorated_function_in_installed_pkg(
     assert expected_id in found
     entry = found[expected_id]
     assert entry.name == "demo"
-    assert entry.parameters == {"x": {"type": "int", "default": 7}}
+    # "int" is normalised to "integer" by CompositeSpec.__post_init__
+    assert entry.parameters == {"x": {"type": "integer", "default": 7}}
 
 
 def test_discover_all_merges_specs_and_generators(tmp_path, installed_fake_pkg):
@@ -538,6 +539,22 @@ def test_discover_generators_traps_sys_exit_from_imported_subpackage(tmp_path):
                 del sys.modules[k]
         _REGISTRY.clear()
         importlib.invalidate_caches()
+
+
+def test_composite_generator_registers_into_process_bigraph_registry():
+    from process_bigraph import composite_spec as cs
+    from pbg_superpowers.composite_generator import composite_generator, build_generator
+    cs.clear_registry()
+
+    @composite_generator(name="shimdemo", parameters={"seed": {"type": "int", "default": 1}})
+    def shimdemo(core=None, *, seed=1):
+        return {"state": {"s": seed}}
+
+    spec_id = f"{shimdemo.__module__}.shimdemo"
+    spec = cs.get(spec_id)
+    assert spec is not None and spec.parameters["seed"]["type"] == "integer"
+    # build_generator delegates to the spec's document
+    assert build_generator(spec, overrides={"seed": 3}) == {"state": {"s": 3}}
 
 
 def test_discover_generators_skips_scripts_subpackage(tmp_path):
