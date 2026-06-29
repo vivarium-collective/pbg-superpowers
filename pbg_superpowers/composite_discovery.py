@@ -9,7 +9,7 @@ import importlib.metadata
 import sys
 from pathlib import Path
 
-from .composite_spec import load_spec, validate_spec
+from process_bigraph.composite_spec import CompositeSpec
 
 
 _GLOB_PATTERNS = ("*.composite.yaml", "*.composite.yml", "*.composite.json")
@@ -53,9 +53,9 @@ def discover_composites(extra_search_paths: list[Path] | None = None) -> dict[st
                 for path in pkg_root.rglob(pattern):
                     spec_id = _make_spec_id(pkg_name, pkg_root, path)
                     try:
-                        spec = load_spec(path)
-                        validate_spec(spec)
-                        specs[spec_id] = spec
+                        # Delegate parsing + validation to the unified engine;
+                        # to_dict() serialises to a plain dict for downstream.
+                        specs[spec_id] = CompositeSpec.from_file(path).to_dict()
                     except Exception as e:
                         # Skip malformed specs; log to stderr
                         print(f"warning: skipping {path}: {e}", file=sys.stderr)
@@ -68,9 +68,7 @@ def discover_composites(extra_search_paths: list[Path] | None = None) -> dict[st
             for path in extra.rglob(pattern):
                 spec_id = _make_spec_id("local", extra, path)
                 try:
-                    spec = load_spec(path)
-                    validate_spec(spec)
-                    specs[spec_id] = spec
+                    specs[spec_id] = CompositeSpec.from_file(path).to_dict()
                 except Exception as e:
                     print(f"warning: skipping {path}: {e}", file=sys.stderr)
 

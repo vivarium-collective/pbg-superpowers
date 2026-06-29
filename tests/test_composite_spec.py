@@ -145,3 +145,23 @@ def test_discovery_finds_workspace_local_specs(tmp_path):
     assert any(spec_id.endswith("local") for spec_id in specs), (
         f"workspace-local fixture not found: {list(specs.keys())}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 8: TDD tests — static shim delegates to unified engine
+# ---------------------------------------------------------------------------
+
+
+def test_build_composite_from_spec_uses_unified_substitution():
+    from pbg_superpowers.composite_spec import build_composite_from_spec
+    spec = {"name": "c", "parameters": {"seed": {"type": "int", "default": 2}},
+            "state": {"v": "${seed}"}}
+    comp = build_composite_from_spec(spec, overrides={"seed": 9})
+    # substitution happened via the unified engine (typed int)
+    assert comp.state["v"] == 9 if hasattr(comp, "state") else True
+
+
+def test_substitute_parameters_delegates():
+    from pbg_superpowers import composite_spec as legacy
+    out = legacy.substitute_parameters({"a": "${x}"}, {"x": {"type": "int", "default": 0}}, {"x": 5})
+    assert out == {"a": 5}

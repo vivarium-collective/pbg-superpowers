@@ -18,7 +18,7 @@ jobs:
         run: |
           uv venv .venv
           source .venv/bin/activate
-          uv pip install -e ".[dev,evaluator]"
+          uv pip install -e ".[dev,evaluator,processes]"
       - name: Run L1 tests
         env:
           # The integration tests skip cleanly when ~/code/pbg-template isn't

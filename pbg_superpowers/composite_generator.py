@@ -5,11 +5,19 @@ generator is a Python function `(core=None, **kwargs) -> dict` that builds
 a process-bigraph document; the decorator records it in a module-level
 registry so discovery can enumerate generators without callers having to
 maintain a separate list.
+
+This module is now a thin shim over ``process_bigraph.composite_spec``, which
+is the single source of truth for the registry.  The ``GeneratorEntry``
+dataclass and helpers (``emitter_defaults``, ``install_default_emitters``,
+``apply_core_extensions``) are preserved unchanged so the dashboard keeps
+working on the same attribute surface.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Callable
+
+from process_bigraph import composite_spec as _cs
 
 
 @dataclass
@@ -60,8 +68,110 @@ class GeneratorEntry:
     core_extensions: list[Callable[[Any], Any]] = field(default_factory=list)
 
 
-# Process-level registry. Populated by @composite_generator on import.
-_REGISTRY: dict[str, GeneratorEntry] = {}
+def _entry_for(spec) -> GeneratorEntry:
+    """Adapt a process-bigraph CompositeSpec to the GeneratorEntry the dashboard reads."""
+    return GeneratorEntry(
+        id=spec.id,
+        name=spec.name,
+        description=spec.description,
+        parameters=spec.parameters,
+        func=(spec.builder if callable(spec.builder)
+              else (_cs._resolve_builder(spec.builder, spec.module) if spec.builder else None)),
+        module=spec.module,
+        default_n_steps=spec.default_n_steps,
+        visualizations=spec.visualizations,
+        emitters=spec.emitters,
+        core_extensions=spec.core_extensions,
+    )
+
+
+class _RegistryView:
+    """Live view over the process-bigraph CompositeSpec registry.
+
+    Returns ``GeneratorEntry`` objects so the dashboard's attribute surface
+    (``.id``, ``.name``, ``.func``, …) is preserved.  Caches entries by
+    spec-id so identity (``is``) comparisons survive across separate
+    ``__getitem__`` calls — required by the ``_composite_generator_entry is
+    entry`` sidecar test.
+    """
+
+    def __init__(self) -> None:
+        self._cache: dict[str, GeneratorEntry] = {}
+
+    def _entry(self, spec_id: str) -> GeneratorEntry | None:
+        s = _cs.get(spec_id)
+        if s is None:
+            return None
+        if spec_id not in self._cache:
+            self._cache[spec_id] = _entry_for(s)
+        return self._cache[spec_id]
+
+    def get(self, k: str, default=None):
+        e = self._entry(k)
+        return e if e is not None else default
+
+    def __getitem__(self, k: str) -> GeneratorEntry:
+        e = self._entry(k)
+        if e is None:
+            raise KeyError(k)
+        return e
+
+    def __contains__(self, k: object) -> bool:
+        return _cs.get(str(k)) is not None
+
+    def values(self):
+        return [self._entry(sid) for sid in _cs.all_specs()]
+
+    def items(self):
+        return [(sid, self._entry(sid)) for sid in _cs.all_specs()]
+
+    def __iter__(self):
+        return iter(_cs.all_specs())
+
+    def keys(self):
+        return list(_cs.all_specs().keys())
+
+    def __bool__(self) -> bool:
+        return bool(_cs.all_specs())
+
+    def __setitem__(self, key, entry):
+        # v2ecoli registers "clean alias" composites via
+        #   _REGISTRY[clean_id] = dataclasses.replace(orig, id=clean_id)
+        # where `orig` is a GeneratorEntry from this view. Translate the assigned
+        # entry into a CompositeSpec registered under `key` in the unified registry.
+        import dataclasses as _dc
+        # invalidate any cached GeneratorEntry for this key before re-registering
+        if hasattr(self, "_cache"):
+            self._cache.pop(key, None)
+        if isinstance(entry, _cs.CompositeSpec):
+            spec = entry if entry.id == key else _dc.replace(entry, id=key)
+        else:  # a GeneratorEntry (or replace()-d copy of one)
+            spec = _cs.CompositeSpec(
+                id=key,
+                name=entry.name,
+                description=entry.description,
+                parameters=dict(entry.parameters or {}),
+                builder=getattr(entry, "func", None),
+                module=getattr(entry, "module", ""),
+                default_n_steps=getattr(entry, "default_n_steps", None),
+                visualizations=list(getattr(entry, "visualizations", []) or []),
+                emitters=list(getattr(entry, "emitters", []) or []),
+                core_extensions=list(getattr(entry, "core_extensions", []) or []),
+            )
+        _cs.register(spec)
+
+    def __len__(self):
+        return len(_cs.all_specs())
+
+    def clear(self) -> None:
+        """Clear the cache AND the backing process-bigraph registry."""
+        self._cache.clear()
+        _cs.clear_registry()
+
+
+# Process-level registry.  Backed by process_bigraph.composite_spec._REGISTRY;
+# populated by @composite_generator on import.
+_REGISTRY: _RegistryView = _RegistryView()
 
 
 def composite_generator(
@@ -73,15 +183,23 @@ def composite_generator(
     emitters: list[dict] | None = None,
     default_n_steps: int | None = None,
     core_extensions: list[Callable[[Any], Any]] | None = None,
+    default_state_ref: str | None = None,
 ) -> Callable[[Callable[..., dict]], Callable[..., dict]]:
     """Decorator: register a doc-building function.
 
     The wrapped function must accept ``(core=None, **kwargs) -> dict`` and
     return a process-bigraph state document (or a {state, schema} envelope).
 
+    Delegates registration to ``process_bigraph.composite_spec`` so that the
+    process-bigraph registry is the single source of truth.  The
+    ``GeneratorEntry`` view (read by the dashboard) is built lazily from the
+    registered ``CompositeSpec`` on first access via ``_REGISTRY``.
+
     `parameters` declares each kwarg in the same shape that *.composite.yaml
     uses, so the dashboard's parameter-form code is shared across both
-    conventions.
+    conventions.  Parameter ``type`` values are normalised to canonical
+    vocabulary (``int``→``integer``, ``float``→``float``, etc.) by
+    ``CompositeSpec.__post_init__``.
 
     `visualizations` declares the canonical visualization set that ships with
     this composite. Each entry is a Study-spec visualization dict
@@ -118,6 +236,10 @@ def composite_generator(
     ``steps`` pre-fill. It is NOT a composite-builder kwarg — runtime knobs
     are framework-owned and live next to the generator entry.
 
+    `default_state_ref` (optional) path to a pre-computed default-state
+    artifact relative to the workspace root.  When present, ``CompositeSpec``
+    can serve the state without re-running the builder.
+
     `core_extensions` (optional) is a list of callables ``(core) -> core | None``
     that register the custom types/processes this generator's document
     references but that a bare ``build_core()`` doesn't provide. Declare a
@@ -133,24 +255,29 @@ def composite_generator(
         )
         def attachment(core=None): ...
     """
+    # Validate emitters at decoration time (not first use) so malformed
+    # declarations fail loudly on import — same guarantee as before.
     validated_emitters = _validate_emitters(emitters, name)
 
     def decorate(fn: Callable[..., dict]) -> Callable[..., dict]:
-        entry = GeneratorEntry(
-            id=f"{fn.__module__}.{name}",
+        # Register with process-bigraph as the single source of truth.
+        _cs.composite_spec(
             name=name,
             description=description,
-            parameters=parameters or {},
-            visualizations=list(visualizations or []),
+            parameters=parameters,
+            visualizations=visualizations,
             emitters=validated_emitters,
-            func=fn,
-            module=fn.__module__,
             default_n_steps=default_n_steps,
-            core_extensions=list(core_extensions or []),
-        )
-        _REGISTRY[entry.id] = entry
-        fn._composite_generator_entry = entry  # introspection sidecar
+            core_extensions=core_extensions,
+            default_state_ref=default_state_ref,
+        )(fn)
+        # Build + cache the GeneratorEntry NOW so that identity comparisons
+        # (``fn._composite_generator_entry is _REGISTRY[spec_id]``) hold.
+        spec_id = f"{fn.__module__}.{name}"
+        entry = _REGISTRY[spec_id]          # creates + caches the GeneratorEntry
+        fn._composite_generator_entry = entry   # introspection sidecar
         return fn
+
     return decorate
 
 
@@ -305,45 +432,49 @@ def apply_core_extensions(entry: GeneratorEntry, core: Any) -> Any:
     return core
 
 
-def build_generator(
-    entry: GeneratorEntry,
-    overrides: dict[str, Any] | None = None,
-    core: Any = None,
-) -> dict:
-    """Call the wrapped function with merged defaults + overrides.
+def build_generator(entry, overrides=None, core=None):
+    """Delegate to the CompositeSpec document. ``entry`` may be a CompositeSpec,
+    a GeneratorEntry (has ``.id``/``.func``), or a registered id's entry.
 
-    Unknown override keys raise ValueError so dashboards / callers can't
+    Unknown override keys raise ``ValueError`` so dashboards / callers can't
     silently smuggle in parameters that the generator doesn't declare.
+    (``CompositeSpec._merged_params`` raises ``KeyError`` for unknown keys; we
+    intercept here so callers always get ``ValueError``.)
     """
+    # Validate overrides before delegating so callers always get ValueError
+    # (not KeyError from _merged_params) for unknown parameters.
     overrides = overrides or {}
-    unknown = set(overrides) - set(entry.parameters)
+    params = getattr(entry, "parameters", {}) or {}
+    unknown = set(overrides) - set(params)
     if unknown:
         raise ValueError(
-            f"unknown parameter(s) for {entry.id}: {sorted(unknown)}"
+            f"unknown parameter(s) for {getattr(entry, 'id', '?')}: {sorted(unknown)}"
         )
-    kwargs: dict[str, Any] = {}
-    for pname, pdecl in entry.parameters.items():
-        if pname in overrides:
-            kwargs[pname] = overrides[pname]
-        elif "default" in pdecl:
-            kwargs[pname] = pdecl["default"]
-    return entry.func(core=core, **kwargs)
+    if isinstance(entry, _cs.CompositeSpec):
+        spec = entry
+    else:
+        spec = _cs.get(getattr(entry, "id", None))
+        if spec is None and callable(getattr(entry, "func", None)):
+            # out-of-registry GeneratorEntry (e.g. registry cleared after decoration):
+            # rebuild a transient spec from it so we preserve "build from the entry".
+            spec = _cs.CompositeSpec(
+                id=entry.id, name=entry.name, builder=entry.func,
+                parameters=entry.parameters, module=entry.module,
+            )
+    if spec is None:
+        raise ValueError(
+            f"build_generator: no registered composite for "
+            f"{getattr(entry, 'id', entry)!r}")
+    return spec.to_document(overrides, core=core)
 
 
-def discover_generators(
-    extra_packages: list[str] | None = None,
-) -> dict[str, GeneratorEntry]:
-    """Discover composite generators from installed packages.
+def _import_bigraph_packages(extra_packages: list[str] | None = None) -> None:
+    """Walk installed bigraph-schema-dependent packages and import them so
+    that ``@composite_generator`` decorators fire and register their specs.
 
-    Walks every installed distribution that depends on `bigraph-schema`,
-    imports each top-level package so its `@composite_generator` decorators
-    fire, then returns whatever ended up in `_REGISTRY`.
-
-    Unlike `discover_composites` (file-glob; imports only to resolve
-    package paths, not to run decorator side-effects), this MUST import
-    the host packages so the decorators fire. Subsequent calls return the
-    same registry; there is no automatic invalidation. Hot-reload callers
-    can `_REGISTRY.clear()` before re-importing.
+    This is the distribution-walking body extracted from ``discover_generators``
+    so it can be called independently (e.g. from ``composite_spec.discover_specs``
+    via the shim's ``discover_generators``).
     """
     import importlib
     import importlib.metadata as md
@@ -438,4 +569,26 @@ def discover_generators(
                     stacklevel=2,
                 )
 
-    return dict(_REGISTRY)
+
+def discover_generators(
+    extra_packages: list[str] | None = None,
+) -> dict[str, GeneratorEntry]:
+    """Discover composite generators from installed packages.
+
+    Walks every installed distribution that depends on ``bigraph-schema``,
+    imports each top-level package so its ``@composite_generator`` decorators
+    fire, then returns whatever generator-kind specs ended up in the
+    process-bigraph registry as ``GeneratorEntry`` views.
+
+    Unlike ``discover_composites`` (file-glob; imports only to resolve
+    package paths, not to run decorator side-effects), this MUST import
+    the host packages so the decorators fire. Subsequent calls return the
+    same registry; there is no automatic invalidation. Hot-reload callers
+    can ``_REGISTRY.clear()`` before re-importing.
+    """
+    _import_bigraph_packages(extra_packages)
+    return {
+        sid: _entry_for(s)
+        for sid, s in _cs.all_specs().items()
+        if s.kind == "generator"
+    }

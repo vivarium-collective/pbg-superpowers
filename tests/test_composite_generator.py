@@ -412,7 +412,8 @@ def test_discover_generators_finds_decorated_function_in_installed_pkg(
     assert expected_id in found
     entry = found[expected_id]
     assert entry.name == "demo"
-    assert entry.parameters == {"x": {"type": "int", "default": 7}}
+    # "int" is normalised to "integer" by CompositeSpec.__post_init__
+    assert entry.parameters == {"x": {"type": "integer", "default": 7}}
 
 
 def test_discover_all_merges_specs_and_generators(tmp_path, installed_fake_pkg):
@@ -538,6 +539,64 @@ def test_discover_generators_traps_sys_exit_from_imported_subpackage(tmp_path):
                 del sys.modules[k]
         _REGISTRY.clear()
         importlib.invalidate_caches()
+
+
+def test_composite_generator_registers_into_process_bigraph_registry():
+    from process_bigraph import composite_spec as cs
+    from pbg_superpowers.composite_generator import composite_generator, build_generator
+    cs.clear_registry()
+
+    @composite_generator(name="shimdemo", parameters={"seed": {"type": "int", "default": 1}})
+    def shimdemo(core=None, *, seed=1):
+        return {"state": {"s": seed}}
+
+    spec_id = f"{shimdemo.__module__}.shimdemo"
+    spec = cs.get(spec_id)
+    assert spec is not None and spec.parameters["seed"]["type"] == "integer"
+    # build_generator delegates to the spec's document
+    assert build_generator(spec, overrides={"seed": 3}) == {"state": {"s": 3}}
+
+
+def test_build_generator_descriptive_error_for_unregistered_id():
+    from process_bigraph import composite_spec as cs
+    from pbg_superpowers.composite_generator import build_generator, GeneratorEntry
+    cs.clear_registry()
+    ge = GeneratorEntry(id="missing.x", name="x", description="", parameters={},
+                        func=None, module="missing")
+    import pytest
+    with pytest.raises(ValueError, match="no registered composite"):
+        build_generator(ge)
+
+
+def test_registry_view_supports_clean_alias_assignment():
+    import dataclasses
+    from process_bigraph import composite_spec as cs
+    from pbg_superpowers.composite_generator import composite_generator, _REGISTRY
+    cs.clear_registry()
+
+    @composite_generator(name="aliasme", parameters={"seed": {"type": "int", "default": 0}})
+    def aliasme(core=None, *, seed=0):
+        return {"state": {"s": seed}}
+
+    full_id = f"{aliasme.__module__}.aliasme"
+    orig = _REGISTRY[full_id]                       # GeneratorEntry from the view
+    _REGISTRY["aliasme"] = dataclasses.replace(orig, id="aliasme")  # the v2ecoli pattern
+    assert "aliasme" in _REGISTRY
+    assert _REGISTRY["aliasme"].id == "aliasme"
+    assert cs.get("aliasme") is not None and cs.get("aliasme").kind == "generator"
+    assert len(_REGISTRY) >= 2                      # exercises __len__
+
+
+def test_registry_view_dict_conversion_works():
+    """M2: _RegistryView.keys() enables dict(_REGISTRY) to work."""
+    from process_bigraph import composite_spec as cs
+    from pbg_superpowers.composite_generator import composite_generator, _REGISTRY
+    cs.clear_registry()
+    @composite_generator(name="dictme", parameters={})
+    def dictme(core=None):
+        return {"state": {}}
+    d = dict(_REGISTRY)            # requires keys()
+    assert f"{dictme.__module__}.dictme" in d
 
 
 def test_discover_generators_skips_scripts_subpackage(tmp_path):
