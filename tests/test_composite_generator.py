@@ -557,6 +557,17 @@ def test_composite_generator_registers_into_process_bigraph_registry():
     assert build_generator(spec, overrides={"seed": 3}) == {"state": {"s": 3}}
 
 
+def test_build_generator_descriptive_error_for_unregistered_id():
+    from process_bigraph import composite_spec as cs
+    from pbg_superpowers.composite_generator import build_generator, GeneratorEntry
+    cs.clear_registry()
+    ge = GeneratorEntry(id="missing.x", name="x", description="", parameters={},
+                        func=None, module="missing")
+    import pytest
+    with pytest.raises(ValueError, match="no registered composite"):
+        build_generator(ge)
+
+
 def test_discover_generators_skips_scripts_subpackage(tmp_path):
     """v2ecoli friction #4: a `scripts/` subpackage holds CLI tools, not
     library code; discovery should skip it entirely to avoid importing

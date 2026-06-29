@@ -75,7 +75,8 @@ def _entry_for(spec) -> GeneratorEntry:
         name=spec.name,
         description=spec.description,
         parameters=spec.parameters,
-        func=_cs._resolve_builder(spec.builder, spec.module),
+        func=(spec.builder if callable(spec.builder)
+              else _cs._resolve_builder(spec.builder, spec.module)),
         module=spec.module,
         default_n_steps=spec.default_n_steps,
         visualizations=spec.visualizations,
@@ -399,21 +400,17 @@ def apply_core_extensions(entry: GeneratorEntry, core: Any) -> Any:
     return core
 
 
-def build_generator(
-    entry: Any,
-    overrides: dict[str, Any] | None = None,
-    core: Any = None,
-) -> dict:
-    """Call the wrapped function with merged defaults + overrides.
+def build_generator(entry, overrides=None, core=None):
+    """Delegate to the CompositeSpec document. ``entry`` may be a CompositeSpec,
+    a GeneratorEntry (has ``.id``/``.func``), or a registered id's entry.
 
-    Delegates to ``CompositeSpec.to_document`` for registered generators.
     Unknown override keys raise ``ValueError`` so dashboards / callers can't
     silently smuggle in parameters that the generator doesn't declare.
-
-    ``entry`` may be a ``GeneratorEntry`` (from ``_REGISTRY``), a
-    ``CompositeSpec`` (from ``process_bigraph.composite_spec.get``), or any
-    object with ``.id`` and ``.parameters``.
+    (``CompositeSpec._merged_params`` raises ``KeyError`` for unknown keys; we
+    intercept here so callers always get ``ValueError``.)
     """
+    # Validate overrides before delegating so callers always get ValueError
+    # (not KeyError from _merged_params) for unknown parameters.
     overrides = overrides or {}
     params = getattr(entry, "parameters", {}) or {}
     unknown = set(overrides) - set(params)
@@ -421,12 +418,22 @@ def build_generator(
         raise ValueError(
             f"unknown parameter(s) for {getattr(entry, 'id', '?')}: {sorted(unknown)}"
         )
-    # Prefer the live CompositeSpec so to_document handles default merging.
-    spec = _cs.get(getattr(entry, "id", None))
-    if spec is not None:
-        return spec.to_document(overrides, core=core)
-    # entry IS a CompositeSpec (or any object with to_document)
-    return entry.to_document(overrides, core=core)
+    if isinstance(entry, _cs.CompositeSpec):
+        spec = entry
+    else:
+        spec = _cs.get(getattr(entry, "id", None))
+        if spec is None and callable(getattr(entry, "func", None)):
+            # out-of-registry GeneratorEntry (e.g. registry cleared after decoration):
+            # rebuild a transient spec from it so we preserve "build from the entry".
+            spec = _cs.CompositeSpec(
+                id=entry.id, name=entry.name, builder=entry.func,
+                parameters=entry.parameters, module=entry.module,
+            )
+    if spec is None:
+        raise ValueError(
+            f"build_generator: no registered composite for "
+            f"{getattr(entry, 'id', entry)!r}")
+    return spec.to_document(overrides, core=core)
 
 
 def _import_bigraph_packages(extra_packages: list[str] | None = None) -> None:
