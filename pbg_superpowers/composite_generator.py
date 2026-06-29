@@ -131,6 +131,32 @@ class _RegistryView:
     def __bool__(self) -> bool:
         return bool(_cs.all_specs())
 
+    def __setitem__(self, key, entry):
+        # v2ecoli registers "clean alias" composites via
+        #   _REGISTRY[clean_id] = dataclasses.replace(orig, id=clean_id)
+        # where `orig` is a GeneratorEntry from this view. Translate the assigned
+        # entry into a CompositeSpec registered under `key` in the unified registry.
+        import dataclasses as _dc
+        if isinstance(entry, _cs.CompositeSpec):
+            spec = entry if entry.id == key else _dc.replace(entry, id=key)
+        else:  # a GeneratorEntry (or replace()-d copy of one)
+            spec = _cs.CompositeSpec(
+                id=key,
+                name=entry.name,
+                description=entry.description,
+                parameters=dict(entry.parameters or {}),
+                builder=getattr(entry, "func", None),
+                module=getattr(entry, "module", ""),
+                default_n_steps=getattr(entry, "default_n_steps", None),
+                visualizations=list(getattr(entry, "visualizations", []) or []),
+                emitters=list(getattr(entry, "emitters", []) or []),
+                core_extensions=list(getattr(entry, "core_extensions", []) or []),
+            )
+        _cs.register(spec)
+
+    def __len__(self):
+        return len(_cs.all_specs())
+
     def clear(self) -> None:
         """Clear the cache AND the backing process-bigraph registry."""
         self._cache.clear()

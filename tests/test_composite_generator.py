@@ -568,6 +568,25 @@ def test_build_generator_descriptive_error_for_unregistered_id():
         build_generator(ge)
 
 
+def test_registry_view_supports_clean_alias_assignment():
+    import dataclasses
+    from process_bigraph import composite_spec as cs
+    from pbg_superpowers.composite_generator import composite_generator, _REGISTRY
+    cs.clear_registry()
+
+    @composite_generator(name="aliasme", parameters={"seed": {"type": "int", "default": 0}})
+    def aliasme(core=None, *, seed=0):
+        return {"state": {"s": seed}}
+
+    full_id = f"{aliasme.__module__}.aliasme"
+    orig = _REGISTRY[full_id]                       # GeneratorEntry from the view
+    _REGISTRY["aliasme"] = dataclasses.replace(orig, id="aliasme")  # the v2ecoli pattern
+    assert "aliasme" in _REGISTRY
+    assert _REGISTRY["aliasme"].id == "aliasme"
+    assert cs.get("aliasme") is not None and cs.get("aliasme").kind == "generator"
+    assert len(_REGISTRY) >= 2                      # exercises __len__
+
+
 def test_discover_generators_skips_scripts_subpackage(tmp_path):
     """v2ecoli friction #4: a `scripts/` subpackage holds CLI tools, not
     library code; discovery should skip it entirely to avoid importing
