@@ -587,6 +587,18 @@ def test_registry_view_supports_clean_alias_assignment():
     assert len(_REGISTRY) >= 2                      # exercises __len__
 
 
+def test_registry_view_dict_conversion_works():
+    """M2: _RegistryView.keys() enables dict(_REGISTRY) to work."""
+    from process_bigraph import composite_spec as cs
+    from pbg_superpowers.composite_generator import composite_generator, _REGISTRY
+    cs.clear_registry()
+    @composite_generator(name="dictme", parameters={})
+    def dictme(core=None):
+        return {"state": {}}
+    d = dict(_REGISTRY)            # requires keys()
+    assert f"{dictme.__module__}.dictme" in d
+
+
 def test_discover_generators_skips_scripts_subpackage(tmp_path):
     """v2ecoli friction #4: a `scripts/` subpackage holds CLI tools, not
     library code; discovery should skip it entirely to avoid importing

@@ -76,7 +76,7 @@ def _entry_for(spec) -> GeneratorEntry:
         description=spec.description,
         parameters=spec.parameters,
         func=(spec.builder if callable(spec.builder)
-              else _cs._resolve_builder(spec.builder, spec.module)),
+              else (_cs._resolve_builder(spec.builder, spec.module) if spec.builder else None)),
         module=spec.module,
         default_n_steps=spec.default_n_steps,
         visualizations=spec.visualizations,
@@ -128,6 +128,9 @@ class _RegistryView:
     def __iter__(self):
         return iter(_cs.all_specs())
 
+    def keys(self):
+        return list(_cs.all_specs().keys())
+
     def __bool__(self) -> bool:
         return bool(_cs.all_specs())
 
@@ -137,6 +140,9 @@ class _RegistryView:
         # where `orig` is a GeneratorEntry from this view. Translate the assigned
         # entry into a CompositeSpec registered under `key` in the unified registry.
         import dataclasses as _dc
+        # invalidate any cached GeneratorEntry for this key before re-registering
+        if hasattr(self, "_cache"):
+            self._cache.pop(key, None)
         if isinstance(entry, _cs.CompositeSpec):
             spec = entry if entry.id == key else _dc.replace(entry, id=key)
         else:  # a GeneratorEntry (or replace()-d copy of one)
