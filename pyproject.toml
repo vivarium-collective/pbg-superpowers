@@ -51,6 +51,15 @@ pbg-populate-findings = "pbg_superpowers.finding_observations:main"
 pbg-roll-up = "pbg_superpowers.roll_up:main"
 pbg-citation-gaps = "pbg_superpowers.citation_gaps:main"
 
+# Register pbg_superpowers' composite-generator discovery into the
+# process_bigraph.spec_generators entry-point group. This lets
+# process_bigraph.composite_spec.discover_specs find generators via a plugin
+# entry point instead of hard-importing pbg_superpowers (the old dependency
+# inversion). Takes effect on (re)install; once relied upon, the engine's legacy
+# import fallback can be removed.
+[project.entry-points."process_bigraph.spec_generators"]
+pbg_superpowers = "pbg_superpowers.composite_generator:discover_generators"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
