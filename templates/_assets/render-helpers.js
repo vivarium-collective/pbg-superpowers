@@ -1,4 +1,14 @@
 // templates/_assets/render-helpers.js
+(function(){
+  var saved = localStorage.getItem('pbg-theme');
+  if(saved === 'dark') document.documentElement.setAttribute('data-theme','dark');
+})();
+function toggleTheme(){
+  var html = document.documentElement;
+  var on = html.getAttribute('data-theme') === 'dark';
+  if(on){ html.removeAttribute('data-theme'); localStorage.setItem('pbg-theme','light'); }
+  else { html.setAttribute('data-theme','dark'); localStorage.setItem('pbg-theme','dark'); }
+}
 function renderJsonTree(obj, depth) {
   depth = depth || 0;
   if (obj === null) return '<span class="bool">null</span>';

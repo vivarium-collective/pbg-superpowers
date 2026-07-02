@@ -4,7 +4,9 @@
 <link rel="stylesheet" href="assets/style.css">
 </head><body>
 <header><h1>{{ workspace_name }}</h1>
-<p class="subtitle">Workspace dashboard · regenerated {{ generated_at }}</p></header>
+<p class="subtitle">Workspace dashboard · regenerated {{ generated_at }}</p>
+<label class="theme-toggle"><span>☾</span><input type="checkbox" onchange="toggleTheme()"><span class="slider"></span></label>
+</header>
 <main>
 <div id="guidance" class="guidance panel"></div>
 <div class="panel"><h2>Models</h2>

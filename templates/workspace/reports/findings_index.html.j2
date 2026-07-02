@@ -41,10 +41,29 @@
 .row-extras .chip.doc{background:#fefce8;border-color:#fef08a;color:#854d0e}
 .hidden{display:none !important}
 .empty{padding:18px;color:var(--gray);text-align:center;font-style:italic}
+[data-theme="dark"] .finding-row details{color:#f8f8f2}
+[data-theme="dark"] .finding-row details pre{background:rgba(255,255,255,0.06)}
+[data-theme="dark"] .chip{background:#44475a;color:#f8f8f2}
+[data-theme="dark"] .chip.active{background:var(--accent);color:#282a36}
+[data-theme="dark"] .chip.inline{background:rgba(255,255,255,0.1)}
+[data-theme="dark"] .view-toggle button{background:#44475a;color:#f8f8f2;border-color:#6272a4}
+[data-theme="dark"] .view-toggle button.active{background:var(--accent2);color:#282a36}
+[data-theme="dark"] .group-head{color:#f8f8f2}
+[data-theme="dark"] .badge.status-confirms{background:#2e7d5a;border-color:#50fa7b;color:#d1fae5}
+[data-theme="dark"] .badge.status-partial{background:#7d6b2e;border-color:#f1fa8c;color:#fef3c7}
+[data-theme="dark"] .badge.status-contradicts{background:#7d2e2e;border-color:#ff5555;color:#fee2e2}
+[data-theme="dark"] .badge.status-novel{background:#5b21b6;border-color:#bd93f9;color:#ede9fe}
+[data-theme="dark"] .badge.kind-biological{background:#075985;border-color:#8be9fd;color:#e0f2fe}
+[data-theme="dark"] .badge.kind-computational{background:#7d6b2e;border-color:#f1fa8c;color:#fef3c7}
+[data-theme="dark"] .badge.kind-methodological{background:#6b21a8;border-color:#bd93f9;color:#f3e8ff}
+[data-theme="dark"] .row-extras .chip.bib{background:#1e40af;border-color:#8be9fd;color:#eff6ff}
+[data-theme="dark"] .row-extras .chip.doc{background:#7d6b2e;border-color:#f1fa8c;color:#fefce8}
 </style>
 </head><body>
 <header><h1>{{ workspace_name }} — findings</h1>
-<p class="subtitle">Cross-study findings index · regenerated {{ generated_at }}</p></header>
+<p class="subtitle">Cross-study findings index · regenerated {{ generated_at }}</p>
+<label class="theme-toggle"><span>☾</span><input type="checkbox" onchange="toggleTheme()"><span class="slider"></span></label>
+</header>
 <main>
 <p class="crumb"><a href="index.html">← Workspace dashboard</a></p>
 

@@ -5,7 +5,9 @@
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head><body>
 <header><h1>{{ model_name }}</h1>
-<p class="subtitle">Per-model deep dive · regenerated {{ generated_at }}</p></header>
+<p class="subtitle">Per-model deep dive · regenerated {{ generated_at }}</p>
+<label class="theme-toggle"><span>☾</span><input type="checkbox" onchange="toggleTheme()"><span class="slider"></span></label>
+</header>
 <main>
 <div id="guidance" class="guidance panel"></div>
 
