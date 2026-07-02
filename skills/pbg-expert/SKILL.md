@@ -183,6 +183,8 @@ Do not ignore `demo/*.html`; the generated report is a deliverable and should be
 
 All subsequent work must happen inside the new repo.
 
+Create a `todo.md` file that should be added to `.gitignore`. **This file should be accessible/readable/discuss-able by both the human user and agent alike, but should be specific to the user themselves.**
+
 ## Deliverables
 
 Every `pbg-<tool>` repo this skill produces is **also a discoverable
