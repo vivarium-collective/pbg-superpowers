@@ -66,7 +66,7 @@ Runs are persisted by one of three emitters — **parquet / xarray-zarr / sqlite
 read(run) ──▶ uniform series/table interface   (engine never knows the backend)
 ```
 
-This belongs in `pbg-emitters` because it owns the *write* side of all three (`parquet_emitter.py`, `sqlite_emitter.py`, `xarray_emitter/`) and already has read/view code (`xarray_emitter/view.py`). The dashboard's per-backend read logic (`vivarium-dashboard/lib/simulations_index.py::_resolve_emitter`, `:504`) **moves down** into `pbg-emitters`, de-duplicating it; the dashboard then imports it too.
+This belongs in `pbg-emitters` because it owns the *write* side of all three (`parquet_emitter.py`, `sqlite_emitter.py`, `xarray_emitter/`) and already has read/view code (`xarray_emitter/view.py`). The dashboard's per-backend read logic (`vivarium-workbench/lib/simulations_index.py::_resolve_emitter`, `:504`) **moves down** into `pbg-emitters`, de-duplicating it; the dashboard then imports it too.
 
 ### 4.3 Observables resolve against the `emit` config
 
@@ -141,7 +141,7 @@ runs:
 
 | Path | Where | Change |
 |---|---|---|
-| Auto after run (UI) | `vivarium-dashboard` `run-baseline`/`run-variant` endpoints | call `study_outcomes.sync(study)` on completion |
+| Auto after run (UI) | `vivarium-workbench` `run-baseline`/`run-variant` endpoints | call `study_outcomes.sync(study)` on completion |
 | Auto after run (CLI) | `pbg-superpowers` `run-script` / `canonical_runs` runner | same call |
 | On demand (CLI) | `pbg-study sync-runs <slug>` | new subcommand |
 | On demand (API) | `/api/study-sync-runs` | new endpoint |

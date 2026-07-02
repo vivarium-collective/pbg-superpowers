@@ -1,6 +1,6 @@
 ---
 name: pbg-dashboard
-description: Start / stop / open the interactive vivarium-dashboard server (the side-rail-tabbed UI — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB). Distinct from /pbg-server (the report-mirror server). Subcommands start, stop, status, open, restart.
+description: Start / stop / open the interactive vivarium-workbench server (the side-rail-tabbed UI — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB). Distinct from /pbg-server (the report-mirror server). Subcommands start, stop, status, open, restart.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
 argument-hint: start|stop|status|open|restart [--port N] [--browser] [--investigation SLUG]
@@ -8,18 +8,18 @@ argument-hint: start|stop|status|open|restart [--port N] [--browser] [--investig
 
 # pbg-dashboard
 
-Transversal skill (no stage). Manages the interactive **vivarium-dashboard** server: the UI you actually look at to drive a workspace — Investigations, Studies, Simulations DB, Visualizations, GitHub Branches.
+Transversal skill (no stage). Manages the interactive **vivarium-workbench** server: the UI you actually look at to drive a workspace — Investigations, Studies, Simulations DB, Visualizations, GitHub Branches.
 
 > **This is NOT `pbg-server`.** `/pbg-server` manages the workspace's
 > *report-mirror* server (renders stage-skill guidance into the static
 > `reports/index.html`). `/pbg-dashboard` manages the *interactive*
-> dashboard served by the `vivarium-dashboard` pip package. The two
+> dashboard served by the `vivarium-workbench` pip package. The two
 > processes are unrelated — different ports, different state dirs,
 > different purposes. Run both side-by-side if you want.
 
 ## What this skill actually does
 
-Wraps the `vivarium-dashboard serve` CLI so the dashboard runs detached, survives terminal exits, has its state tracked at `<workspace>/.pbg/dashboard/`, and opens in your browser automatically.
+Wraps the `vivarium-workbench serve` CLI so the dashboard runs detached, survives terminal exits, has its state tracked at `<workspace>/.pbg/dashboard/`, and opens in your browser automatically.
 
 State files:
 
@@ -29,7 +29,7 @@ State files:
 
 ## Subcommands
 
-- **`/pbg-dashboard start`** — pick a free port (prefer 8765), launch `vivarium-dashboard serve --workspace . --port <P>` detached, write info+pid+log, wait briefly for the HTTP probe, and open the URL in the browser. Crashes-on-import are surfaced via the log tail. If the dashboard is already alive, just opens the browser.
+- **`/pbg-dashboard start`** — pick a free port (prefer 8765), launch `vivarium-workbench serve --workspace . --port <P>` detached, write info+pid+log, wait briefly for the HTTP probe, and open the URL in the browser. Crashes-on-import are surfaced via the log tail. If the dashboard is already alive, just opens the browser.
 
 - **`/pbg-dashboard stop`** — read the PID file, send SIGTERM, wait up to 5 s, escalate to SIGKILL if needed, clear the state files.
 
@@ -37,7 +37,7 @@ State files:
 
 - **`/pbg-dashboard open [--investigation SLUG]`** — open the dashboard URL in the browser. Auto-starts the server first if it isn't already running. With `--investigation SLUG` (or implicitly, the slug inferred from the current branch — see below), focus or open the dashboard tab AND switch the SPA's view to that investigation's detail via injected JS — bypassing the SPA's default-to-alphabetically-first behavior.
 
-- **`/pbg-dashboard restart`** — `stop` then `start`. Useful after a code change in an editable `vivarium-dashboard` install (Python reload isn't automatic; restart picks up changes).
+- **`/pbg-dashboard restart`** — `stop` then `start`. Useful after a code change in an editable `vivarium-workbench` install (Python reload isn't automatic; restart picks up changes).
 
 Each subcommand prints a single JSON object describing the outcome.
 
@@ -82,8 +82,8 @@ If 1+2 hold but 3 doesn't, status reports `stale` with a note — the process ma
 
 Order of resolution:
 
-1. `<workspace>/.venv/bin/vivarium-dashboard` — the canonical, preferred path. Composites resolve from the workspace's own site-packages.
-2. **Parent git-worktree's `.venv/bin/vivarium-dashboard`** — used when the current workspace is a secondary git worktree (its `.git` is a file pointing at `<main>/.git/worktrees/<name>`) and the local `.venv` is missing or doesn't have the binary. Safe because all worktrees of the same repo share source; the dashboard's `set_workspace_root()` + sys.path injection guarantees the **local** workspace's source wins for composite discovery. Avoids forcing a per-worktree `uv sync` (~5 min) just to spin up a server.
+1. `<workspace>/.venv/bin/vivarium-workbench` — the canonical, preferred path. Composites resolve from the workspace's own site-packages.
+2. **Parent git-worktree's `.venv/bin/vivarium-workbench`** — used when the current workspace is a secondary git worktree (its `.git` is a file pointing at `<main>/.git/worktrees/<name>`) and the local `.venv` is missing or doesn't have the binary. Safe because all worktrees of the same repo share source; the dashboard's `set_workspace_root()` + sys.path injection guarantees the **local** workspace's source wins for composite discovery. Avoids forcing a per-worktree `uv sync` (~5 min) just to spin up a server.
 
 If neither path resolves, `start` raises an error and prints the install command. **Sibling-WORKSPACE venvs (different repos) are still off-limits** — those would silently load the wrong composites (mem3dg-readdy friction #13).
 

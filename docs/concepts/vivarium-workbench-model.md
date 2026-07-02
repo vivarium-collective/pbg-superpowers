@@ -1,8 +1,8 @@
-# vivarium-dashboard Data Model
+# vivarium-workbench Data Model
 
-The canonical concepts pbg-superpowers reads, writes, and orchestrates in a vivarium-dashboard workspace. This document is the source of truth for vocabulary, on-disk shape, and the API surface that maps each concept to skill commands.
+The canonical concepts pbg-superpowers reads, writes, and orchestrates in a vivarium-workbench workspace. This document is the source of truth for vocabulary, on-disk shape, and the API surface that maps each concept to skill commands.
 
-> **Companion repo:** [vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard). pbg-superpowers requires its server to be running for any skill that mutates dashboard state.
+> **Companion repo:** [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench). pbg-superpowers requires its server to be running for any skill that mutates dashboard state.
 
 ## At a glance
 
@@ -421,7 +421,7 @@ An Investigation is a **named collection of studies** with an explicit cross-stu
   - `GET /api/iset-list` — summaries (name, title, status, n_studies).
   - `GET /api/iset/<name>` — full investigation + resolved studies (each carrying normalized `parent_studies` for DAG layout).
   - `GET /api/investigation-registry` — cross-worktree view: this server's "current" Investigation + every OTHER live server's `{slug, worktree_path, url, effective_status, pid}`. Powers the left-rail Investigation switcher across worktrees. (Pass C, 2026-05-17.)
-  - `POST /api/investigation-create {name, overview?, parent_studies?}` — scaffolds a new investigation. Emits the v2 narrative-spine YAML (via `vivarium_dashboard.lib.scaffold_yaml.v2_investigation_scaffold`) with the 9 narrative sections (`executive` / `scientific_argument` / `biological_story` / `lead` / `at_a_glance` / `how_to_read` / `glossary` / `guidelines`) commented in as TODO placeholders.
+  - `POST /api/investigation-create {name, overview?, parent_studies?}` — scaffolds a new investigation. Emits the v2 narrative-spine YAML (via `vivarium_workbench.lib.scaffold_yaml.v2_investigation_scaffold`) with the 9 narrative sections (`executive` / `scientific_argument` / `biological_story` / `lead` / `at_a_glance` / `how_to_read` / `glossary` / `guidelines`) commented in as TODO placeholders.
   - `POST /api/iset-clone {source, target, ...}` — shells out to the workspace's `scripts/clone_investigation.py` (workspace-owned because clone rules are workspace-specific).
   - For update operations (acceptance criteria, narrative-spine field edits) the skills still write YAML directly with atomic tmp-file + rename — `/api/iset-update` is not yet wired.
 - **Dashboard render**: Investigations tab cards → DAG canvas on click; rail sidebar groups studies under their investigation header; "Ungrouped" bucket for studies not in any investigation; topological order within each group.
@@ -617,7 +617,7 @@ Skills that read dashboard state do so via these HTTP endpoints:
 
 > **Status:** Pass A of the infrastructure-feedback roadmap. Schema lives in
 > [`study.schema.json`](https://github.com/vivarium-collective/pbg-template/blob/main/template/.pbg/schemas/study.schema.json);
-> dashboard surface in [vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard).
+> dashboard surface in [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench).
 > Sweep tables · linting · scaffold tracking · failure modes · expert questions ·
 > dashboard filters · claim-traceability view · JSON bundle export come in later passes.
 
@@ -895,7 +895,7 @@ planned variant, `readouts`, `behavior_tests`, and at least one
 
 ## Migration notes
 
-- **v2 → v3 on read:** `vivarium_dashboard.lib.spec_migration.migrate_v2_to_v3` runs automatically in `load_spec`. Skills never need to invoke it.
+- **v2 → v3 on read:** `vivarium_workbench.lib.spec_migration.migrate_v2_to_v3` runs automatically in `load_spec`. Skills never need to invoke it.
 - **v2 endpoints still aliased:** `/api/investigation-add-viz`, `/api/investigation-render-viz`, and a few others remain as aliases of their `/api/study-*` v3 counterparts. New skill code should prefer the `study-` form.
 - **Removed in v3:** `/api/study-set-baseline-params` (covered by `study-variant-set-params` + the new baseline-list shape); `/api/investigation-set-overview` (split into `set-objective` + status writes).
 

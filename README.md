@@ -28,12 +28,12 @@ Two supported paths. Both end at the same dashboard over the same workspace file
 
 For testers evaluating the UI against an existing or scaffold-only workspace. No Claude Code required.
 
-    pip install vivarium-dashboard
+    pip install vivarium-workbench
     # scaffold a workspace from pbg-template (GitHub "Use this template" or git clone)
     bash use-this-template-init.sh
-    vivarium-dashboard serve --workspace .
+    vivarium-workbench serve --workspace .
 
-Open the printed URL and browse the side-rail tabs — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB (the canonical set is owned by the [vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard); see `/pbg-dashboard`). Create studies and investigations directly through the UI. Scaffolding details in the [pbg-template](https://github.com/vivarium-collective/pbg-template) README; serving details (ports, multi-workspace) in the [vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard) README.
+Open the printed URL and browse the side-rail tabs — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB (the canonical set is owned by the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench); see `/pbg-dashboard`). Create studies and investigations directly through the UI. Scaffolding details in the [pbg-template](https://github.com/vivarium-collective/pbg-template) README; serving details (ports, multi-workspace) in the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench) README.
 
 ### Path B — Dashboard + AI agent (pbg-superpowers integration)
 
@@ -76,7 +76,7 @@ Full skill catalog: [`docs/skills.md`](docs/skills.md).
 ## Concepts
 
 - **Workspace IS the model.** A git repo containing the model's Python package, tests, references, decisions log, and a `workspace.yaml`. The unit of reproducibility — clone a workspace, run it, get the same answer.
-- **Study.** A self-contained research unit — purpose, baseline composite(s), simulations, readouts, behavior tests, conclusion — moving through five phases (Design → Build → Simulate → Evaluate → Decide). Each phase has a distinct deliverable. See [`docs/concepts/vivarium-dashboard-model.md`](docs/concepts/vivarium-dashboard-model.md).
+- **Study.** A self-contained research unit — purpose, baseline composite(s), simulations, readouts, behavior tests, conclusion — moving through five phases (Design → Build → Simulate → Evaluate → Decide). Each phase has a distinct deliverable. See [`docs/concepts/vivarium-workbench-model.md`](docs/concepts/vivarium-workbench-model.md).
 - **Composite.** A typed graph of Processes wired to shared stores; itself a Process, so models compose recursively. JSON-serializable, so composites can be stored, exchanged, and executed across environments. See [`docs/conventions/composites.md`](docs/conventions/composites.md).
 - **Visualization.** A `Step` subclass auto-discovered alongside Processes; wireable into Composites and attachable to Studies. Generated from a natural-language description via `/pbg-viz`. See [`docs/conventions/visualizations.md`](docs/conventions/visualizations.md).
 
@@ -86,7 +86,7 @@ Two surfaces commonly get confused when a new user says "make this a pbg-superpo
 
 | Shape | Has `workspace.yaml`? | What lives in it | Driven by |
 |---|---|---|---|
-| **Workspace** | yes | `studies/`, `investigations/`, `notes/`, `references/`, `scripts/serve.sh`, plus the model's Python package | the vivarium-dashboard + the `/pbg-*` skills |
+| **Workspace** | yes | `studies/`, `investigations/`, `notes/`, `references/`, `scripts/serve.sh`, plus the model's Python package | the vivarium-workbench + the `/pbg-*` skills |
 | **Composite-only repo** | no | a single Process or Composite package (e.g. `pbg-mem3dg`, `pbg-readdy`) — `pyproject.toml`, `pbg_<slug>/`, `tests/`, `demo/` | imported by one or more workspaces via `workspace.yaml.imports` |
 
 A workspace can wrap or live beside one or more composite-only repos. Use `/pbg-workspace --in-place` to promote an existing composite-only repo into a workspace branch (adds the workspace artifacts on top without clobbering the composite's existing files).
@@ -98,7 +98,7 @@ A workspace can wrap or live beside one or more composite-only repos. Use `/pbg-
 ## Companion repos
 
 - **[pbg-template](https://github.com/vivarium-collective/pbg-template)** — the workspace scaffold cloned by `/pbg-workspace`. Use the template directly if you want a workspace without the Claude Code plugin.
-- **[vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard)** — the local web UI the skills drive. Browse composites, run studies, render visualizations.
+- **[vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench)** — the local web UI the skills drive. Browse composites, run studies, render visualizations.
 
 ## Reference
 

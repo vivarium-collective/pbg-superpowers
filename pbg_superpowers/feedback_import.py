@@ -1,7 +1,7 @@
 """Import an inline-feedback yaml downloaded from an investigation report.
 
 The downloadable investigation HTML carries a self-contained widget
-(see vivarium-dashboard's static/walkthrough.js) that lets an offline
+(see vivarium-workbench's static/walkthrough.js) that lets an offline
 evaluator leave inline annotations on each section and save them as a
 single yaml file. This CLI takes that file and drops it into the
 workspace at ``investigations/<inv>/feedback/<ts>.yaml`` — the path

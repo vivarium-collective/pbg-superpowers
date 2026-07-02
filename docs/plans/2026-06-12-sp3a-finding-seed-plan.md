@@ -8,7 +8,7 @@
 
 **The disconnect (grounding):** FOUR followup field families (`finding.next_action`, `followup_proposals[]`, legacy `follow_up_studies[]`, `discovery_implications.followup_study_proposals[]`) and TWO disjoint seed paths — the CLI `seed_from_followup.py` (reads `followup_proposals`+`findings`, prints but doesn't write — the SKILL prose flow writes) and the dashboard `lib/study_seed.py` + `/api/study-seed-followup` (reads `follow_up_studies`/`discovery_implications.followup_study_proposals`, writes directly). `finding.next_action` is dashboard-unreachable, and even the CLI can't seed a finding STANDALONE (it requires a resolvable `followup_proposals[]` entry).
 
-**Tech:** Python + JS; pytest. Repos: pbg-superpowers (the shared mechanism) + vivarium-dashboard (the API + button). `.venv/bin/python`.
+**Tech:** Python + JS; pytest. Repos: pbg-superpowers (the shared mechanism) + vivarium-workbench (the API + button). `.venv/bin/python`.
 
 **Anchors:** `seed_from_followup.py` `build_child_seed_from_finding`(:312), `apply_from_finding`(:423), `find_proposal`(:173), the `ChildSeed`/`seeded_from` machinery (:83-123); dashboard `lib/study_seed.py` `seed_followup_study`(:64) + `_post_study_seed_followup` (server.py:12555) + button `_seedFollowupStudy` (study-detail.js:150) + the "Next" row (study-detail.js:1191-1207).
 
@@ -53,9 +53,9 @@ def test_write_child_study_creates_child_and_stamps_parent(tmp_workspace):
 - [ ] **Step 2: fail. Step 3: implement** `write_child_study(ws_root, parent_slug, seed_source, *, new_slug=None) -> dict`: build the child seed (reuse `build_child_seed_from_finding`/the proposal path), write `studies/<new_slug>/study.yaml` via the atomic `study_io` writer, stamp the parent (the finding's `seeded_study`/the proposal's `status: seeded`) via ruamel round-trip — the writes the SKILL prose flow currently does, now callable. Reuse the dashboard's investigation back-link convention if present (or leave to the API). Idempotent on the parent stamp (fill-absent).
 - [ ] **Step 4: pass. Step 5: commit** — `feat(seed-from-followup): write_child_study — callable atomic child-write + parent stamp`
 
-## Task 3: Dashboard delegates + the finding-seed button (vivarium-dashboard)
+## Task 3: Dashboard delegates + the finding-seed button (vivarium-workbench)
 
-**Files:** (vivarium-dashboard, branch `feat/sp3a-finding-seed-dashboard` off origin/main) `vivarium_dashboard/lib/study_seed.py`, `server.py` (`_post_study_seed_followup` ~12555), `static/study-detail.js` (the Next row ~1191 + the button). Use vivarium-dashboard's `.venv`.
+**Files:** (vivarium-workbench, branch `feat/sp3a-finding-seed-dashboard` off origin/main) `vivarium_workbench/lib/study_seed.py`, `server.py` (`_post_study_seed_followup` ~12555), `static/study-detail.js` (the Next row ~1191 + the button). Use vivarium-workbench's `.venv`.
 
 - [ ] **Step 1: Failing test** — `/api/study-seed-followup` accepts `{parent, finding_id}` and seeds via the shared pbg helper.
 ```python

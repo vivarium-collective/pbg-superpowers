@@ -71,7 +71,7 @@ Every bespoke runner should:
         label: "60s @ 10s smoke"
     ```
 
-    See [`canonical_runs:` in vivarium-dashboard-model.md](../concepts/vivarium-dashboard-model.md#canonical-run-recipe-bespoke-scripts).
+    See [`canonical_runs:` in vivarium-workbench-model.md](../concepts/vivarium-workbench-model.md#canonical-run-recipe-bespoke-scripts).
 
 ## Reference implementation
 

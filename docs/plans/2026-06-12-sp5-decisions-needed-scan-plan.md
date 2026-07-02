@@ -18,7 +18,7 @@
 
 **Isolation invariant (SP4b lesson):** the scan is PURE/cheap by DEFAULT — signals 1,2,3,5,6 read YAML only. Signal 4 (phantom observable) needs a composite build, so it is **opt-in** behind an INJECTED `observables_for_ref` (the dashboard supplies its cached `_observables_for_ref`); `scan_investigation(...)` with no `observables_for_ref` runs build-free and simply omits signal 4.
 
-**Tech:** Python + JS; pytest. Repos: pbg-superpowers (the aggregator + skill) + vivarium-dashboard (endpoint + panel). `.venv/bin/python`. **AI-free** (the scan is deterministic aggregation; dashboard renders; no model judgment). The output is EPHEMERAL — never written back to YAML.
+**Tech:** Python + JS; pytest. Repos: pbg-superpowers (the aggregator + skill) + vivarium-workbench (endpoint + panel). `.venv/bin/python`. **AI-free** (the scan is deterministic aggregation; dashboard renders; no model judgment). The output is EPHEMERAL — never written back to YAML.
 
 **Reuse anchors (confirmed by grounding):** `linkage_index.ac_gating_matrix`, `feedback_actions.study_feedback_actions`, `readout_validation.validate_readouts`/`available_observables`, `param_enforcement.check_enforced_params`, `investigation_status.roll_up_acceptance` (the canonical investigation-level entry point) + `WorkspacePaths`/`study_io` + `linkage_index._iter_studies` for member iteration.
 
@@ -116,9 +116,9 @@ def test_phantom_observable_opt_in(tmp_inv_with_phantom_readout):
 - [ ] **Step 2:** Extend `tests/test_navigate_skill.py` to assert `decisions` + `scan_investigation` + `/api/needs-attention` are named.
 - [ ] **Step 3: pass. Commit** — `feat(pbg-navigate): decisions subcommand — lead with the needs-attention scan`
 
-## Task 4: Dashboard — `/api/needs-attention` + the "needs attention" panel (vivarium-dashboard)
+## Task 4: Dashboard — `/api/needs-attention` + the "needs attention" panel (vivarium-workbench)
 
-**Files:** (vivarium-dashboard, branch `feat/sp5-needs-attention-dashboard` off origin/main) `server.py` (a new `_needs_attention` worker + dispatch + `_needs_attention_test` seam, modeled on SP4b's `_linkage_index`), the investigation-detail JS (find where the investigation page renders — grep `investigation` in `static/`), `static/walkthrough.js` (report). Use its `.venv`.
+**Files:** (vivarium-workbench, branch `feat/sp5-needs-attention-dashboard` off origin/main) `server.py` (a new `_needs_attention` worker + dispatch + `_needs_attention_test` seam, modeled on SP4b's `_linkage_index`), the investigation-detail JS (find where the investigation page renders — grep `investigation` in `static/`), `static/walkthrough.js` (report). Use its `.venv`.
 
 - [ ] **Step 1: Failing test** — `/api/needs-attention?investigation=<inv>` returns the ranked scan (pure path; monkeypatch any build away).
 ```python

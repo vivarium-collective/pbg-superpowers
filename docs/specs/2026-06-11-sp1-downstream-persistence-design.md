@@ -15,7 +15,7 @@ Complete the run → verdict → acceptance → param-drift persistence path so 
 
 ## Design
 
-Four small, independent wirings. All new logic is deterministic and lives in `pbg_superpowers/`; the vivarium-dashboard post-run hook (the existing `study_outcomes.sync()` call sites, `server.py:~5036/5057/5419`) calls them. All writes are code-owned slots, fill-absent-only, never clobbering authored values, via the ruamel round-trip already used by `study_outcomes`.
+Four small, independent wirings. All new logic is deterministic and lives in `pbg_superpowers/`; the vivarium-workbench post-run hook (the existing `study_outcomes.sync()` call sites, `server.py:~5036/5057/5419`) calls them. All writes are code-owned slots, fill-absent-only, never clobbering authored values, via the ruamel round-trip already used by `study_outcomes`.
 
 ### 1. Investigation acceptance auto-write
 - Add `sync_investigation(inv_dir, workspace=None) -> dict` to `pbg_superpowers/study_outcomes.py` (or `investigation_status.py`): a thin best-effort wrapper that calls `write_investigation_acceptance(inv_dir, workspace)` and returns a summary.

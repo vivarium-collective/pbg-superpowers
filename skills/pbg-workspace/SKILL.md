@@ -117,7 +117,7 @@ This stage has no prereqs. If a partial scaffold exists, ask: delete-and-retry, 
 
 ## See also
 
-- [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md) —
+- [`docs/concepts/vivarium-workbench-model.md`](../../docs/concepts/vivarium-workbench-model.md) —
   the dashboard's data model and `/api/*` endpoints. Read this to understand what
   `workspace.yaml`, study files, and expert-doc entries must contain before the
   dashboard can render them correctly.

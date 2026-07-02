@@ -8,7 +8,7 @@
 
 **Surfaced live gap (motivation):** `chromosome-cycle-calibration` has 5 `acceptance_criteria` with NO `study:` link — the AC→study matrix flags exactly these.
 
-**Tech:** Python + JS; pytest. Repos: pbg-superpowers (the index + queries + skill) + vivarium-dashboard (the endpoint + the AC-matrix panel). `.venv/bin/python`.
+**Tech:** Python + JS; pytest. Repos: pbg-superpowers (the index + queries + skill) + vivarium-workbench (the endpoint + the AC-matrix panel). `.venv/bin/python`.
 
 **AI-free:** the index + queries are deterministic pbg-superpowers derives; the dashboard renders; the `/pbg-navigate` skill queries. No AI.
 
@@ -47,9 +47,9 @@ def test_build_index_pure_read(tmp_ws):
 - [ ] **Step 2: fail. Step 3: implement** `build_index(ws_root) -> {nodes, edges}` (the typed node/edge dict from the grounding) as a PURE derive over the workspace YAML (`WorkspacePaths` + `study_io`); reuse `roll_up_acceptance`/`canonical_outcomes` for the AC results, `bands_missing_provenance`/the study `cites[]` for sources, `investigation_inputs` for the input pool. NORMALIZE the investigation→source split-shape (read both `inputs.references/datasets/expert_docs` AND top-level `references`/`expert_docs`). Then the reverse-query helpers as `edges`-by-target lookups: `ac_gating_matrix(ws, inv)` (per-criterion study→result, `gap: true` when no `study:` link), `studies_for_source(ws, key)`, `findings_for_observable(ws, token)` (via `evidence.from_test`→`measure.field`), `study_dag(ws, inv)` (nodes + prerequisite edges). Best-effort per study (bad yaml skipped). PURE — no writes.
 - [ ] **Step 4: pass. Step 5: commit** — `feat(linkage-index): YAML-only knowledge-graph index + AC-matrix/source/finding/DAG reverse queries (pure)`
 
-## Task 2: `GET /api/linkage-index` (vivarium-dashboard)
+## Task 2: `GET /api/linkage-index` (vivarium-workbench)
 
-**Files:** (vivarium-dashboard, branch `feat/sp4a-linkage-dashboard` off origin/main) `server.py`; Test `tests/test_linkage_index_endpoint.py`. Use its `.venv`.
+**Files:** (vivarium-workbench, branch `feat/sp4a-linkage-dashboard` off origin/main) `server.py`; Test `tests/test_linkage_index_endpoint.py`. Use its `.venv`.
 
 - [ ] **Step 1: Failing test** — `GET /api/linkage-index?investigation=<inv>` returns the index/queries; tolerant.
 ```python
@@ -71,7 +71,7 @@ def test_linkage_index_endpoint(tmp_ws):
 
 ## Task 4: Dashboard AC→study gating matrix panel (the gap surface)
 
-**Files:** (vivarium-dashboard, same branch) `static/walkthrough.js` (investigation render) or the executive fold; Test: structural.
+**Files:** (vivarium-workbench, same branch) `static/walkthrough.js` (investigation render) or the executive fold; Test: structural.
 
 - [ ] **Step 1: Implement.** In the investigation view, render an **AC→study gating matrix** panel from `/api/linkage-index?investigation=<inv>` (reuse the report-lint readiness-panel rendering / the thread-A acceptance-rollup styling): rows = acceptance criteria; columns = `study` (linked to its section) + computed result; **unkeyed-AC rows flagged** (red "no study linked — gap"). This makes the chromosome-cycle 5-unlinked-AC gap visible. Tolerate the endpoint failing.
 - [ ] **Step 2: Structural test** — `walkthrough.js` fetches `/api/linkage-index` + renders the ac-matrix with the gap flag. `node -c` clean. **Step 3: Commit** — `feat(spine-present): AC->study gating-matrix panel (flags unlinked acceptance criteria)`

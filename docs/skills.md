@@ -18,7 +18,7 @@
 | Skill | What it does |
 |---|---|
 | [`/pbg-workspace <name>`](../skills/pbg-workspace/SKILL.md) | Scaffold a fresh workspace — three modes: upstream-branch (clone an upstream model repo and create a workspace branch), standalone (clone `pbg-template`), or in-place (promote an existing checkout). |
-| [`/pbg-dashboard [start\|stop\|status\|open\|restart]`](../skills/pbg-dashboard/SKILL.md) | Start/stop/open the interactive vivarium-dashboard (the side-rail-tabbed UI). The server the Studies skills depend on. Distinct from `/pbg-server`. |
+| [`/pbg-dashboard [start\|stop\|status\|open\|restart]`](../skills/pbg-dashboard/SKILL.md) | Start/stop/open the interactive vivarium-workbench (the side-rail-tabbed UI). The server the Studies skills depend on. Distinct from `/pbg-server`. |
 | [`/pbg-server [start\|stop\|status]`](../skills/pbg-server/SKILL.md) | Start/stop the **report-mirror** server (serves `reports/index.html`, proxies stage-skill events). NOT the interactive dashboard — that's `/pbg-dashboard`. |
 | [`/pbg-status`](../skills/pbg-status/SKILL.md) | Print workspace health: is this a workspace? server up? recent activity? Delegates the server-liveness section to `/pbg-server status`. |
 
@@ -53,7 +53,7 @@ from a pbg-superpowers checkout. (Replaces the v0.8 `/pbg-package` skill.)
 | [`/pbg-report [model\|--all]`](../skills/pbg-report/SKILL.md) | Regenerate `reports/index.html` after manual state changes. |
 | [`/pbg-navigate <ac-gaps\|source\|finding-by-observable\|dag> …`](../skills/pbg-navigate/SKILL.md) | **Read-only** query of the workspace linkage index (SP4a) — the AC→study gating matrix + unlinked-AC gaps, source↔study, finding-by-observable, study-DAG. Pure deterministic derive (`linkage_index` / `/api/linkage-index`), no writes, no AI. |
 
-For the read/write surface each skill touches (which API endpoints, which on-disk files), see the [Skill ↔ concept map](concepts/vivarium-dashboard-model.md#skill--concept-map).
+For the read/write surface each skill touches (which API endpoints, which on-disk files), see the [Skill ↔ concept map](concepts/vivarium-workbench-model.md#skill--concept-map).
 
 > Also shipped: `/pbg-init`, a one-shot machine-setup installer that symlinks the skills into `~/.claude/skills/`. Not part of the workflow surface above. And `/pbg-suggest <id>`, an internal callback the dashboard's "Suggest" button asks the user to paste — kept registered so the callback works, but not part of the user-facing catalog.
 

@@ -15,7 +15,7 @@
 ## File map
 - Create: `pbg_superpowers/study_verdict.py`, `pbg_superpowers/investigation_status.py`.
 - Modify: `pbg_superpowers/study_outcomes.py` (`sync` also writes the gate evaluator) + `pyproject.toml` (a `pbg-roll-up` CLI / extend sync CLI).
-- Modify (dashboard): `vivarium_dashboard/server.py` (surface computed verdict/acceptance) + `static/study-detail.js` / investigation render.
+- Modify (dashboard): `vivarium_workbench/server.py` (surface computed verdict/acceptance) + `static/study-detail.js` / investigation render.
 - Test: `tests/test_study_verdict.py`, `tests/test_investigation_status.py` (+ dashboard test).
 
 ---
@@ -51,7 +51,7 @@
 
 ## Notes for executor
 - `.venv/bin/python -m pytest`. Mirror `simulation_set._write_simset_preserving_comments` / `study_outcomes` ruamel writers.
-- The `passed` predicate MUST equal `vivarium-dashboard server.py:_condition_satisfied` `tests-passed` (`counts["fail"]==0 and counts["pass"]>0`) so the gate and the verdict agree.
+- The `passed` predicate MUST equal `vivarium-workbench server.py:_condition_satisfied` `tests-passed` (`counts["fail"]==0 and counts["pass"]>0`) so the gate and the verdict agree.
 - Date/time unavailable deterministically — omit `evaluated_at` (or let the caller stamp it); keep writes idempotent.
 - Don't modify real v2e-invest; tests use tmp/inline. Real investigation acceptance_criteria example: `v2e-invest/investigations/dnaa-replication/investigation.yaml` (acceptance_criteria ~460).
-- Dashboard `main` may be in the `vivarium-dashboard-pdmp` worktree; branch off origin/main.
+- Dashboard `main` may be in the `vivarium-workbench-pdmp` worktree; branch off origin/main.

@@ -3,7 +3,7 @@
 Pure deterministic Python — no AI involved. The dashboard calls
 ``populate_simulation_set`` via ``study_outcomes.sync`` and renders the result.
 
-Read-time derivation already exists in vivarium-dashboard's
+Read-time derivation already exists in vivarium-workbench's
 ``lib/investigations.py:388-416`` (projects baseline+variants → in-memory
 simulation_set). This module PERSISTS that mapping and extends it with
 run-derived fields (seeds, status, metrics, pass_fail_tests).
