@@ -5,6 +5,7 @@
 ./.github/workflows/publish-reports.yml
 ./.github/workflows/workspace-ci.yml
 ./.gitignore
+./.pbg/hpc.env.example
 ./.pbg/schemas/investigation.schema.json
 ./.pbg/schemas/study.schema.json
 ./.pbg/schemas/workspace.schema.json
@@ -12,6 +13,7 @@
 ./Dockerfile
 ./NEXT_STEPS.md
 ./README.md
+./Singularity.def
 ./docs/README.md
 ./docs/decisions.yaml
 ./pbg_snap/__init__.py
