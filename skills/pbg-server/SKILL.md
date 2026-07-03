@@ -1,6 +1,6 @@
 ---
 name: pbg-server
-description: Manage the local stage-skill mirror server that serves reports/index.html and proxies stage-skill guidance/click events through .pbg/server/. NOT the interactive dashboard — that's `vivarium-dashboard serve` (workspace's `scripts/serve.sh`). Subcommands start, stop, status, cleanup.
+description: Manage the local stage-skill mirror server that serves reports/index.html and proxies stage-skill guidance/click events through .pbg/server/. NOT the interactive dashboard — that's `vivarium-workbench serve` (workspace's `scripts/serve.sh`). Subcommands start, stop, status, cleanup.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
 argument-hint: start|stop|status|cleanup
@@ -12,7 +12,7 @@ Transversal skill (no stage). Manages the workspace's stage-skill mirror server.
 
 > **This is NOT the interactive dashboard.** The interactive dashboard
 > (side-rail tabs: Workspace inputs, Registry, Composites, Investigations,
-> Visualizations, GitHub Branches) is served by `vivarium-dashboard serve`,
+> Visualizations, GitHub Branches) is served by `vivarium-workbench serve`,
 > launched from inside the workspace via `bash scripts/serve.sh`. If you
 > want that, run `scripts/serve.sh`, not `/pbg-server start`. The two
 > servers are unrelated processes — they share neither port nor PID file.
@@ -53,7 +53,7 @@ If only some of these are true (e.g., stale PID file from a previously-crashed s
 - Never modifies `workspace.yaml` or any persistent state — server is read-mostly (only writes to `.pbg/server/state/events`).
 - The server binds to `127.0.0.1` only; it is NOT exposed externally.
 - The server picks a free port on `start`; multiple workspaces can run servers concurrently without conflict.
-- The interactive `vivarium-dashboard serve` and this report-mirror server can run side-by-side; they don't share state.
+- The interactive `vivarium-workbench serve` and this report-mirror server can run side-by-side; they don't share state.
 
 ## Compatibility with other skills
 

@@ -8,11 +8,11 @@ argument-hint: <subcmd> [args...]
 
 # pbg-investigation
 
-The interface for **Investigations** in the vivarium-dashboard: named collections of studies that together answer a higher-level research question.
+The interface for **Investigations** in the vivarium-workbench: named collections of studies that together answer a higher-level research question.
 
 An Investigation lives at `$INVESTIGATIONS_DIR/<slug>/investigation.yaml` (resolved from `workspace.yaml` `layout:`; `investigations/<slug>/` by default). It lists member studies by slug, carries its own question/hypothesis/description, and links acceptance criteria to specific `expected_behavior[i].name` entries on member studies.
 
-See [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md) for the canonical data model.
+See [`docs/concepts/vivarium-workbench-model.md`](../../docs/concepts/vivarium-workbench-model.md) for the canonical data model.
 
 ## Layout (investigation-centric, nested)
 
@@ -86,7 +86,7 @@ An Investigation slug is also a **git branch name** and a **worktree directory n
 
 ## Write strategy
 
-The vivarium-dashboard exposes POST `/api/investigation-create` for the initial scaffold (it emits a v2-shape `investigation.yaml` with the narrative spine commented in as TODO placeholders — executive, scientific_argument, biological_story, at_a_glance, glossary, guidelines). Update subcommands write YAML directly to disk using an atomic tmp-file + rename pattern, because the dashboard doesn't yet expose mutation endpoints for the narrative-spine fields. Read paths use GET `/api/investigation-summaries` and GET `/api/investigation/<name>`.
+The vivarium-workbench exposes POST `/api/investigation-create` for the initial scaffold (it emits a v2-shape `investigation.yaml` with the narrative spine commented in as TODO placeholders — executive, scientific_argument, biological_story, at_a_glance, glossary, guidelines). Update subcommands write YAML directly to disk using an atomic tmp-file + rename pattern, because the dashboard doesn't yet expose mutation endpoints for the narrative-spine fields. Read paths use GET `/api/investigation-summaries` and GET `/api/investigation/<name>`.
 
 ## Rigor (investigation level)
 

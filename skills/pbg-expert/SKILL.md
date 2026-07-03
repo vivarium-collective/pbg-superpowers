@@ -902,7 +902,7 @@ def test_generator_is_registered():
 
 After processes, generators, tests, and demo are in place, run the
 in-place workspace scaffolder so the repo also appears in the
-vivarium-dashboard's workspace switcher and Composites tab. This is
+vivarium-workbench's workspace switcher and Composites tab. This is
 **not optional** — pbg-* repos are workspace-shaped by convention.
 
 ```bash
@@ -931,7 +931,7 @@ The scaffolder will:
 - Drop `workspace.yaml` at the repo root (schema_version 2).
 - Add top-level `experiments/`, `references/`, `reports/`, `scripts/`,
   `docs/`, `notes/`, `datasets/`.
-- Merge dashboard deps (`pyyaml`, `jsonschema`, `jinja2`, `vivarium-dashboard`)
+- Merge dashboard deps (`pyyaml`, `jsonschema`, `jinja2`, `vivarium-workbench`)
   into the existing `pyproject.toml`.
 - Append `.pbg/` runtime paths to `.gitignore`.
 - Create a single bootstrap commit on the chosen branch.

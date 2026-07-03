@@ -1,8 +1,8 @@
 """Canonical resolution of a workspace's directory layout.
 
 VENDORED COPY — the canonical source is
-``vivarium-dashboard/vivarium_dashboard/lib/workspace_paths.py``. pbg-superpowers
-does not depend on vivarium-dashboard, so this file is kept in sync by hand; the
+``vivarium-workbench/vivarium_workbench/lib/workspace_paths.py``. pbg-superpowers
+does not depend on vivarium-workbench, so this file is kept in sync by hand; the
 drift guard in ``tests/test_workspace_paths.py`` fails if ``LAYOUT_DEFAULTS``
 diverges. Edit both copies together.
 

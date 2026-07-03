@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-07
 **Status:** Approved (brainstorming), ready for implementation plan
-**Repos:** `pbg-superpowers` (paths, schema, run-sweep helper, migration, skills) + `vivarium-dashboard` (sidebar, Inputs page, SimulationsDB page)
+**Repos:** `pbg-superpowers` (paths, schema, run-sweep helper, migration, skills) + `vivarium-workbench` (sidebar, Inputs page, SimulationsDB page)
 
 ## Problem
 
@@ -16,7 +16,7 @@ Two sidebar pages are global but are really **investigation-dependent**:
    or XArray (`XArrayEmitter`/zarr) results that are saved on disk — only SQLite.
 
 Separately, the menu lacked investigation lifecycle control and branch-aware
-selection — both shipped already (vivarium-dashboard #166); this spec covers only
+selection — both shipped already (vivarium-workbench #166); this spec covers only
 the two redesign pieces (#3 Inputs, #4 SimulationsDB).
 
 ## Goal
@@ -126,9 +126,9 @@ For every study dir (`iter_study_dirs`):
   + `emitter_type_of(path)` (pure, unit-tested).
 - `pbg_superpowers/migrate_inputs.py` (new): `pbg-migrate-inputs`.
 - `skills/pbg-investigation/SKILL.md`: document the `inputs:` block + inputs-add verbs.
-- `docs/concepts/vivarium-dashboard-model.md`: inputs ownership + SimDB tagging.
+- `docs/concepts/vivarium-workbench-model.md`: inputs ownership + SimDB tagging.
 
-**vivarium-dashboard**
+**vivarium-workbench**
 - `lib/workspace_paths.py` (vendored `inputs_dir`), `lib/runs_index.py` (vendored
   `list_all_runs`/`emitter_type_of`), drift-guard tests.
 - `server.py`: `GET /api/iset/<slug>/inputs`; `GET /api/simulations`; remove global

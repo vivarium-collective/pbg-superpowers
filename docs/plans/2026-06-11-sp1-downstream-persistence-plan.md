@@ -4,9 +4,9 @@
 
 **Goal:** Wire the verified downstream-persistence gaps so a run's verdict/acceptance/runs/param-drift are written to disk automatically. Spec: `docs/specs/2026-06-11-sp1-downstream-persistence-design.md`.
 
-**Architecture:** New deterministic functions in `pbg_superpowers/`; the vivarium-dashboard post-run hook calls them. Code-owned slots, fill-absent, ruamel round-trip, best-effort steps in `sync()` (errors captured), idempotent. Reuse existing verdict/acceptance/check logic — no new math.
+**Architecture:** New deterministic functions in `pbg_superpowers/`; the vivarium-workbench post-run hook calls them. Code-owned slots, fill-absent, ruamel round-trip, best-effort steps in `sync()` (errors captured), idempotent. Reuse existing verdict/acceptance/check logic — no new math.
 
-**Tech Stack:** Python 3.11, ruamel.yaml, pytest. Repos: `pbg-superpowers` (logic + sync), `vivarium-dashboard` (the hook call in Task 2).
+**Tech Stack:** Python 3.11, ruamel.yaml, pytest. Repos: `pbg-superpowers` (logic + sync), `vivarium-workbench` (the hook call in Task 2).
 
 **Verified (do not re-litigate):** study `gate_evaluator` is ALREADY persisted by `sync()` (study_outcomes.py:184) — do not duplicate. The gaps are investigation-acceptance auto-write, `enforced_params` writer, and on-disk run reconcile.
 
@@ -45,7 +45,7 @@ def test_populate_enforced_params_fills_then_idempotent(tmp_study_dir):
 
 ## Task 2: Investigation acceptance auto-write
 
-**Files:** Modify `pbg_superpowers/study_outcomes.py` (or `investigation_status.py`), `vivarium-dashboard/vivarium_dashboard/server.py`; Test `tests/test_investigation_status.py` + a dashboard test.
+**Files:** Modify `pbg_superpowers/study_outcomes.py` (or `investigation_status.py`), `vivarium-workbench/vivarium_workbench/server.py`; Test `tests/test_investigation_status.py` + a dashboard test.
 
 - [ ] **Step 1: Failing test (pbg-superpowers).**
 ```python
@@ -60,8 +60,8 @@ def test_sync_investigation_writes_acceptance(tmp_investigation):
 ```
 - [ ] **Step 2: fail. Step 3: implement** `sync_investigation(inv_dir, workspace=None) -> {"ok": bool, "changed": bool, "error"?: str}` — a thin best-effort wrapper over `investigation_status.write_investigation_acceptance(inv_dir, workspace)`. Match the exact slot `write_investigation_acceptance` writes (confirm: `executive.computed_acceptance` per the spec).
 - [ ] **Step 4: pass.**
-- [ ] **Step 5: Wire the dashboard post-run hook.** At the `study_outcomes.sync(study_dir)` call sites in `vivarium-dashboard/vivarium_dashboard/server.py` (~5036/5057/5419 — confirm), after the study sync, resolve the study's parent investigation dir via `WorkspacePaths` (nested `investigations/<inv>/studies/<slug>/`) and, if found, call `sync_investigation(parent_inv_dir)` (best-effort, behind the lazy `pbg_superpowers` import already used there). Add a dashboard test asserting the hook calls it (or a structural test that the call site exists).
-- [ ] **Step 6: Commit** (pbg-superpowers) — `feat(investigation): sync_investigation auto-writes computed_acceptance`; then (vivarium-dashboard, separate commit/branch) — `feat(server): auto-write investigation acceptance after study sync`
+- [ ] **Step 5: Wire the dashboard post-run hook.** At the `study_outcomes.sync(study_dir)` call sites in `vivarium-workbench/vivarium_workbench/server.py` (~5036/5057/5419 — confirm), after the study sync, resolve the study's parent investigation dir via `WorkspacePaths` (nested `investigations/<inv>/studies/<slug>/`) and, if found, call `sync_investigation(parent_inv_dir)` (best-effort, behind the lazy `pbg_superpowers` import already used there). Add a dashboard test asserting the hook calls it (or a structural test that the call site exists).
+- [ ] **Step 6: Commit** (pbg-superpowers) — `feat(investigation): sync_investigation auto-writes computed_acceptance`; then (vivarium-workbench, separate commit/branch) — `feat(server): auto-write investigation acceptance after study sync`
 
 ## Task 3: On-disk run reconcile (backfill)
 
@@ -100,5 +100,5 @@ def test_reconcile_runs_registers_ondisk_run_absent_from_yaml(tmp_study_with_ond
 ## Notes for the executor
 - `.venv/bin/python -m pytest`. Reuse `study_io` (ruamel) for all study.yaml reads/writes; reuse `WorkspacePaths` for layout; reuse `backfill_runs`/`simulations_index` for run discovery; reuse `write_investigation_acceptance`/`check_enforced_params` — do NOT re-implement.
 - Best-effort sync steps: capture errors into the summary, never raise (match the existing `sync()` pattern).
-- Task 2's dashboard hook is in a SEPARATE repo (vivarium-dashboard) — its own branch + commit + PR; the pbg-superpowers logic merges first (or the dashboard lazy-imports the new fn, tolerant if absent).
+- Task 2's dashboard hook is in a SEPARATE repo (vivarium-workbench) — its own branch + commit + PR; the pbg-superpowers logic merges first (or the dashboard lazy-imports the new fn, tolerant if absent).
 - Don't modify real v2e-invest; goldens use a tmp copy.

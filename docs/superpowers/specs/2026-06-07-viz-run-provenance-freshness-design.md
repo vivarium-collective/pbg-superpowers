@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-07
 **Status:** Approved (brainstorming), ready for implementation plan
-**Repos:** `pbg-superpowers` (runners, backfill, refresh-viz skill, linter) + `vivarium-dashboard` (freshness read, study-card badges, report)
+**Repos:** `pbg-superpowers` (runners, backfill, refresh-viz skill, linter) + `vivarium-workbench` (freshness read, study-card badges, report)
 
 ## Problem
 
@@ -143,10 +143,10 @@ rerun study
 - `skills/pbg-study/SKILL.md`: `refresh-viz` subcommand + `visualizations[].render`
   convention + `--no-refresh-viz` on the run-* verbs.
 - `skills/pbg-investigation/SKILL.md`: `refresh-viz`.
-- `docs/concepts/vivarium-dashboard-model.md`: document `render:` + `.meta.json`
+- `docs/concepts/vivarium-workbench-model.md`: document `render:` + `.meta.json`
   provenance + freshness states.
 
-**vivarium-dashboard**
+**vivarium-workbench**
 - `lib/viz_freshness.py`: vendored mirror of the freshness function (drift-guard
   test, same pattern as `workspace_paths`).
 - `server.py`: a `/api/study-viz-render`/`refresh-viz` endpoint (or extend existing)

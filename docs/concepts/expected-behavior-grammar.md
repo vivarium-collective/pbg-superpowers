@@ -8,12 +8,12 @@ Overview tab.
 > **Field rename (Pass 7).** Section 6 of the canonical 8-section `study.yaml`
 > is `behavior_tests:`. The legacy v3 name was `expected_behavior:` (renamed
 > because `tests:` is reserved in dashboard v4; see
-> [vivarium-dashboard-model.md § v4 reserved fields](vivarium-dashboard-model.md#v4-reserved-fields)).
+> [vivarium-workbench-model.md § v4 reserved fields](vivarium-workbench-model.md#v4-reserved-fields)).
 > The grammar below applies unchanged under either field name; v3 specs using
 > `expected_behavior:` are auto-migrated on read.
 
 Adding a new behavioral test is a YAML edit only — no new test code required.
-The evaluator (`vivarium_dashboard.lib.expected_behavior.evaluate()`) turns
+The evaluator (`vivarium_workbench.lib.expected_behavior.evaluate()`) turns
 every entry into a deterministic pytest assertion.
 
 ---
@@ -59,7 +59,7 @@ expected_behavior:
 
 ## Measure primitives
 
-All primitives live in `vivarium_dashboard.lib.expected_behavior`.
+All primitives live in `vivarium_workbench.lib.expected_behavior`.
 State accessors always look inside the **first agent** found under `state.agents.*`.
 
 ### bulk_count
@@ -268,11 +268,11 @@ The evaluator calls `evaluate(entry, history)`, which:
 
 ## Evaluator location
 
-`vivarium_dashboard/lib/expected_behavior.py` — canonical upstream evaluator.
+`vivarium_workbench/lib/expected_behavior.py` — canonical upstream evaluator.
 Per-study `tests/_behaviors.py` files in v2ecoli were the original prototype;
 new workspaces should import from the dashboard package instead.
 
 ## See also
 
-- `docs/concepts/vivarium-dashboard-model.md` — overall dashboard architecture.
+- `docs/concepts/vivarium-workbench-model.md` — overall dashboard architecture.
 - `docs/concepts/process-bigraph-glossary.md` — framework terminology.

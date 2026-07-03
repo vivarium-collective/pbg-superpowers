@@ -115,7 +115,7 @@ def test_pbg_server_frontmatter_lists_cleanup():
 
 
 def test_concept_doc_documents_investigation_branch_worktree():
-    p = REPO_ROOT / "docs" / "concepts" / "vivarium-dashboard-model.md"
+    p = REPO_ROOT / "docs" / "concepts" / "vivarium-workbench-model.md"
     text = p.read_text()
     assert "Investigation ≡ branch ≡ worktree" in text, (
         "Concept doc must document the 1:1 slug/branch/worktree convention."

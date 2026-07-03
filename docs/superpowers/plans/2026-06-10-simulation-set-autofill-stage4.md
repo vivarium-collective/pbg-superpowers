@@ -4,7 +4,7 @@
 
 **Goal:** Auto-populate the often-blank `simulation_set` block in a study from what's actually defined + run (baseline, variants, runs[]) — **deterministic Python in pbg-superpowers**, mirroring `study_outcomes.record_runs`. The dashboard calls it via `sync` and merely renders the result (NO AI in the dashboard — see memory `feedback_dashboard_ai_free`).
 
-**Architecture:** New `pbg_superpowers/simulation_set.py`: `derive_entries(spec)` builds simulation_set entries from `conditions.baseline`/`baseline[]` + `conditions.variants`/`variants[]` + `runs[]`; `populate_simulation_set(study_dir)` reconciles them into study.yaml via a **ruamel round-trip** (comment-preserving), **conservatively**: fill-when-absent on existing authored entries (NEVER overwrite an authored value), full-derive + append for new entries, **never delete authored entries**. Wired into `study_outcomes.sync`. The read-time derivation already exists at `vivarium-dashboard/lib/investigations.py:388-416` (baseline+variants → in-memory simulation_set) — this PERSISTS that mapping and extends it with run-derived fields.
+**Architecture:** New `pbg_superpowers/simulation_set.py`: `derive_entries(spec)` builds simulation_set entries from `conditions.baseline`/`baseline[]` + `conditions.variants`/`variants[]` + `runs[]`; `populate_simulation_set(study_dir)` reconciles them into study.yaml via a **ruamel round-trip** (comment-preserving), **conservatively**: fill-when-absent on existing authored entries (NEVER overwrite an authored value), full-derive + append for new entries, **never delete authored entries**. Wired into `study_outcomes.sync`. The read-time derivation already exists at `vivarium-workbench/lib/investigations.py:388-416` (baseline+variants → in-memory simulation_set) — this PERSISTS that mapping and extends it with run-derived fields.
 
 **Tech:** Python 3.11+, ruamel.yaml, pytest. `.venv/bin/python`. Spec: the spine grounding (this plan is self-contained).
 
@@ -58,5 +58,5 @@
 
 ## Notes for executor
 - `.venv/bin/python -m pytest`. Mirror `study_outcomes.py` (`_MECHANICAL`, `_write_runs_preserving_comments`, `record_runs`, `sync`) closely — same ruamel `YAML(preserve_quotes=True, width=4096)` + `study_io.atomic_write`.
-- Read `vivarium-dashboard/.../lib/investigations.py:388-416` for the baseline/variant→entry shape to match (so the dashboard renders the persisted entries the same way it renders the projected ones).
+- Read `vivarium-workbench/.../lib/investigations.py:388-416` for the baseline/variant→entry shape to match (so the dashboard renders the persisted entries the same way it renders the projected ones).
 - Real study.yamls READ-ONLY; golden uses a tmp copy. study_verify `_check_simulation_set` wants entries' base refs to resolve to real baseline/variant names — derive `base_model`/`name` accordingly.

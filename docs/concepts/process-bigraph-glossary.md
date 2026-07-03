@@ -170,7 +170,7 @@ From the main paper's Table 2. Useful as a categorization when scaffolding a new
 
 ## See also
 
-- `docs/concepts/vivarium-dashboard-model.md` — the dashboard's view of workspaces, studies, runs.
+- `docs/concepts/vivarium-workbench-model.md` — the dashboard's view of workspaces, studies, runs.
 - `docs/concepts/expected-behavior-grammar.md` — DSL for encoding scientific predictions as testable (given, measure, expect) triples in study.yaml.
 - `docs/conventions/composites.md`, `docs/conventions/composite_generators.md` — implementation conventions.
 - `docs/conventions/visualizations.md`, `docs/conventions/discovery.md`, `docs/conventions/distribution.md` — implementation conventions.

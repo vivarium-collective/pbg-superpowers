@@ -236,11 +236,11 @@ PY
 After both passes succeed (or `--force`):
 
 ```bash
-# Prefer the vivarium-dashboard full SPA renderer when installed
+# Prefer the vivarium-workbench full SPA renderer when installed
 # (produces the 110+ KB interactive SPA shell at $REPORTS_DIR/index.html;
 #  pass the workspace ROOT — the renderer resolves the layout-aware reports dir itself):
 python -c "from pathlib import Path; \
-           from vivarium_dashboard.lib.report import render_workspace_report; \
+           from vivarium_workbench.lib.report import render_workspace_report; \
            render_workspace_report(Path('.'))"
 
 # Fall back to pbg-superpowers' slim renderer if the above is not installed:
@@ -274,9 +274,9 @@ The per-investigation report a reviewer downloads is built **client-side**
    `status` is `passed`.
 2. **If a correct change isn't showing**, check the install mode before
    debugging the code: a workspace `.venv` often runs **non-editable, git-pinned**
-   `vivarium-dashboard` / `pbg-superpowers`. Make the source live and restart:
+   `vivarium-workbench` / `pbg-superpowers`. Make the source live and restart:
    ```bash
-   uv pip install -e <path-to-vivarium-dashboard> --no-deps
+   uv pip install -e <path-to-vivarium-workbench> --no-deps
    uv pip install -e <path-to-pbg-superpowers> --no-deps
    python -m pbg_superpowers.dashboard restart
    ```

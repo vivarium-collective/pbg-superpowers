@@ -8,7 +8,7 @@
 
 **The isolation invariant (from the grounding):** the composite build is the ONLY expensive edge. It is injected behind an `observables_for_ref` function so SP4a's pure YAML core never depends on (or pays for) a build. The dashboard supplies the build via the existing cached `_observables_for_ref` (SP2b-i, merged → `available_observables`); pbg-superpowers' enrichment takes the injected fn.
 
-**Tech:** Python + JS; pytest. Repos: pbg-superpowers (enrichment + queries + skill) + vivarium-dashboard (the endpoint wiring + render). `.venv/bin/python`. AI-free; the index stays EPHEMERAL.
+**Tech:** Python + JS; pytest. Repos: pbg-superpowers (enrichment + queries + skill) + vivarium-workbench (the endpoint wiring + render). `.venv/bin/python`. AI-free; the index stays EPHEMERAL.
 
 **Reuse (confirmed):** SP4a `linkage_index.build_index` (the YAML core; has study→observables via `_observables_of_study` + `findings_for_observable`); SP2b-i `_observables_for_ref(ws, ref) -> {leaves, catalogs}` (dashboard, cached in `_COMPOSITE_STATE_CACHE`); SP2b `readout_resolver` for the canonical observable token. Study→composite edges already in the index (`baseline[].composite`).
 
@@ -48,9 +48,9 @@ def test_enrich_is_pure_given_injected_fn(tmp_ws):
 - [ ] **Step 2: fail. Step 3: implement.** `enrich_observable_edges(index, observables_for_ref) -> index`: for each `composite:` node in the index, call `observables_for_ref(spec_id)` → `{leaves, catalogs}`; add `composite --emits--> observable:<token>` edges (normalize the leaf to the canonical observable token via `readout_resolver` where applicable; strip the lineage `agents.<n>.` prefix consistent with SP2b-i so it matches studies' bare tokens). Optionally `composite --contains--> process` if the build exposes processes. Tolerate `observables_for_ref` raising (skip that composite). Then `studies_for_observable(ws, token, *, observables_for_ref) -> {studies, composites}` (build the index, enrich, then: composites that `emits` the token, and studies that `uses_composite` those) and `composite_emits(ws, composite_id, *, observables_for_ref) -> {emits:[tokens], used_by_studies:[...]}`. The enrichment touches NO YAML (pure given the injected fn).
 - [ ] **Step 4: pass. Step 5: commit** — `feat(linkage-index): composite->observable edge enrichment (injected build) + studies_for_observable/composite_emits queries`
 
-## Task 2: Wire the dashboard endpoint to the enrichment (vivarium-dashboard)
+## Task 2: Wire the dashboard endpoint to the enrichment (vivarium-workbench)
 
-**Files:** (vivarium-dashboard, branch `feat/sp4b-observable-dashboard` off origin/main) `server.py` (`_linkage_index` ~the SP4a worker); Test `tests/test_linkage_index_endpoint.py`. Use its `.venv`.
+**Files:** (vivarium-workbench, branch `feat/sp4b-observable-dashboard` off origin/main) `server.py` (`_linkage_index` ~the SP4a worker); Test `tests/test_linkage_index_endpoint.py`. Use its `.venv`.
 
 - [ ] **Step 1: Failing test** — `GET /api/linkage-index?observable=<token>` returns the cross-study registry (using the real `_observables_for_ref` build).
 ```python

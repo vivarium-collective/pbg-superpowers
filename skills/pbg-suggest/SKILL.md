@@ -1,6 +1,6 @@
 ---
 name: pbg-suggest
-description: Internal dashboard callback — invoked by the vivarium-dashboard "Suggest" button to draft a repo name, PR title, or PR body in response to a request file. Not part of the user-facing catalog; do not invoke directly. The dashboard prints the exact `/pbg-suggest <id>` to run when needed.
+description: Internal dashboard callback — invoked by the vivarium-workbench "Suggest" button to draft a repo name, PR title, or PR body in response to a request file. Not part of the user-facing catalog; do not invoke directly. The dashboard prints the exact `/pbg-suggest <id>` to run when needed.
 user-invocable: false
 argument-hint: <request-id>
 ---
@@ -8,7 +8,7 @@ argument-hint: <request-id>
 # /pbg-suggest <request-id>
 
 > **Internal callback skill.** This is not part of the v0.9 user-facing
-> catalog. It exists because the vivarium-dashboard "Suggest" button asks
+> catalog. It exists because the vivarium-workbench "Suggest" button asks
 > the user to paste `/pbg-suggest <id>` into Claude Code — the dashboard
 > wrote a request file at `.pbg/agent-requests/<id>.json` and is polling
 > `.pbg/agent-responses/<id>.json` for the answer.

@@ -8,7 +8,7 @@
 
 **The open half (grounding):** `feedback_import.py` imports `investigations/<inv>/feedback/<ts>.yaml` (`{meta, annotations:{section:[{author,text,ts}]}, responses:{section:{status,by,at,response}}}`); `feedback_tracking.study_feedback_tracked` (:43) aggregates + derives status from `responses` (`_derive_status` :31). NOTHING writes `responses` or links feedback→finding/next_action — the loop dead-ends. SP3b adds a deterministic, tracked `actions:` surface parallel to `responses`, with apply primitives.
 
-**Tech:** Python + JS; pytest. Repos: pbg-superpowers (the mechanism + skill) + vivarium-dashboard (the panel + apply API). `.venv/bin/python`.
+**Tech:** Python + JS; pytest. Repos: pbg-superpowers (the mechanism + skill) + vivarium-workbench (the panel + apply API). `.venv/bin/python`.
 
 **AI-free split:** deterministic `feedback_item_id` + `study_feedback_actions` aggregation + `apply_feedback_action` primitives in pbg-superpowers (dashboard renders + an Apply button POSTs); the AI judgment (which action kind, the proposed_text) is in the `/pbg-study feedback-respond` skill.
 
@@ -66,9 +66,9 @@ def test_apply_next_action_writes_finding_next_action(tmp_inv_with_action):
 - [ ] **Step 2:** Add `tests/test_feedback_respond_skill.py` asserting `skills/pbg-study/SKILL.md` names `feedback-respond` + `study_feedback_actions` + `apply_feedback_action`.
 - [ ] **Step 3: pass. Commit** — `feat(pbg-study): feedback-respond subcommand — turn open feedback into tracked actions`
 
-## Task 4: Dashboard — feedback→action panel + Apply (vivarium-dashboard)
+## Task 4: Dashboard — feedback→action panel + Apply (vivarium-workbench)
 
-**Files:** (vivarium-dashboard, branch `feat/sp3b-feedback-dashboard` off origin/main) `server.py` (a new `/api/feedback-apply-action` + surface `study_feedback_actions` on the spec), `static/study-detail.js` (`_renderFeedbackTrackedPanel` ~:981), `static/walkthrough.js` (report table). Use its `.venv`.
+**Files:** (vivarium-workbench, branch `feat/sp3b-feedback-dashboard` off origin/main) `server.py` (a new `/api/feedback-apply-action` + surface `study_feedback_actions` on the spec), `static/study-detail.js` (`_renderFeedbackTrackedPanel` ~:981), `static/walkthrough.js` (report table). Use its `.venv`.
 
 - [ ] **Step 1: Failing test** — `/api/feedback-apply-action` applies an action via the pbg primitive.
 ```python

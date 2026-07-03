@@ -155,7 +155,7 @@ composites" — so it needs the real composite build behind
 import sys
 from pbg_superpowers.linkage_index import studies_for_observable
 # observables_for_ref is the dashboard's _observables_for_ref (the real build).
-from vivarium_dashboard.server import _observables_for_ref
+from vivarium_workbench.lib.observables_views import _observables_for_ref
 res = studies_for_observable(".", sys.argv[1], observables_for_ref=_observables_for_ref)
 print("studies:   ", ", ".join(res["studies"]) or "(none)")
 print("composites:", ", ".join(res["composites"]) or "(none)")
@@ -176,7 +176,7 @@ Also triggers a composite build (cached).
 .venv/bin/python - "$ID" <<'PY'
 import sys
 from pbg_superpowers.linkage_index import composite_emits
-from vivarium_dashboard.server import _observables_for_ref
+from vivarium_workbench.lib.observables_views import _observables_for_ref
 res = composite_emits(".", sys.argv[1], observables_for_ref=_observables_for_ref)
 print("emits:", ", ".join(res["emits"]) or "(none)")
 print("used by studies:", ", ".join(res["used_by_studies"]) or "(none)")

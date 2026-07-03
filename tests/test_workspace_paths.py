@@ -1,7 +1,7 @@
 """Tests for the vendored workspace-layout resolver + a drift guard.
 
 ``pbg_superpowers/workspace_paths.py`` is a vendored copy of the canonical
-resolver that lives in ``vivarium-dashboard`` (pbg-superpowers does not depend
+resolver that lives in ``vivarium-workbench`` (pbg-superpowers does not depend
 on it). The drift guard below pins ``LAYOUT_DEFAULTS`` to the canonical map so
 the two copies can't silently diverge.
 """
@@ -9,7 +9,7 @@ from pbg_superpowers.workspace_paths import (
     WorkspacePaths, LAYOUT_DEFAULTS, package_slug,
 )
 
-# The canonical flat layout — must match vivarium-dashboard's copy exactly.
+# The canonical flat layout — must match vivarium-workbench's copy exactly.
 # If you change a directory name, change it in BOTH repos.
 CANONICAL_LAYOUT_DEFAULTS = {
     "studies": "studies",
@@ -31,14 +31,14 @@ def test_layout_defaults_match_canonical():
     assert LAYOUT_DEFAULTS == CANONICAL_LAYOUT_DEFAULTS
 
 
-def test_drift_guard_against_vivarium_dashboard_if_available():
+def test_drift_guard_against_vivarium_workbench_if_available():
     try:
-        from vivarium_dashboard.lib.workspace_paths import (
+        from vivarium_workbench.lib.workspace_paths import (
             LAYOUT_DEFAULTS as DASH_DEFAULTS,
         )
     except ModuleNotFoundError:
         import pytest
-        pytest.skip("vivarium_dashboard not installed; literal pin checked above")
+        pytest.skip("vivarium_workbench not installed; literal pin checked above")
     assert LAYOUT_DEFAULTS == DASH_DEFAULTS
 
 

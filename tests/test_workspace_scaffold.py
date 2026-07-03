@@ -169,8 +169,8 @@ def _run_inplace(repo: Path, plugin_root: Path, name: str = "demo-composite",
     env.setdefault("GIT_COMMITTER_NAME", "scaffold-test")
     env.setdefault("GIT_COMMITTER_EMAIL", "scaffold-test@example.invalid")
     # Make sure auto-pin doesn't accidentally find a sibling dashboard checkout
-    # via the default ../vivarium-dashboard path (the test repo's parent is tmp).
-    env.pop("VIVARIUM_DASHBOARD_PATH", None)
+    # via the default ../vivarium-workbench path (the test repo's parent is tmp).
+    env.pop("VIVARIUM_WORKBENCH_PATH", None)
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
@@ -213,7 +213,7 @@ def test_inplace_promotes_existing_composite_repo(tmp_path, plugin_root):
 
 def test_inplace_preserves_existing_pyproject_and_merges_deps(tmp_path, plugin_root):
     """The existing repo's pyproject must keep its own dependencies
-    (numpy) AND gain the template's missing ones (vivarium-dashboard,
+    (numpy) AND gain the template's missing ones (vivarium-workbench,
     pyyaml, jsonschema, etc.). process-bigraph is in both — must not
     be duplicated."""
     repo = _make_existing_composite_repo(tmp_path)
@@ -224,7 +224,7 @@ def test_inplace_preserves_existing_pyproject_and_merges_deps(tmp_path, plugin_r
     # Existing foreign dep preserved.
     assert '"numpy"' in text
     # Template deps added.
-    assert "vivarium-dashboard" in text
+    assert "vivarium-workbench" in text
     assert "pyyaml" in text or "PyYAML" in text
     # process-bigraph appears exactly once (no duplicate).
     assert text.count('"process-bigraph"') == 1
@@ -289,21 +289,21 @@ def test_inplace_refuses_non_git_directory(tmp_path, plugin_root):
     assert "not a git repo" in (r.stderr + r.stdout)
 
 
-def test_inplace_autopin_pings_sibling_vivarium_dashboard(tmp_path, plugin_root):
-    """When a sibling ../vivarium-dashboard exists, the in-place scaffolder
+def test_inplace_autopin_pings_sibling_vivarium_workbench(tmp_path, plugin_root):
+    """When a sibling ../vivarium-workbench exists, the in-place scaffolder
     appends a [tool.uv.sources] block so `uv pip install` resolves the
     dep without further user action (friction #6)."""
-    sibling = tmp_path / "vivarium-dashboard"
+    sibling = tmp_path / "vivarium-workbench"
     sibling.mkdir()
-    (sibling / "pyproject.toml").write_text("[project]\nname='vivarium-dashboard'\nversion='0'\n")
+    (sibling / "pyproject.toml").write_text("[project]\nname='vivarium-workbench'\nversion='0'\n")
     repo = _make_existing_composite_repo(tmp_path)
     r = _run_inplace(repo, plugin_root,
-                     extra_env={"VIVARIUM_DASHBOARD_PATH": str(sibling)})
+                     extra_env={"VIVARIUM_WORKBENCH_PATH": str(sibling)})
     assert r.returncode == 0, r.stderr
 
     text = (repo / "pyproject.toml").read_text()
     assert "[tool.uv.sources]" in text
-    assert "vivarium-dashboard" in text
+    assert "vivarium-workbench" in text
     assert str(sibling) in text
 
 

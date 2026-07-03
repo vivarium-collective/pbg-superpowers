@@ -3,7 +3,7 @@
 Covers two behavior changes the friction log called out:
 
   - _resolve_dashboard_cmd no longer falls through to PATH or python -m;
-    the workspace venv MUST have vivarium-dashboard installed. A sibling
+    the workspace venv MUST have vivarium-workbench installed. A sibling
     venv that happens to have it installed (with a different composite
     set) no longer poisons the dashboard's discovery (friction #13).
 
@@ -29,11 +29,11 @@ from pbg_superpowers import dashboard as dash_mod
 
 
 def _make_workspace_with_venv_bin(tmp_path: Path, *, has_bin: bool) -> Path:
-    """Build a minimal workspace dir; optionally seed .venv/bin/vivarium-dashboard."""
+    """Build a minimal workspace dir; optionally seed .venv/bin/vivarium-workbench."""
     ws = tmp_path / "ws"
     (ws / ".venv" / "bin").mkdir(parents=True)
     if has_bin:
-        bin_path = ws / ".venv" / "bin" / "vivarium-dashboard"
+        bin_path = ws / ".venv" / "bin" / "vivarium-workbench"
         bin_path.write_text("#!/bin/sh\necho stub\n")
         bin_path.chmod(bin_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return ws
@@ -44,19 +44,19 @@ def test_resolve_returns_venv_bin_when_present(tmp_path):
     result = dash_mod._resolve_dashboard_cmd(ws)
     assert result is not None
     cmd, venv_workspace = result
-    assert cmd[0] == str(ws / ".venv" / "bin" / "vivarium-dashboard")
+    assert cmd[0] == str(ws / ".venv" / "bin" / "vivarium-workbench")
     assert cmd[1] == "serve"
     assert venv_workspace == ws
 
 
 def test_resolve_falls_back_to_parent_worktree_venv(tmp_path):
     """When this workspace is a secondary git worktree of a main worktree
-    that DOES have a usable .venv/bin/vivarium-dashboard, the resolver
+    that DOES have a usable .venv/bin/vivarium-workbench, the resolver
     reuses it. Worktrees share source so the composites resolve from this
     workspace via the dashboard's set_workspace_root() injection."""
     main = tmp_path / "main"
     (main / ".venv" / "bin").mkdir(parents=True)
-    bin_path = main / ".venv" / "bin" / "vivarium-dashboard"
+    bin_path = main / ".venv" / "bin" / "vivarium-workbench"
     bin_path.write_text("#!/bin/sh\necho stub\n")
     bin_path.chmod(bin_path.stat().st_mode | stat.S_IXUSR)
     (main / ".git").mkdir()
@@ -71,20 +71,20 @@ def test_resolve_falls_back_to_parent_worktree_venv(tmp_path):
     result = dash_mod._resolve_dashboard_cmd(wt)
     assert result is not None
     cmd, venv_workspace = result
-    assert cmd[0] == str(main / ".venv" / "bin" / "vivarium-dashboard")
+    assert cmd[0] == str(main / ".venv" / "bin" / "vivarium-workbench")
     assert venv_workspace == main
 
 
 def test_resolve_returns_none_when_venv_bin_missing(tmp_path):
     """No workspace-venv binary → None. Used to fall through to
-    `which vivarium-dashboard` and silently pick up a sibling venv;
+    `which vivarium-workbench` and silently pick up a sibling venv;
     that's the foot-gun this slice closes."""
     ws = _make_workspace_with_venv_bin(tmp_path, has_bin=False)
     assert dash_mod._resolve_dashboard_cmd(ws) is None
 
 
-def test_resolve_ignores_path_vivarium_dashboard(tmp_path, monkeypatch):
-    """Even when `which vivarium-dashboard` would find one on PATH, the
+def test_resolve_ignores_path_vivarium_workbench(tmp_path, monkeypatch):
+    """Even when `which vivarium-workbench` would find one on PATH, the
     resolver must NOT use it — that's exactly the friction #13 scenario.
 
     We simulate by putting a fake binary on PATH and asserting the resolver
@@ -92,7 +92,7 @@ def test_resolve_ignores_path_vivarium_dashboard(tmp_path, monkeypatch):
     ws = _make_workspace_with_venv_bin(tmp_path, has_bin=False)
     fake_bin_dir = tmp_path / "fake_path"
     fake_bin_dir.mkdir()
-    fake_bin = fake_bin_dir / "vivarium-dashboard"
+    fake_bin = fake_bin_dir / "vivarium-workbench"
     fake_bin.write_text("#!/bin/sh\necho sibling-venv-stub\n")
     fake_bin.chmod(fake_bin.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PATH", str(fake_bin_dir) + ":" + os.environ.get("PATH", ""))
@@ -153,15 +153,15 @@ def test_is_placeholder_false_when_real_spa(tmp_path):
 
 
 def test_start_refuses_when_no_venv_bin(tmp_path, monkeypatch):
-    """When workspace .venv has no vivarium-dashboard, start() must raise
+    """When workspace .venv has no vivarium-workbench, start() must raise
     with an actionable install command — NOT fall through to PATH."""
     ws = _make_workspace_with_venv_bin(tmp_path, has_bin=False)
-    # Make sure no PATH-installed vivarium-dashboard sneaks in either.
+    # Make sure no PATH-installed vivarium-workbench sneaks in either.
     monkeypatch.setenv("PATH", "")
     with pytest.raises(RuntimeError) as ei:
         dash_mod.start(ws, open_browser=False)
     msg = str(ei.value)
-    assert "vivarium-dashboard is not installed in the workspace venv" in msg
+    assert "vivarium-workbench is not installed in the workspace venv" in msg
     assert "uv pip install" in msg
     # Sibling-WORKSPACE fallback (different repo, different composites) is
     # still off — only sibling git-worktree fallback (same source) is allowed.
@@ -169,23 +169,23 @@ def test_start_refuses_when_no_venv_bin(tmp_path, monkeypatch):
     assert "friction log #13" in msg
 
 
-def _block_vivarium_dashboard_imports(monkeypatch):
-    """Clear every cached vivarium_dashboard.* submodule so the next
-    `from vivarium_dashboard.lib.report import render_dashboard` fails
-    fresh. Setting sys.modules['vivarium_dashboard'] to None alone isn't
+def _block_vivarium_workbench_imports(monkeypatch):
+    """Clear every cached vivarium_workbench.* submodule so the next
+    `from vivarium_workbench.lib.report import render_dashboard` fails
+    fresh. Setting sys.modules['vivarium_workbench'] to None alone isn't
     enough — Python honors cached submodules even when the parent is None.
     Cross-test pollution from earlier integration tests that DO import
-    vivarium-dashboard is the reason this helper exists."""
+    vivarium-workbench is the reason this helper exists."""
     import sys
     for key in list(sys.modules):
-        if key == "vivarium_dashboard" or key.startswith("vivarium_dashboard."):
+        if key == "vivarium_workbench" or key.startswith("vivarium_workbench."):
             monkeypatch.delitem(sys.modules, key, raising=False)
-    monkeypatch.setitem(sys.modules, "vivarium_dashboard", None)
+    monkeypatch.setitem(sys.modules, "vivarium_workbench", None)
 
 
 def test_start_refuses_when_placeholder_and_render_unavailable(tmp_path, monkeypatch):
-    """Workspace has a .venv/bin/vivarium-dashboard, but reports/index.html
-    is the bootstrap placeholder AND vivarium-dashboard isn't importable
+    """Workspace has a .venv/bin/vivarium-workbench, but reports/index.html
+    is the bootstrap placeholder AND vivarium-workbench isn't importable
     from this Python (so auto-render can't run). start() must refuse with
     a clear hint rather than serving the stub."""
     ws = _make_workspace_with_venv_bin(tmp_path, has_bin=True)
@@ -194,7 +194,7 @@ def test_start_refuses_when_placeholder_and_render_unavailable(tmp_path, monkeyp
     (reports / "index.html").write_text(
         "<html><p>No models registered yet. Run /pbg-add-model</p></html>"
     )
-    _block_vivarium_dashboard_imports(monkeypatch)
+    _block_vivarium_workbench_imports(monkeypatch)
 
     with pytest.raises(RuntimeError) as ei:
         dash_mod.start(ws, open_browser=False)
@@ -204,9 +204,9 @@ def test_start_refuses_when_placeholder_and_render_unavailable(tmp_path, monkeyp
 
 
 def test_try_render_dashboard_handles_missing_import(monkeypatch, tmp_path):
-    """The fallback path (when vivarium_dashboard isn't importable) must
+    """The fallback path (when vivarium_workbench isn't importable) must
     return a clean (False, error_msg) tuple — not raise."""
-    _block_vivarium_dashboard_imports(monkeypatch)
+    _block_vivarium_workbench_imports(monkeypatch)
     rendered, err = dash_mod._try_render_dashboard(tmp_path)
     assert rendered is False
     assert err is not None
@@ -365,7 +365,7 @@ def test_status_does_not_adopt_other_workspaces_server(tmp_path, monkeypatch):
 def test_proc_is_workspace_dashboard_matches_workspace_arg(tmp_path, monkeypatch):
     ws = tmp_path / "ws"
     ws.mkdir()
-    cmd = f"python -m vivarium_dashboard.server --workspace {ws} --port 8765"
+    cmd = f"python -m vivarium_workbench.cli serve --workspace {ws} --port 8765"
     monkeypatch.setattr(dash_mod, "_proc_cmdline", lambda pid: cmd)
     monkeypatch.setattr(dash_mod, "_proc_cwd", lambda pid: None)
     assert dash_mod._proc_is_workspace_dashboard(4242, ws) is True
@@ -376,7 +376,7 @@ def test_proc_is_workspace_dashboard_matches_cwd_fallback(tmp_path, monkeypatch)
     matching the process cwd."""
     ws = tmp_path / "ws"
     ws.mkdir()
-    cmd = "python -m vivarium_dashboard.server --workspace . --port 8765"
+    cmd = "python -m vivarium_workbench.cli serve --workspace . --port 8765"
     monkeypatch.setattr(dash_mod, "_proc_cmdline", lambda pid: cmd)
     monkeypatch.setattr(dash_mod, "_proc_cwd", lambda pid: ws.resolve())
     assert dash_mod._proc_is_workspace_dashboard(4242, ws) is True
@@ -396,7 +396,7 @@ def test_proc_is_workspace_dashboard_rejects_other_workspace(tmp_path, monkeypat
     ws.mkdir()
     other = tmp_path / "other"
     other.mkdir()
-    cmd = f"python -m vivarium_dashboard.server --workspace {other} --port 8765"
+    cmd = f"python -m vivarium_workbench.cli serve --workspace {other} --port 8765"
     monkeypatch.setattr(dash_mod, "_proc_cmdline", lambda pid: cmd)
     monkeypatch.setattr(dash_mod, "_proc_cwd", lambda pid: other.resolve())
     assert dash_mod._proc_is_workspace_dashboard(4242, ws) is False

@@ -129,7 +129,7 @@ calls `update(state)` once per tick with per-step scalar values.
 ### Path B — auto-render from runs.db via typed wire (most common)
 
 After a run completes,
-`vivarium_dashboard.lib.investigations.render_visualizations` builds a
+`vivarium_workbench.lib.investigations.render_visualizations` builds a
 **fresh single-step composite** per viz: one tiny composite containing
 the viz Step plus an `inputs_store` populated from the SQLiteEmitter's
 `runs.db`. The viz receives `state` with each port populated by a

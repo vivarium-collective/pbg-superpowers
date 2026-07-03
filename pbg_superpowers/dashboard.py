@@ -1,8 +1,8 @@
-"""Start / stop / status / open the interactive vivarium-dashboard server.
+"""Start / stop / status / open the interactive vivarium-workbench server.
 
 Distinct from ``pbg_superpowers.server`` (which manages the report-mirror
 server under ``.pbg/server/``). The interactive dashboard is the
-side-rail-tabbed UI served by the ``vivarium-dashboard`` pip package.
+side-rail-tabbed UI served by the ``vivarium-workbench`` pip package.
 
 State lives at ``<workspace>/.pbg/dashboard/``:
 
@@ -186,7 +186,7 @@ def _clear_state(workspace: Path) -> None:
 # Adopt an externally-launched server (v2ecoli friction #11)
 # ---------------------------------------------------------------------------
 # When someone starts the dashboard directly —
-#   python -m vivarium_dashboard.server --workspace . --port 8765
+#   python -m vivarium_workbench.cli serve --workspace . --port 8765
 # — the .pbg/dashboard/ state files are never written, so `status` used to
 # report `not-running` even though the UI was live and curl-able. Probe the
 # known port(s), confirm the listener really is THIS workspace's dashboard
@@ -241,7 +241,7 @@ def _proc_cwd(pid: int) -> Path | None:
 
 
 def _proc_is_workspace_dashboard(pid: int, workspace: Path) -> bool:
-    """True iff `pid` is a vivarium-dashboard server bound to `workspace`.
+    """True iff `pid` is a vivarium-workbench server bound to `workspace`.
 
     Identity check (so we never adopt a different workspace's server that
     happens to hold the default port):
@@ -250,7 +250,7 @@ def _proc_is_workspace_dashboard(pid: int, workspace: Path) -> bool:
         must equal `workspace`.
     """
     cmd = _proc_cmdline(pid)
-    if "vivarium_dashboard" not in cmd and "vivarium-dashboard" not in cmd:
+    if "vivarium_workbench" not in cmd and "vivarium-workbench" not in cmd:
         return False
     ws = workspace.resolve()
     # Explicit `--workspace <path>` form.
@@ -354,17 +354,17 @@ def _find_main_worktree(workspace: Path) -> Path | None:
 
 
 def _resolve_dashboard_cmd(workspace: Path) -> tuple[list[str], Path] | None:
-    """Pick the vivarium-dashboard launcher to use.
+    """Pick the vivarium-workbench launcher to use.
 
     Returns ``(cmd, venv_root)`` where ``cmd`` is the launcher prefix and
     ``venv_root`` is the workspace the venv came from (for diagnostics).
 
     Resolution order:
 
-      1. **Local ``<workspace>/.venv/bin/vivarium-dashboard``** — the canonical
+      1. **Local ``<workspace>/.venv/bin/vivarium-workbench``** — the canonical
          case. Composites resolve from local site-packages exactly as
          intended.
-      2. **Parent git-worktree's ``.venv/bin/vivarium-dashboard``** — when
+      2. **Parent git-worktree's ``.venv/bin/vivarium-workbench``** — when
          this workspace is a secondary git worktree (``.git`` is a file
          pointing at ``<main>/.git/worktrees/<name>``) and the main
          worktree has a usable venv. Safe because worktrees share source;
@@ -379,12 +379,12 @@ def _resolve_dashboard_cmd(workspace: Path) -> tuple[list[str], Path] | None:
     still off. Different repos must each install their own dashboard, or
     the discovered composites are wrong.
     """
-    local_bin = workspace / ".venv" / "bin" / "vivarium-dashboard"
+    local_bin = workspace / ".venv" / "bin" / "vivarium-workbench"
     if local_bin.is_file() and os.access(local_bin, os.X_OK):
         return ([str(local_bin), "serve"], workspace)
     main = _find_main_worktree(workspace)
     if main is not None and main.resolve() != workspace.resolve():
-        main_bin = main / ".venv" / "bin" / "vivarium-dashboard"
+        main_bin = main / ".venv" / "bin" / "vivarium-workbench"
         if main_bin.is_file() and os.access(main_bin, os.X_OK):
             return ([str(main_bin), "serve"], main)
     return None
@@ -399,17 +399,17 @@ def prepare_investigation(workspace: Path | str, *,
                           dashboard_url: str | None = None) -> int:
     """Prepare an investigation's coordinated generation.
 
-    Thin wrapper over ``vivarium-dashboard prepare-investigation`` — that
-    command lives in the vivarium-dashboard package (co-located with the run
+    Thin wrapper over ``vivarium-workbench prepare-investigation`` — that
+    command lives in the vivarium-workbench package (co-located with the run
     API + comparative_viz it drives), and this is how the framework invokes it.
     Requires a running dashboard for the workspace. Runs in the foreground
     (streams progress); returns the subprocess exit code.
     """
     workspace = Path(workspace)
-    venv_bin = workspace / ".venv" / "bin" / "vivarium-dashboard"
+    venv_bin = workspace / ".venv" / "bin" / "vivarium-workbench"
     if not (venv_bin.is_file() and os.access(venv_bin, os.X_OK)):
         raise FileNotFoundError(
-            f"vivarium-dashboard not found in {workspace}/.venv/bin — install "
+            f"vivarium-workbench not found in {workspace}/.venv/bin — install "
             "it into the workspace venv first.")
     cmd = [str(venv_bin), "prepare-investigation", "--workspace", str(workspace)]
     if investigation:
@@ -428,7 +428,7 @@ def prepare_investigation(workspace: Path | str, *,
 
 
 # Placeholder bodies that overwrite reports/index.html with something OTHER
-# than the rich vivarium-dashboard SPA. Detecting any of these lets
+# than the rich vivarium-workbench SPA. Detecting any of these lets
 # `start()` decide whether to auto-render the real SPA before the user
 # sees an empty page at the dashboard URL.
 #
@@ -465,14 +465,14 @@ def _is_placeholder_or_missing(reports_path: Path) -> bool:
 
 def _try_render_dashboard(workspace: Path) -> tuple[bool, str | None]:
     """Try to render the workspace SPA before serving. Returns (rendered,
-    error_msg). When vivarium-dashboard isn't importable from THIS Python,
+    error_msg). When vivarium-workbench isn't importable from THIS Python,
     rendered=False and error_msg names the install command — the caller
     decides whether to refuse-to-start or proceed with the placeholder."""
     try:
-        from vivarium_dashboard.lib.report import render_dashboard
+        from vivarium_workbench.lib.report import render_dashboard
     except ImportError as e:
         return False, (
-            f"vivarium-dashboard not importable from {sys.executable}: {e}. "
+            f"vivarium-workbench not importable from {sys.executable}: {e}. "
             f"Run `{workspace}/.venv/bin/python scripts/render-dashboard.py` "
             "to render the SPA, then re-run dashboard start."
         )
@@ -492,7 +492,7 @@ def status(workspace: Path) -> dict:
 
     v2ecoli friction #11: when our own state files are absent we don't
     immediately conclude not-running — a dashboard may have been launched
-    directly (``python -m vivarium_dashboard.server …``) without writing
+    directly (``python -m vivarium_workbench.cli serve …``) without writing
     them. Probe the known port(s) and adopt a live server that's confirmed
     to be THIS workspace's, writing the state files so later commands work.
     """
@@ -545,12 +545,12 @@ def start(workspace: Path, port: int | None = None,
     resolved = _resolve_dashboard_cmd(workspace)
     if resolved is None:
         raise RuntimeError(
-            "vivarium-dashboard is not installed in the workspace venv at "
+            "vivarium-workbench is not installed in the workspace venv at "
             f"{workspace}/.venv/, and no parent git-worktree's venv has it "
             "either. Install it before starting the dashboard:\n"
             f"  uv pip install --python {workspace}/.venv/bin/python -e "
-            "/path/to/vivarium-dashboard\n"
-            "OR, if this is a secondary git worktree, install vivarium-dashboard "
+            "/path/to/vivarium-workbench\n"
+            "OR, if this is a secondary git worktree, install vivarium-workbench "
             "into the MAIN worktree's .venv (this skill will reuse it via "
             "git-worktree-aware fallback — safe because worktrees share "
             "source). Sibling-WORKSPACE venvs are still off-limits because "
@@ -560,10 +560,10 @@ def start(workspace: Path, port: int | None = None,
     cmd_prefix, venv_workspace = resolved
 
     # F-friction #1: ensure reports/index.html is the rendered SPA, not the
-    # pbg-template bootstrap placeholder. The vivarium-dashboard server happily
+    # pbg-template bootstrap placeholder. The vivarium-workbench server happily
     # serves whatever's at that path — and the placeholder "No models
     # registered yet" body is always a bug for an end user to see. Try to
-    # render now; if vivarium-dashboard isn't importable from this Python,
+    # render now; if vivarium-workbench isn't importable from this Python,
     # refuse-to-start with the manual command instead of serving the stub.
     reports = _reports_index(workspace)
     if _is_placeholder_or_missing(reports):
@@ -624,7 +624,7 @@ def start(workspace: Path, port: int | None = None,
             tail = log.read_text(encoding="utf-8")[-1500:] if log.is_file() else "(no log)"
             _clear_state(workspace)
             raise RuntimeError(
-                f"vivarium-dashboard exited immediately. Last log lines:\n{tail}"
+                f"vivarium-workbench exited immediately. Last log lines:\n{tail}"
             )
         time.sleep(0.1)
     else:
@@ -704,18 +704,18 @@ def restart(workspace: Path, port: int | None = None,
     behavior (stop, then start, fail start) killed the running dashboard
     and left the user with nothing — they had a working server before the
     restart and no working server after. Refuse-up-front when the venv
-    can't supply vivarium-dashboard, so the running dashboard keeps
+    can't supply vivarium-workbench, so the running dashboard keeps
     running.
     """
     if _resolve_dashboard_cmd(workspace) is None:
         raise RuntimeError(
-            "vivarium-dashboard is not installed in the workspace venv at "
+            "vivarium-workbench is not installed in the workspace venv at "
             f"{workspace}/.venv/ and no parent git-worktree's venv has it "
             "either. Refusing to restart — the running dashboard would be "
-            "stopped and unable to restart. Install vivarium-dashboard "
+            "stopped and unable to restart. Install vivarium-workbench "
             "into the workspace venv first:\n"
             f"  uv pip install --python {workspace}/.venv/bin/python -e "
-            "/path/to/vivarium-dashboard\n"
+            "/path/to/vivarium-workbench\n"
             "If you only want to STOP the running dashboard, run "
             "`pbg-dashboard stop` instead (stop is venv-agnostic — it "
             "only needs the PID file)."
@@ -1056,7 +1056,7 @@ def _open_browser(url: str) -> str:
 def main(argv: list[str] | None = None) -> int:
     import argparse
     p = argparse.ArgumentParser(prog="pbg-dashboard",
-                                description="Manage the interactive vivarium-dashboard server.")
+                                description="Manage the interactive vivarium-workbench server.")
     p.add_argument("subcommand", choices=("start", "stop", "status", "open", "restart"))
     p.add_argument("--workspace", default=".", type=Path,
                    help="Workspace root (default: cwd).")

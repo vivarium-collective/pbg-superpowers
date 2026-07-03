@@ -2051,7 +2051,7 @@ def _check_narrative_spine_completeness(ctx: _LintContext) -> None:
     a v3 study with question + behavior_tests + baseline still validates
     and can publish, it just won't have the dnaa-style narrative spine.
 
-    See docs/concepts/vivarium-dashboard-model.md#v4-narrative-spine for
+    See docs/concepts/vivarium-workbench-model.md#v4-narrative-spine for
     the full section list and authoring guidance.
     """
     # Skip workspace-level pseudo-specs (the iterator may include a
@@ -2086,7 +2086,7 @@ def _check_narrative_spine_completeness(ctx: _LintContext) -> None:
         message=(
             f"narrative incomplete: {n_missing} of {len(_NARRATIVE_SECTIONS)} "
             f"v4 sections missing.{star_str}{other_str}. "
-            "See docs/concepts/vivarium-dashboard-model.md#v4-narrative-spine "
+            "See docs/concepts/vivarium-workbench-model.md#v4-narrative-spine "
             "for the full pattern, or /pbg-study fill-overview <slug> "
             "--include-narrative to draft them from plan + expert PDFs."
         ),
@@ -2265,7 +2265,7 @@ def _check_missing_conditions_block(ctx: _LintContext) -> None:
             "this study, even if v3 `baseline:` + `variants:` are "
             "populated. Add at minimum a `conditions.baseline.composite` "
             "value; see the study lint-checks + data-model reference in "
-            "docs/concepts/vivarium-dashboard-model.md."
+            "docs/concepts/vivarium-workbench-model.md."
         ),
         check="missing_conditions_block",
     )

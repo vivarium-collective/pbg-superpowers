@@ -156,7 +156,7 @@ def _inplace_extract_template_deps(template_pyproject_text: str) -> list[str]:
     """Pull the `dependencies = [...]` array out of the template's pyproject.
 
     Returns the list of dep strings (e.g. ['process-bigraph', 'pyyaml>=6.0',
-    'vivarium-dashboard']). Used to compute the diff against an existing
+    'vivarium-workbench']). Used to compute the diff against an existing
     pyproject's deps when merging.
     """
     import tomllib
@@ -242,19 +242,19 @@ def _inplace_merge_gitignore(existing_path: Path, template_lines: list[str]) -> 
 
 def _inplace_autopin_vivarium(pyproject_path: Path) -> str | None:
     """Mirror of template-init.sh's auto-pin block. If a sibling
-    `../vivarium-dashboard/` exists and the pyproject doesn't already
-    declare `[tool.uv.sources]`, append a vivarium-dashboard pin.
+    `../vivarium-workbench/` exists and the pyproject doesn't already
+    declare `[tool.uv.sources]`, append a vivarium-workbench pin.
 
     Returns the absolute path that got pinned, or None if no pin was made
     (either because the sibling is absent or the section already exists)."""
     text = pyproject_path.read_text(encoding="utf-8")
     if "[tool.uv.sources]" in text:
         return None  # don't clobber user-set sources
-    env_path = os.environ.get("VIVARIUM_DASHBOARD_PATH")
+    env_path = os.environ.get("VIVARIUM_WORKBENCH_PATH")
     candidates = []
     if env_path:
         candidates.append(Path(env_path).expanduser().resolve())
-    candidates.append((pyproject_path.parent.parent / "vivarium-dashboard").resolve())
+    candidates.append((pyproject_path.parent.parent / "vivarium-workbench").resolve())
     sibling = next((c for c in candidates
                     if c.is_dir() and (c / "pyproject.toml").is_file()),
                    None)
@@ -263,7 +263,7 @@ def _inplace_autopin_vivarium(pyproject_path: Path) -> str | None:
     sep = "" if text.endswith("\n") else "\n"
     pyproject_path.write_text(
         f"{text}{sep}\n[tool.uv.sources]\n"
-        f'vivarium-dashboard = {{ path = "{sibling}", editable = true }}\n'
+        f'vivarium-workbench = {{ path = "{sibling}", editable = true }}\n'
     )
     return str(sibling)
 
@@ -303,7 +303,7 @@ def scaffold_workspace_in_place(
     Implements the manual ritual the friction log called out: copies the
     template tree minus a small conflict set, renders the .j2 files,
     merges new dependencies into the existing pyproject, appends new
-    .gitignore entries, runs the vivarium-dashboard auto-pin, creates the
+    .gitignore entries, runs the vivarium-workbench auto-pin, creates the
     Python package skeleton if absent, switches to a workspace branch,
     commits, and registers in the workspace catalog.
 
@@ -395,7 +395,7 @@ def scaffold_workspace_in_place(
             added_ignore_lines = _inplace_merge_gitignore(
                 workspace_root / ".gitignore", tpl_lines)
 
-        # vivarium-dashboard auto-pin (only if a sibling checkout exists).
+        # vivarium-workbench auto-pin (only if a sibling checkout exists).
         autopin_path = None
         pyproject = workspace_root / "pyproject.toml"
         if pyproject.is_file():
@@ -440,12 +440,12 @@ def scaffold_workspace_in_place(
     if added_ignore_lines:
         click.echo(f"  .gitignore lines added: {added_ignore_lines}")
     if autopin_path:
-        click.echo(f"  vivarium-dashboard auto-pinned to: {autopin_path}")
-    elif added_deps and any("vivarium-dashboard" in d for d in added_deps):
+        click.echo(f"  vivarium-workbench auto-pinned to: {autopin_path}")
+    elif added_deps and any("vivarium-workbench" in d for d in added_deps):
         click.echo(
-            "  note: vivarium-dashboard added to deps but no sibling "
-            "../vivarium-dashboard checkout found for auto-pin. "
-            "Set VIVARIUM_DASHBOARD_PATH or add [tool.uv.sources] manually "
+            "  note: vivarium-workbench added to deps but no sibling "
+            "../vivarium-workbench checkout found for auto-pin. "
+            "Set VIVARIUM_WORKBENCH_PATH or add [tool.uv.sources] manually "
             "before `uv pip install -e \".[dev]\"`.",
             err=True,
         )
