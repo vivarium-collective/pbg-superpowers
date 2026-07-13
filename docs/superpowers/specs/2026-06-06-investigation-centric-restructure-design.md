@@ -3,7 +3,7 @@
 **Date:** 2026-06-06
 **Author:** Eran (+ Claude)
 **Status:** approved design — building (user authorized build without further approval; merges still require explicit approval)
-**Repos:** `pbg-template`, `pbg-superpowers`, `vivarium-dashboard` (+ migration of consuming repos, e.g. `v2ecoli`)
+**Repos:** `pbg-template`, `pbg-superpowers`, `vivarium-workbench` (+ migration of consuming repos, e.g. `v2ecoli`)
 
 ## Goal
 
@@ -90,7 +90,7 @@ subsequent investigations.
   - `branch · WIP` — present in the checkout but not in `main`.
   - `draft PR` / `open PR #N` — optional enhancement via `gh pr list` keyed on the branch.
 
-### Dashboard UI (vivarium-dashboard)
+### Dashboard UI (vivarium-workbench)
 
 - **Top-left repo switcher** (replaces the investigation-level role of the current
   switcher). Data: `~/.pbg/workspaces.json` (+ live `~/.pbg/servers/*.json`). Selecting a
@@ -124,7 +124,7 @@ subsequent investigations.
 1. **Structure + paths** (`pbg-template`, `pbg-superpowers`): nested template + `paths.py`
    investigation-scoped resolution + back-compat shim + `pbg-investigation` scaffold update
    + `pbg-migrate-nested` tool + tests.
-2. **Dashboard** (`vivarium-dashboard`): nested study resolution, repo switcher,
+2. **Dashboard** (`vivarium-workbench`): nested study resolution, repo switcher,
    Investigations list view, label change, studies sync, lifecycle badges + tests.
 3. **Migrate consumers** (`v2ecoli` first): run `pbg-migrate-nested`, verify the dashboard,
    open the migration PR.

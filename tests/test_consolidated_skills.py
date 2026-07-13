@@ -133,13 +133,13 @@ def test_pbg_status_delegates_server_section():
 
 
 def test_pbg_suggest_remains_for_dashboard_callback():
-    """pbg-suggest is invoked by the vivarium-dashboard 'Suggest' button.
+    """pbg-suggest is invoked by the vivarium-workbench 'Suggest' button.
 
     Removing it would break the dashboard's repo-name/PR-title/PR-body suggest flow,
     so v0.9 keeps the skill registered but flags it as internal-only.
     """
     assert (SKILLS / "pbg-suggest" / "SKILL.md").exists(), (
-        "pbg-suggest must remain installed for the vivarium-dashboard Suggest callback"
+        "pbg-suggest must remain installed for the vivarium-workbench Suggest callback"
     )
     text = _read("pbg-suggest")
     assert "internal" in text.lower(), (

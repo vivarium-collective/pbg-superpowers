@@ -88,11 +88,11 @@ def test_build_index_pure_on_v2e_invest():
 def _real_build_fn():
     """The dashboard's real ``_observables_for_ref`` build callable, or None.
 
-    It lives in the vivarium-dashboard repo, which is NOT a dependency of
+    It lives in the vivarium-workbench repo, which is NOT a dependency of
     pbg-superpowers — so when it isn't importable here we skip the golden
     gracefully (an expected, acceptable skip)."""
     try:
-        from vivarium_dashboard.server import _observables_for_ref  # type: ignore
+        from vivarium_workbench.lib.observables_views import _observables_for_ref  # type: ignore
         return _observables_for_ref
     except Exception:  # noqa: BLE001 — wrong env / not installed → skip
         return None
@@ -107,7 +107,7 @@ def test_golden_studies_for_observable_v2e_invest():
     build_fn = _real_build_fn()
     if build_fn is None:
         pytest.skip(
-            "vivarium_dashboard._observables_for_ref not importable in this env "
+            "vivarium_workbench._observables_for_ref not importable in this env "
             "(the real build fn lives in the dashboard repo) — golden skipped"
         )
 

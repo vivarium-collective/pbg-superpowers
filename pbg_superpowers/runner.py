@@ -3,7 +3,7 @@
 A ``pbg_runner(...)`` context manager wraps a study's per-sim runner so it
 writes a ``runs_meta`` row at start, configures a SQLiteEmitter pointed at
 ``studies/<study>/runs.db``, and marks completion (or ``orphaned`` on
-crash) at end. Pairs with ``vivarium_dashboard.lib.composite_runs``: the
+crash) at end. Pairs with ``vivarium_workbench.lib.composite_runs``: the
 schema this module bootstraps is exactly what the dashboard's auto-viz
 panel reads, so any run wrapped this way shows up automatically.
 
@@ -17,7 +17,7 @@ and was invisible to the dashboard becomes::
                     params={'seed': 0}) as run:
         # run.emitter_config is ready to hand to whatever emitter-setup
         # mechanism the workspace prefers (v2ecoli's set_emitter_override,
-        # vivarium_dashboard.inject_sqlite_emitter, etc.).
+        # vivarium_workbench.inject_sqlite_emitter, etc.).
         with workspace_emitter(**run.emitter_config):
             composite = build_composite('baseline', ...)
             composite.run(duration)
@@ -43,9 +43,9 @@ from pbg_superpowers.workspace_paths import WorkspacePaths
 
 
 # ---------------------------------------------------------------------------
-# Schema (mirrors vivarium_dashboard.lib.composite_runs)
+# Schema (mirrors vivarium_workbench.lib.composite_runs)
 # ---------------------------------------------------------------------------
-# We keep an in-tree copy to avoid a runtime dep on vivarium-dashboard: the
+# We keep an in-tree copy to avoid a runtime dep on vivarium-workbench: the
 # dashboard's connect() does the same bootstrap, so a runs.db produced here
 # is byte-compatible. If the dashboard later evolves the schema we mirror
 # the new columns via the same ALTER pattern.

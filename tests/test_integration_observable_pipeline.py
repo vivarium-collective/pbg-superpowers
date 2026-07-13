@@ -2,9 +2,9 @@
 
 This is the test the v2ecoli session-2 notes (friction #18) asked for: a
 single test that pins the contract between pbg-superpowers,
-vivarium-dashboard, and pbg-template so a regression in any one of them
+vivarium-workbench, and pbg-template so a regression in any one of them
 fails the suite. Friction notes #13 (mixed-type started_at sort) and
-#14 (nested observable resolution) — both fixed in vivarium-dashboard
+#14 (nested observable resolution) — both fixed in vivarium-workbench
 PR #40 — are the immediate regressions this protects against.
 
 The observable round-trip has five hops:
@@ -32,16 +32,16 @@ from pathlib import Path
 
 import pytest
 
-# This integration test crosses the pbg-superpowers ↔ vivarium-dashboard
+# This integration test crosses the pbg-superpowers ↔ vivarium-workbench
 # boundary on purpose — that's the whole point of F5. CI environments that
-# don't install vivarium-dashboard (it's a sibling pip-editable dep, not on
+# don't install vivarium-workbench (it's a sibling pip-editable dep, not on
 # PyPI) skip cleanly instead of failing. Local developers with the dashboard
 # installed get the full coverage. Same convention test_workspace_scaffold_snapshot
 # uses for its $PBG_TEMPLATE dependency.
 pytest.importorskip(
-    "vivarium_dashboard",
-    reason="integration test needs vivarium-dashboard installed; "
-           "pip install -e ../vivarium-dashboard (sibling checkout)",
+    "vivarium_workbench",
+    reason="integration test needs vivarium-workbench installed; "
+           "pip install -e ../vivarium-workbench (sibling checkout)",
 )
 
 from process_bigraph import Composite, allocate_core
@@ -135,12 +135,12 @@ def _make_runs_db_with_nested_state(db_path: Path, *, run_id: str,
 
 
 def test_nested_observable_path_renders_into_viz(tmp_path):
-    """`listeners.demo.count` is a NESTED path. Before vivarium-dashboard
+    """`listeners.demo.count` is a NESTED path. Before vivarium-workbench
     PR #40 the gather pipeline flattened only top-level keys, so the viz
     received an empty `count` input and silently rendered a "no data"
     placeholder. Pinning the fix: a viz declaring
     `inputs_map: count: listeners.demo.count` MUST end up with the values."""
-    from vivarium_dashboard.lib.investigations import render_visualizations
+    from vivarium_workbench.lib.investigations import render_visualizations
 
     study_dir = tmp_path / "ws" / "studies" / "demo"
     study_dir.mkdir(parents=True)
@@ -194,7 +194,7 @@ def test_nested_observable_path_renders_into_viz(tmp_path):
 def test_top_level_observable_path_still_works(tmp_path):
     """The PR #40 fix added nested-path support without breaking the flat
     case. A viz pointed at a top-level key must still see the values."""
-    from vivarium_dashboard.lib.investigations import render_visualizations
+    from vivarium_workbench.lib.investigations import render_visualizations
 
     study_dir = tmp_path / "ws" / "studies" / "demo-flat"
     study_dir.mkdir(parents=True)
@@ -238,7 +238,7 @@ def test_missing_observable_renders_error_stub_not_silent_blank(tmp_path):
     stub HTML (or at least an empty-data marker), not silently render
     nothing. The render_visualizations harness catches exceptions and
     writes an error stub — pinning that behavior."""
-    from vivarium_dashboard.lib.investigations import render_visualizations
+    from vivarium_workbench.lib.investigations import render_visualizations
 
     study_dir = tmp_path / "ws" / "studies" / "demo-missing"
     study_dir.mkdir(parents=True)
@@ -316,7 +316,7 @@ def _make_mixed_timestamp_workspace(tmp_path: Path) -> Path:
             "VALUES ('run-real', 'mixed', 1700000000.0, 'complete', 'baseline')"
         )
         # simulations (process_bigraph SQLiteEmitter schema) with TEXT ISO started_at.
-        # Columns mirror what vivarium_dashboard.lib.simulations_index._read_sqlite_emitter
+        # Columns mirror what vivarium_workbench.lib.simulations_index._read_sqlite_emitter
         # selects — drift here means the test fires a clear "schema changed"
         # signal rather than a confusing failure inside the dashboard reader.
         conn.execute("""
@@ -351,11 +351,11 @@ def _make_mixed_timestamp_workspace(tmp_path: Path) -> Path:
 
 
 def test_simulations_index_handles_mixed_timestamp_sources(tmp_path):
-    """Friction #13 (vivarium-dashboard PR #40 part 1): the moment a
+    """Friction #13 (vivarium-workbench PR #40 part 1): the moment a
     workspace's runs.db has both runs_meta (REAL ts) and simulations (TEXT
     ISO ts) rows, the sort key would raise `TypeError: str < float` and
     the whole Simulations tab went empty. Pin the fix."""
-    from vivarium_dashboard.lib.simulations_index import list_simulations
+    from vivarium_workbench.lib.simulations_index import list_simulations
 
     ws = _make_mixed_timestamp_workspace(tmp_path)
 
@@ -376,14 +376,14 @@ def test_simulations_index_handles_mixed_timestamp_sources(tmp_path):
 
 def test_dashboard_lib_imports_resolve():
     """Smoke test: every dashboard library symbol this file relies on must
-    import cleanly. If vivarium-dashboard renames or moves any of these,
+    import cleanly. If vivarium-workbench renames or moves any of these,
     this test fires first instead of a confusing AttributeError deep inside
     one of the round-trip tests."""
-    from vivarium_dashboard.lib.investigations import (  # noqa: F401
+    from vivarium_workbench.lib.investigations import (  # noqa: F401
         _resolve_observable, build_viz_composite,
         gather_emitter_outputs, render_visualizations,
     )
-    from vivarium_dashboard.lib.simulations_index import (  # noqa: F401
+    from vivarium_workbench.lib.simulations_index import (  # noqa: F401
         list_simulations,
     )
 

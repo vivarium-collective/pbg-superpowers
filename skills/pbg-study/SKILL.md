@@ -8,7 +8,7 @@ argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|b
 
 # pbg-study
 
-The end-to-end interface for **Studies** in the vivarium-dashboard, organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide; see [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md#study-lifecycle)).
+The end-to-end interface for **Studies** in the vivarium-workbench, organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide; see [`docs/concepts/vivarium-workbench-model.md`](../../docs/concepts/vivarium-workbench-model.md#study-lifecycle)).
 
 ## Layout (investigation-centric, nested)
 
@@ -69,11 +69,11 @@ runs them via `POST /api/study-tests-run {study}` and writes a summary back to
 `study.yaml.tests.last_results`. The Tests tab on the Study detail page shows
 per-test pass/fail with expandable tracebacks.
 
-Tests use a `run` pytest fixture provided by `vivarium_dashboard.testing`:
+Tests use a `run` pytest fixture provided by `vivarium_workbench.testing`:
 
 ```python
 # studies/<slug>/tests/conftest.py
-from vivarium_dashboard.testing import run  # noqa: F401
+from vivarium_workbench.testing import run  # noqa: F401
 
 # studies/<slug>/tests/test_steady_state.py
 def test_dnaA_count_in_range(run):
@@ -644,12 +644,12 @@ After a successful run, automatically invokes `refresh-viz` for the study so reg
 
 #### `run-script <study-name> [--entry <name>] [--list] [--no-refresh-viz]`
 
-Run a study's **bespoke runner script** declared in `study.yaml.canonical_runs[]`. This is the third sibling alongside `run-baseline` / `run-variant`, and serves studies whose runners predate the dashboard's in-process composite executor — division-spanning multi-gen sims, calibration harnesses, parquet rerun wrappers (the v2ecoli `sims/run_dnaa_*.py` family is the canonical example). See `canonical_runs:` in [`docs/concepts/vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md#canonical-run-recipe-bespoke-scripts) for the schema.
+Run a study's **bespoke runner script** declared in `study.yaml.canonical_runs[]`. This is the third sibling alongside `run-baseline` / `run-variant`, and serves studies whose runners predate the dashboard's in-process composite executor — division-spanning multi-gen sims, calibration harnesses, parquet rerun wrappers (the v2ecoli `sims/run_dnaa_*.py` family is the canonical example). See `canonical_runs:` in [`docs/concepts/vivarium-workbench-model.md`](../../docs/concepts/vivarium-workbench-model.md#canonical-run-recipe-bespoke-scripts) for the schema.
 
 Flow:
 
 1. Locate `studies/<slug>/study.yaml` from the workspace root.
-2. Read `canonical_runs:`. Fail with a clear message if absent or empty: *"Study <slug> has no `canonical_runs:` block. Either add one (see docs/concepts/vivarium-dashboard-model.md#canonical-run-recipe-bespoke-scripts) or use `/pbg-study run-baseline` if the study has a baseline composite."*
+2. Read `canonical_runs:`. Fail with a clear message if absent or empty: *"Study <slug> has no `canonical_runs:` block. Either add one (see docs/concepts/vivarium-workbench-model.md#canonical-run-recipe-bespoke-scripts) or use `/pbg-study run-baseline` if the study has a baseline composite."*
 3. `--list`: print each entry as `<name> (default? ★) — <label or "—"> — python <script> <args...>`, exit 0.
 4. Else: pick the entry whose `default: true` is set; if none flagged, pick the first. `--entry <name>` overrides.
 5. Resolve `script:` against the workspace root. Fail if file doesn't exist.
@@ -856,7 +856,7 @@ At least one flag is required. YAML-direct subcommand.
 Walk the study's `behavior_tests[]` outcomes (under `runs[]`) and propose
 one structured finding per outcome not already covered by an entry in
 `findings[]`. The Pass 10A findings protocol (see
-[`vivarium-dashboard-model.md`](../../docs/concepts/vivarium-dashboard-model.md#findings-protocol-pass-10a))
+[`vivarium-workbench-model.md`](../../docs/concepts/vivarium-workbench-model.md#findings-protocol-pass-10a))
 formalizes each finding as `{id, kind, status, statement}` plus optional
 `evidence` / `expected` / `expert_reference` / `explanation` / `next_action`
 sub-objects.

@@ -2,20 +2,20 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Make the vivarium-dashboard render the nested investigation structure: endpoints resolve studies under `investigations/<inv>/studies/`, the top-left becomes a **repo switcher**, the menu reads **Investigations**, the list→detail→studies-sync flow works, lifecycle badges show git state, and reports are per-investigation.
+**Goal:** Make the vivarium-workbench render the nested investigation structure: endpoints resolve studies under `investigations/<inv>/studies/`, the top-left becomes a **repo switcher**, the menu reads **Investigations**, the list→detail→studies-sync flow works, lifecycle badges show git state, and reports are per-investigation.
 
 **Architecture:** Build on Phase 1's `WorkspacePaths.study_dir()` (already mirrored into the dashboard's `lib/workspace_paths.py`). Most UI (list/detail views, studies-sync, `/api/workspaces`) already exists — repoint study resolution, repurpose the switcher, add badges, relabel.
 
 **Tech Stack:** Python 3.12 stdlib http.server, pytest; vanilla-JS SPA (`walkthrough.js`, `investigation-switcher.js`), Jinja template (`index.html.j2`).
 
-**Spec:** `docs/superpowers/specs/2026-06-06-investigation-centric-restructure-design.md`. **Branch:** `vivarium-dashboard feat/dashboard-investigation-nav` (off `feat/nested-study-resolution`).
+**Spec:** `docs/superpowers/specs/2026-06-06-investigation-centric-restructure-design.md`. **Branch:** `vivarium-workbench feat/dashboard-investigation-nav` (off `feat/nested-study-resolution`).
 
 ---
 
 ## Task 1: Nested study resolution in iset endpoints (TDD)
 
 **Files:**
-- Modify: `vivarium_dashboard/server.py` — `_read_study_status` (~1213), `_get_iset_detail` study loop (~7699)
+- Modify: `vivarium_workbench/server.py` — `_read_study_status` (~1213), `_get_iset_detail` study loop (~7699)
 - Test: `tests/test_iset_nested.py`
 
 - [ ] **Step 1: Write failing test** — a nested workspace where the member study lives at `investigations/<inv>/studies/<slug>/study.yaml`; assert `_build_iset_summary_for_test` reports `n_studies==1` with the study's status (not "planning"/missing), and `_build_iset_detail_for_test` resolves the study (status != "missing").
@@ -24,7 +24,7 @@
 # tests/test_iset_nested.py
 from pathlib import Path
 import yaml
-from vivarium_dashboard.server import _build_iset_summary_for_test, _build_iset_detail_for_test
+from vivarium_workbench.server import _build_iset_summary_for_test, _build_iset_detail_for_test
 
 def _nested_ws(tmp):
     (tmp / "workspace.yaml").write_text("name: demo\n", encoding="utf-8")
@@ -118,7 +118,7 @@ def test_lifecycle_badge_main_vs_branch(tmp_path):
 
 ## Task 3: Menu label + page heading "Investigation" → "Investigations"
 
-**Files:** Modify `vivarium_dashboard/templates/index.html.j2:372` (menu label) + the page `<h..>`/lead at ~970.
+**Files:** Modify `vivarium_workbench/templates/index.html.j2:372` (menu label) + the page `<h..>`/lead at ~970.
 
 - [ ] **Step 1:** Change line 372 `<span class="viv-rail-link-label">Investigation</span>` → `Investigations`. Update the page-investigations heading/lead text to plural ("All investigations in this repo …").
 - [ ] **Step 2: Verify render** — `grep -n 'rail-link-label">Investigations<' index.html.j2` returns the line; load the template via the existing template test if present.
@@ -128,7 +128,7 @@ def test_lifecycle_badge_main_vs_branch(tmp_path):
 
 ## Task 4: Top-left repo switcher (repurpose the switcher to `/api/workspaces`)
 
-**Files:** Modify `vivarium_dashboard/static/investigation-switcher.js` (or add `repo-switcher.js` + swap the include in `index.html.j2`); trigger label at template ~304.
+**Files:** Modify `vivarium_workbench/static/investigation-switcher.js` (or add `repo-switcher.js` + swap the include in `index.html.j2`); trigger label at template ~304.
 
 - [ ] **Step 1:** Add a `refreshRepos()` path that fetches `/api/workspaces` and renders rows: `current` (no-op), `running` (→ `window.location.assign(row.url)`), `stopped`/`stale`/`missing` (→ show "start with `/pbg-dashboard open`" hint). Keep the existing investigation registry as a secondary section OR move it behind the Branch menu.
 - [ ] **Step 2:** Trigger label (template ~304) → show repo name only (drop `:investigation`). Keep `publishCurrentSlug` for studies-sync (now driven by the investigations list selection, not the top-left).

@@ -57,7 +57,7 @@ Status legibility is the canonical example: the report derives a study's
 run/test/verdict markers from `runs[].outcomes` and the 6-axis status fields,
 **not** from a hand-set `status: passed`. Fixing one study's yaml without
 fixing the derivation just moves the problem to the next investigation. See
-[reviewer-facing status clarity](../concepts/vivarium-dashboard-model.md#reviewer-facing-status-clarity).
+[reviewer-facing status clarity](../concepts/vivarium-workbench-model.md#reviewer-facing-status-clarity).
 
 ### 4. Run heavy work in the background, verify against real data
 
@@ -84,18 +84,18 @@ wrong.
 ### 6. Account for the install / deployment gap
 
 A workspace's `.venv` usually runs **non-editable, git-pinned** installs of
-`pbg-superpowers` and `vivarium-dashboard`. Editing the source repos does
+`pbg-superpowers` and `vivarium-workbench`. Editing the source repos does
 **not** change what the workspace's dashboard serves until you make the source
 live:
 
 ```bash
-uv pip install -e <path-to-vivarium-dashboard> --no-deps
+uv pip install -e <path-to-vivarium-workbench> --no-deps
 uv pip install -e <path-to-pbg-superpowers> --no-deps
 python -m pbg_superpowers.dashboard restart
 ```
 
 If a correct change "doesn't show up," check the install mode before debugging
-the code: `python -c "import vivarium_dashboard, os; print(os.path.dirname(vivarium_dashboard.__file__))"`
+the code: `python -c "import vivarium_workbench, os; print(os.path.dirname(vivarium_workbench.__file__))"`
 (run from *outside* the source repo so cwd doesn't mask the real import).
 
 ### 7. Commit, push, regenerate, eyeball
@@ -172,6 +172,6 @@ reading, record FAIL, and start diagnosing a non-problem.
 
 ## Related
 
-- [Reviewer-facing status clarity](../concepts/vivarium-dashboard-model.md#reviewer-facing-status-clarity) — the `study_clarity_summary` backbone + the report-linter clarity checks.
+- [Reviewer-facing status clarity](../concepts/vivarium-workbench-model.md#reviewer-facing-status-clarity) — the `study_clarity_summary` backbone + the report-linter clarity checks.
 - `/pbg-report` skill — the pre-send audit + lint + render.
 - `pbg_superpowers.study_status` — derive-on-read status (the single source of truth for run/test/verdict markers).

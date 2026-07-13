@@ -4,7 +4,7 @@
 
 This is the remaining production-hardening work from the Fable-5 cross-repo review (2026-06-09). The **P0 correctness/security fixes shipped** (10 PRs merged: `allocate_core` isolation, engine global state, `report.py` nested layout, dashboard CSRF, + the safe-cleanup pass). The **investigation/study-spine program is complete and separate** (run/outcome spine + readout coordination + stages #2–#5). Everything below is the leftover P1/P2 — independent items of varying value, risk, and churn.
 
-Repos in scope: `bigraph-schema` → `process-bigraph` → (`pbg-superpowers` · `vivarium-dashboard` · `pbg-template` · `pbg-emitters`). ~66K LOC first-party Python.
+Repos in scope: `bigraph-schema` → `process-bigraph` → (`pbg-superpowers` · `vivarium-workbench` · `pbg-template` · `pbg-emitters`). ~66K LOC first-party Python.
 
 ---
 
@@ -26,7 +26,7 @@ Repos in scope: `bigraph-schema` → `process-bigraph` → (`pbg-superpowers` ·
 
 ## C — Targeted perf fixes
 Concrete, bounded, low-risk:
-1. `vivarium-dashboard` `/api/simulations` — add a cache.
+1. `vivarium-workbench` `/api/simulations` — add a cache.
 2. `pbg-superpowers` `discover_all` — move off the request path.
 3. engine per-tick walk + `JSONEmitter` O(n²) — fix the quadratic path.
 
@@ -39,7 +39,7 @@ Concrete, bounded, low-risk:
 *Value: medium. Risk: low. Mechanical/broad. Good parallel-agent work.*
 
 ## E — God-file splits (LAST — riskiest)
-- `vivarium-dashboard/server.py` ~13K LOC.
+- `vivarium-workbench/server.py` ~13K LOC.
 - `process-bigraph/composite.py` ~3.4K LOC.
 
 *Value: medium (maintainability). Risk: high (broad ripple). Do last, carefully.*

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, PyYAML, sqlite3 (stdlib), argparse; pytest. Spec: `docs/specs/2026-06-09-study-run-outcome-spine-design.md`.
 
-**Repos touched:** `pbg-superpowers` (engine + status + CLI), `vivarium-dashboard` (gate + post-run hook + endpoint).
+**Repos touched:** `pbg-superpowers` (engine + status + CLI), `vivarium-workbench` (gate + post-run hook + endpoint).
 
 ---
 
@@ -21,8 +21,8 @@
 - Modify: `pyproject.toml` — add `pbg-sync-runs` console script.
 - Test: `tests/test_study_outcomes.py`, additions to `tests/test_study_status.py` (or new `tests/test_canonical_run.py`), `tests/test_run_registry_list.py`.
 
-**vivarium-dashboard**
-- Modify: `vivarium_dashboard/server.py` — gate `_condition_satisfied` "tests-passed" → canonical outcomes; post-run hook in the `if code == 200:` block (~`:3115`); add `_post_study_sync_runs` + `_POST_ROUTE_MAP` entry.
+**vivarium-workbench**
+- Modify: `vivarium_workbench/server.py` — gate `_condition_satisfied` "tests-passed" → canonical outcomes; post-run hook in the `if code == 200:` block (~`:3115`); add `_post_study_sync_runs` + `_POST_ROUTE_MAP` entry.
 - Test: `tests/test_gate_canonical_source.py`, `tests/test_study_sync_runs_endpoint.py`.
 
 ---
@@ -521,13 +521,13 @@ git commit -m "feat(study_outcomes): pbg-sync-runs CLI (--study/--all)"
 ### Task 6: Dashboard gate reads canonical outcomes (collapse the third source)
 
 **Files:**
-- Modify: `vivarium-dashboard/vivarium_dashboard/server.py` (`_condition_satisfied`, ~`:8615-8631`)
-- Test: `vivarium-dashboard/tests/test_gate_canonical_source.py`
+- Modify: `vivarium-workbench/vivarium_workbench/server.py` (`_condition_satisfied`, ~`:8615-8631`)
+- Test: `vivarium-workbench/tests/test_gate_canonical_source.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# vivarium-dashboard/tests/test_gate_canonical_source.py
+# vivarium-workbench/tests/test_gate_canonical_source.py
 from pbg_superpowers import study_status
 
 def _passed(parent):
@@ -578,7 +578,7 @@ Expected: PASS — gate and pills now read the same canonical-run source.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add vivarium_dashboard/server.py tests/test_gate_canonical_source.py
+git add vivarium_workbench/server.py tests/test_gate_canonical_source.py
 git commit -m "fix(gate): tests-passed reads canonical-run outcomes (one source with verdict pills)"
 ```
 
@@ -587,15 +587,15 @@ git commit -m "fix(gate): tests-passed reads canonical-run outcomes (one source 
 ### Task 7: Post-run hook records runs into study.yaml
 
 **Files:**
-- Modify: `vivarium-dashboard/vivarium_dashboard/server.py` (`if code == 200:` block, ~`:3115`)
-- Test: `vivarium-dashboard/tests/test_post_run_records.py`
+- Modify: `vivarium-workbench/vivarium_workbench/server.py` (`if code == 200:` block, ~`:3115`)
+- Test: `vivarium-workbench/tests/test_post_run_records.py`
 
 - [ ] **Step 1: Write the failing test**
 
 Drive the `_for_test` helper directly (no HTTP). If the run launcher is hard to invoke in a unit test, test the hook function in isolation:
 
 ```python
-# vivarium-dashboard/tests/test_post_run_records.py
+# vivarium-workbench/tests/test_post_run_records.py
 from pathlib import Path
 from pbg_superpowers import study_io, run_registry, study_outcomes
 
@@ -633,7 +633,7 @@ Run a baseline from the dashboard (or `_post_study_run_baseline_for_test(ws, bod
 - [ ] **Step 5: Commit**
 
 ```bash
-git add vivarium_dashboard/server.py tests/test_post_run_records.py
+git add vivarium_workbench/server.py tests/test_post_run_records.py
 git commit -m "feat(server): record runs into study.yaml after a successful baseline/variant run"
 ```
 
@@ -642,16 +642,16 @@ git commit -m "feat(server): record runs into study.yaml after a successful base
 ### Task 8: `/api/study-sync-runs` endpoint
 
 **Files:**
-- Modify: `vivarium-dashboard/vivarium_dashboard/server.py` (`_POST_ROUTE_MAP` ~`:206`; new handler + `_for_test`)
-- Test: `vivarium-dashboard/tests/test_study_sync_runs_endpoint.py`
+- Modify: `vivarium-workbench/vivarium_workbench/server.py` (`_POST_ROUTE_MAP` ~`:206`; new handler + `_for_test`)
+- Test: `vivarium-workbench/tests/test_study_sync_runs_endpoint.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# vivarium-dashboard/tests/test_study_sync_runs_endpoint.py
+# vivarium-workbench/tests/test_study_sync_runs_endpoint.py
 from pathlib import Path
 from pbg_superpowers import study_io, run_registry
-from vivarium_dashboard import server
+from vivarium_workbench import server
 
 def test_sync_runs_for_test(tmp_path: Path):
     (tmp_path / "workspace.yaml").write_text("name: ws\n")
@@ -667,7 +667,7 @@ def test_sync_runs_for_test(tmp_path: Path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_study_sync_runs_endpoint.py -v`
-Expected: FAIL — `AttributeError: module 'vivarium_dashboard.server' has no attribute '_post_study_sync_runs_for_test'`
+Expected: FAIL — `AttributeError: module 'vivarium_workbench.server' has no attribute '_post_study_sync_runs_for_test'`
 
 - [ ] **Step 3: Implement handler + `_for_test` + route**
 
@@ -710,7 +710,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add vivarium_dashboard/server.py tests/test_study_sync_runs_endpoint.py
+git add vivarium_workbench/server.py tests/test_study_sync_runs_endpoint.py
 git commit -m "feat(server): /api/study-sync-runs endpoint"
 ```
 
@@ -747,7 +747,7 @@ git commit -m "docs(pbg-study): run-script auto-records runs via pbg-sync-runs"
 
 ```bash
 cd pbg-superpowers && .venv/bin/python -m pytest -q
-cd ../vivarium-dashboard && .venv/bin/python -m pytest tests/test_gate_canonical_source.py tests/test_study_sync_runs_endpoint.py tests/test_post_run_records.py -q
+cd ../vivarium-workbench && .venv/bin/python -m pytest tests/test_gate_canonical_source.py tests/test_study_sync_runs_endpoint.py tests/test_post_run_records.py -q
 ```
 Expected: all green (pre-existing unrelated failures, if any, unchanged).
 

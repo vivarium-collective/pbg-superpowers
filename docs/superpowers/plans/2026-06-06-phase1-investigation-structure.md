@@ -4,7 +4,7 @@
 
 **Goal:** Make pbg-superpowers resolve, scaffold, and migrate **nested self-contained investigations** (`investigations/<inv>/studies/<study>/`) while keeping legacy flat workspaces working unchanged.
 
-**Architecture:** Add nested-aware study resolution to the layout layer (`workspace_paths.py` + the vendored copy in vivarium-dashboard, kept in sync by the drift guard), expose study helpers in `paths.py`, add a `migrate_nested` tool, and update the `pbg-investigation` scaffold + `pbg-template` to emit the nested layout. Back-compat is load-bearing: a workspace with no nesting still resolves flat.
+**Architecture:** Add nested-aware study resolution to the layout layer (`workspace_paths.py` + the vendored copy in vivarium-workbench, kept in sync by the drift guard), expose study helpers in `paths.py`, add a `migrate_nested` tool, and update the `pbg-investigation` scaffold + `pbg-template` to emit the nested layout. Back-compat is load-bearing: a workspace with no nesting still resolves flat.
 
 **Tech Stack:** Python 3.12, pytest, PyYAML, dataclasses, git (`git mv`).
 
@@ -14,13 +14,13 @@
 
 ## File Structure
 
-- `pbg_superpowers/workspace_paths.py` — add `study_dir()`, `iter_study_dirs()`, `study_owner()`, nested detection. (VENDORED — mirror to vivarium-dashboard in Task 6.)
+- `pbg_superpowers/workspace_paths.py` — add `study_dir()`, `iter_study_dirs()`, `study_owner()`, nested detection. (VENDORED — mirror to vivarium-workbench in Task 6.)
 - `pbg_superpowers/paths.py` — expose `study_dir(slug)` CLI + import the new helpers.
 - `pbg_superpowers/migrate_nested.py` — NEW: flat→nested migration tool + CLI.
 - `pbg_superpowers/scaffold.py` — emit nested investigation scaffold.
 - `tests/test_workspace_paths_nested.py` — NEW resolver tests.
 - `tests/test_migrate_nested.py` — NEW migration tests.
-- `vivarium-dashboard/vivarium_dashboard/lib/workspace_paths.py` — mirror the resolver additions (drift guard).
+- `vivarium-workbench/vivarium_workbench/lib/workspace_paths.py` — mirror the resolver additions (drift guard).
 - pbg-template (locate via scaffold) — nested template dirs + `workspace.yaml`.
 
 ---
@@ -439,25 +439,25 @@ git commit -m "build: pbg-migrate-nested console script"
 ## Task 6: Mirror the resolver to the vendored canonical copy (drift guard)
 
 **Files:**
-- Modify: `vivarium-dashboard/vivarium_dashboard/lib/workspace_paths.py`
+- Modify: `vivarium-workbench/vivarium_workbench/lib/workspace_paths.py`
 
 - [ ] **Step 1: Check the drift guard**
 
 Run: `cd ~/code/pbg-superpowers && .venv/bin/python -m pytest tests/test_workspace_paths.py -v`
 Expected: PASS today (copies in sync for `LAYOUT_DEFAULTS`). Read the guard to see exactly what it compares (it may compare only `LAYOUT_DEFAULTS`, in which case the new methods don't trip it — confirm).
 
-- [ ] **Step 2: Add the same three methods** (`iter_study_dirs`, `study_dir`, `study_owner`) verbatim from Task 1 to the `WorkspacePaths` class in `vivarium-dashboard/vivarium_dashboard/lib/workspace_paths.py`.
+- [ ] **Step 2: Add the same three methods** (`iter_study_dirs`, `study_dir`, `study_owner`) verbatim from Task 1 to the `WorkspacePaths` class in `vivarium-workbench/vivarium_workbench/lib/workspace_paths.py`.
 
 - [ ] **Step 3: Verify both import + guard passes**
 
 Run: `cd ~/code/pbg-superpowers && .venv/bin/python -m pytest tests/test_workspace_paths.py tests/test_workspace_paths_nested.py -v`
 Expected: PASS
 
-- [ ] **Step 4: Commit (in vivarium-dashboard repo, on a Phase-1 branch there)**
+- [ ] **Step 4: Commit (in vivarium-workbench repo, on a Phase-1 branch there)**
 
 ```bash
-cd ~/code/vivarium-dashboard && git checkout -b feat/nested-study-resolution origin/main
-git add vivarium_dashboard/lib/workspace_paths.py
+cd ~/code/vivarium-workbench && git checkout -b feat/nested-study-resolution origin/main
+git add vivarium_workbench/lib/workspace_paths.py
 git commit -m "feat(paths): mirror nested study resolver (sync with pbg-superpowers vendored copy)"
 ```
 
@@ -501,7 +501,7 @@ Expected: the new tests pass; the 4 pre-existing failures (`test_expert_search`,
 
 ```bash
 cd ~/code/pbg-superpowers && git push origin feat/investigation-centric-structure
-cd ~/code/vivarium-dashboard && git push origin feat/nested-study-resolution
+cd ~/code/vivarium-workbench && git push origin feat/nested-study-resolution
 ```
 
 - [ ] **Step 3: Open draft PRs** referencing the spec; summarize the nested resolver, migration tool, and scaffold; note Phase 2 (dashboard) + Phase 3 (migrate v2ecoli) follow.

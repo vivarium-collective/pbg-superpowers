@@ -6,10 +6,10 @@
 
 **Architecture:** A pure freshness core (`viz_freshness.py`) is the single source of truth, vendored into the dashboard (drift-guarded like `workspace_paths`). The per-study `runs.db` `runs_meta` table gains `emitter_path` and a `latest_run()` accessor; `visualizations[]` entries gain a `render:` command; each chart gets a `<chart>.meta.json` provenance sidecar. `refresh-viz` re-runs registered render commands against the latest run (auto on rerun, error-tolerant) and reports the rest. Detection lights up the linter, the dashboard study card, and the report.
 
-**Tech Stack:** Python 3.12 stdlib (sqlite3, json, hashlib, subprocess), pytest; vanilla-JS SPA (`walkthrough.js`); the existing `pbg_superpowers` package + `vivarium_dashboard` package.
+**Tech Stack:** Python 3.12 stdlib (sqlite3, json, hashlib, subprocess), pytest; vanilla-JS SPA (`walkthrough.js`); the existing `pbg_superpowers` package + `vivarium_workbench` package.
 
 **Spec:** `docs/superpowers/specs/2026-06-07-viz-run-provenance-freshness-design.md`.
-**Branches:** `pbg-superpowers feat/viz-run-provenance` (spec already committed here) + a matching `vivarium-dashboard feat/viz-run-provenance`.
+**Branches:** `pbg-superpowers feat/viz-run-provenance` (spec already committed here) + a matching `vivarium-workbench feat/viz-run-provenance`.
 
 ---
 
@@ -21,13 +21,13 @@
 - Modify `pbg_superpowers/backfill_runs.py` — discover + register parquet/zarr run dirs.
 - Create `pbg_superpowers/refresh_viz.py` — `refresh_study_viz(study_dir, spec, latest)` → runs `render:` commands, stamps meta, returns a per-chart result list (error-tolerant).
 - Modify `pbg_superpowers/report_linter.py` — `viz_stale_vs_latest_run` check; retire `figure_stale_vs_run`.
-- Modify `skills/pbg-study/SKILL.md`, `skills/pbg-investigation/SKILL.md`, `docs/concepts/vivarium-dashboard-model.md`.
+- Modify `skills/pbg-study/SKILL.md`, `skills/pbg-investigation/SKILL.md`, `docs/concepts/vivarium-workbench-model.md`.
 - Tests under `tests/`.
 
-**vivarium-dashboard**
-- Create `vivarium_dashboard/lib/viz_freshness.py` — vendored copy of the pure core (drift-guard test).
-- Modify `vivarium_dashboard/server.py` — `_get_study_charts` returns freshness; a `/api/study-refresh-viz/<name>` route.
-- Modify `vivarium_dashboard/static/walkthrough.js` — per-chart freshness badge + Refresh affordance (live card + report).
+**vivarium-workbench**
+- Create `vivarium_workbench/lib/viz_freshness.py` — vendored copy of the pure core (drift-guard test).
+- Modify `vivarium_workbench/server.py` — `_get_study_charts` returns freshness; a `/api/study-refresh-viz/<name>` route.
+- Modify `vivarium_workbench/static/walkthrough.js` — per-chart freshness badge + Refresh affordance (live card + report).
 - Tests under `tests/`.
 
 ---
@@ -192,7 +192,7 @@ def manifest_diff(study_dir: Path, entries: list[dict]) -> dict:
 
 **Files:**
 - Create: `pbg_superpowers/run_registry.py`
-- Modify: `vivarium_dashboard/lib/composite_runs.py:_NEW_COLUMNS` (add `emitter_path`) — and mirror the column in the per-study runs.db writer.
+- Modify: `vivarium_workbench/lib/composite_runs.py:_NEW_COLUMNS` (add `emitter_path`) — and mirror the column in the per-study runs.db writer.
 - Test: `tests/test_run_registry.py`
 
 Context: `runs_meta` columns today are `run_id, spec_id, label, params_json, started_at, completed_at, n_steps, status, sim_name` + nullable `_NEW_COLUMNS` (`pid, progress_step, log_path, heartbeat_at, generation_id`). `_latest_run_timestamp` (server.py:795) already does `SELECT MAX(COALESCE(completed_at, started_at))`. We need the *row* (id too).
@@ -287,7 +287,7 @@ def latest_run(runs_db: Path) -> dict | None:
         return None
 ```
 
-- [ ] **Step 4: Add `emitter_path` to the live schema.** In `vivarium_dashboard/lib/composite_runs.py` add `"emitter_path": "TEXT"` to `_NEW_COLUMNS` (auto-ALTERed by `_migrate_runs_meta`). Where each runner records its row (the `run-baseline`/`run-variant`/`run-script` server handlers that call `save_metadata` + the completion update), pass the emitter store path through to a new `emitter_path` value on the completion UPDATE. (Find the completion UPDATE via `grep -n "completed_at" vivarium_dashboard/lib/composite_runs.py`.)
+- [ ] **Step 4: Add `emitter_path` to the live schema.** In `vivarium_workbench/lib/composite_runs.py` add `"emitter_path": "TEXT"` to `_NEW_COLUMNS` (auto-ALTERed by `_migrate_runs_meta`). Where each runner records its row (the `run-baseline`/`run-variant`/`run-script` server handlers that call `save_metadata` + the completion update), pass the emitter store path through to a new `emitter_path` value on the completion UPDATE. (Find the completion UPDATE via `grep -n "completed_at" vivarium_workbench/lib/composite_runs.py`.)
 
 - [ ] **Step 5: Run — expect PASS.** `pytest tests/test_run_registry.py -q`
 - [ ] **Step 6: Commit** `feat(runs): latest_run() accessor + emitter_path column on runs_meta`
@@ -509,20 +509,20 @@ Add `"viz_stale_vs_latest_run"` to `CHECKS`, add `_check_viz_stale_vs_latest_run
 
 ## Task 6: `refresh-viz` skill verbs + auto-on-rerun (pbg-superpowers)
 
-**Files:** `skills/pbg-study/SKILL.md`, `skills/pbg-investigation/SKILL.md`, `docs/concepts/vivarium-dashboard-model.md`.
+**Files:** `skills/pbg-study/SKILL.md`, `skills/pbg-investigation/SKILL.md`, `docs/concepts/vivarium-workbench-model.md`.
 
 - [ ] **Step 1:** In `pbg-study/SKILL.md` add the `refresh-viz <study> [--no-auto]` subcommand: resolve study dir via `python -m pbg_superpowers.paths --study <slug>`, call `refresh_study_viz(study_dir, spec, latest_run(runs.db))`, print the per-chart result list (rendered / error / needs_manual_refresh). Document `visualizations[].render` (with `{chart}` substitution + `PBG_RUN_DIR` / `PBG_RUN_ID` env) in the same file.
 - [ ] **Step 2:** Add a `--no-refresh-viz` flag note to `run-baseline` / `run-variant` / `run-script`: after a successful run they invoke `refresh-viz` for that study unless the flag is set.
 - [ ] **Step 3:** In `pbg-investigation/SKILL.md` add `refresh-viz <inv> [--studies a,b]` orchestrating the study verb over members.
-- [ ] **Step 4:** In `docs/concepts/vivarium-dashboard-model.md` document the provenance/freshness model (`render:`, `.meta.json`, fresh/stale/untracked, `latest_run`).
+- [ ] **Step 4:** In `docs/concepts/vivarium-workbench-model.md` document the provenance/freshness model (`render:`, `.meta.json`, fresh/stale/untracked, `latest_run`).
 - [ ] **Step 5: Commit** `feat(skills): pbg-study/-investigation refresh-viz + auto-on-rerun + docs`
 
 ---
 
-## Task 7: Vendored freshness mirror + drift guard (vivarium-dashboard, TDD)
+## Task 7: Vendored freshness mirror + drift guard (vivarium-workbench, TDD)
 
 **Files:**
-- Create: `vivarium_dashboard/lib/viz_freshness.py` (byte-copy of `pbg_superpowers/viz_freshness.py`).
+- Create: `vivarium_workbench/lib/viz_freshness.py` (byte-copy of `pbg_superpowers/viz_freshness.py`).
 - Test: `tests/test_viz_freshness_mirror.py` (drift guard, same pattern as the `workspace_paths` mirror test).
 
 - [ ] **Step 1: Write failing test** asserting the two files' `chart_freshness`/`stamp_meta`/`manifest_diff` source bodies are identical (read both files, compare the function source via `inspect.getsource` or a normalized text compare of the shared region).
@@ -533,9 +533,9 @@ Add `"viz_stale_vs_latest_run"` to `CHECKS`, add `_check_viz_stale_vs_latest_run
 
 ---
 
-## Task 8: Freshness in the charts API (vivarium-dashboard, TDD)
+## Task 8: Freshness in the charts API (vivarium-workbench, TDD)
 
-**Files:** Modify `vivarium_dashboard/server.py` `_get_study_charts` (7622) + `_build`-style helper; Test `tests/test_study_charts_freshness.py`.
+**Files:** Modify `vivarium_workbench/server.py` `_get_study_charts` (7622) + `_build`-style helper; Test `tests/test_study_charts_freshness.py`.
 
 - [ ] **Step 1: Write failing test** — a study with a declared `visualizations[]` entry + a stamped chart whose `source_run_id` matches the runs.db latest → the `/api/study-charts/<name>` payload marks that chart `freshness: "fresh"`; a mismatched stamp → `"stale"`; an on-disk chart with no entry → `"untracked"`.
 - [ ] **Step 2: Run — FAIL.**
@@ -545,9 +545,9 @@ Add `"viz_stale_vs_latest_run"` to `CHECKS`, add `_check_viz_stale_vs_latest_run
 
 ---
 
-## Task 9: Study-card + report freshness badge + Refresh affordance (vivarium-dashboard)
+## Task 9: Study-card + report freshness badge + Refresh affordance (vivarium-workbench)
 
-**Files:** Modify `vivarium_dashboard/static/walkthrough.js` (the Visualisations section render + a `/api/study-refresh-viz/<name>` POST handler in `server.py`).
+**Files:** Modify `vivarium_workbench/static/walkthrough.js` (the Visualisations section render + a `/api/study-refresh-viz/<name>` POST handler in `server.py`).
 
 - [ ] **Step 1:** Add `POST /api/study-refresh-viz/<name>` to `server.py` that calls `refresh_viz.refresh_study_viz(study_dir, spec, latest_run(...))` and returns the result list (render-error-tolerant; never 500 on a single chart failure).
 - [ ] **Step 2:** In `walkthrough.js`, where charts render (the Visualisations block), read each chart's `freshness` from the charts API and show a badge: `✓ latest run` (fresh) / `⚠ stale — from run <id>` (stale) / `❓ untracked` / `◌ not rendered`. Add a "Refresh visualizations" button on the study card that POSTs to the new endpoint and re-fetches charts.
@@ -560,7 +560,7 @@ Add `"viz_stale_vs_latest_run"` to `CHECKS`, add `_check_viz_stale_vs_latest_run
 ## Task 10: Green + push + PRs (no merge)
 
 - [ ] **Step 1:** `pytest -q` green in both repos (note pre-existing polars/build skips). 
-- [ ] **Step 2:** Push `feat/viz-run-provenance` in both repos; open draft PRs referencing the spec; the vivarium-dashboard PR stacks conceptually on the pbg-superpowers one (vendored core). Do NOT merge.
+- [ ] **Step 2:** Push `feat/viz-run-provenance` in both repos; open draft PRs referencing the spec; the vivarium-workbench PR stacks conceptually on the pbg-superpowers one (vendored core). Do NOT merge.
 
 ---
 

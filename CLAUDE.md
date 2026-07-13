@@ -1,10 +1,10 @@
 # pbg-superpowers — agent entry point
 
-This is the Claude Code plugin that drives the [vivarium-dashboard](https://github.com/vivarium-collective/vivarium-dashboard) — a web UI for building and running process-bigraph simulation workspaces. Skills in this plugin read from the dashboard, write to it, and fill it out with content generated from user prompts.
+This is the Claude Code plugin that drives the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench) — a web UI for building and running process-bigraph simulation workspaces. Skills in this plugin read from the dashboard, write to it, and fill it out with content generated from user prompts.
 
 ## Start here
 
-1. **Concept map: [`docs/concepts/vivarium-dashboard-model.md`](docs/concepts/vivarium-dashboard-model.md)** — canonical vocabulary (Workspace · Study · Baseline · Variant · Intervention · Run · Visualization), the 8-section canonical `study.yaml` (Pass 7), Decide-phase follow-up proposals (Pass 8), on-disk shapes, the dashboard API surface, and which skill controls which concept. **Read this before invoking any Study/Baseline/Variant skill.**
+1. **Concept map: [`docs/concepts/vivarium-workbench-model.md`](docs/concepts/vivarium-workbench-model.md)** — canonical vocabulary (Workspace · Study · Baseline · Variant · Intervention · Run · Visualization), the 8-section canonical `study.yaml` (Pass 7), Decide-phase follow-up proposals (Pass 8), on-disk shapes, the dashboard API surface, and which skill controls which concept. **Read this before invoking any Study/Baseline/Variant skill.**
 2. **Conventions: [`docs/conventions/`](docs/conventions/)** — authoritative specs for composites, composite generators, discovery, distribution, visualizations, and bespoke runner scripts.
 3. **Skills catalog: [`docs/skills.md`](docs/skills.md)** — all 15 user-invocable `/pbg-*` skills with one-line descriptions, plus the v0.8→v0.9 migration table.
 4. **README: [`README.md`](README.md)** — install + quick start for humans.
@@ -54,7 +54,7 @@ If either is missing, the skill should fail with a clear actionable error pointi
 | Propose a Decide-phase follow-up study | `/pbg-study propose-followup <study> --id <slug> --title '<t>' --motivation '<m>'` |
 | Seed a new study from a follow-up proposal | `/pbg-study seed-from-followup <parent-study> <proposal-id>` |
 
-For the full set of skill commands, see [`docs/concepts/vivarium-dashboard-model.md`](docs/concepts/vivarium-dashboard-model.md#skill--concept-map).
+For the full set of skill commands, see [`docs/concepts/vivarium-workbench-model.md`](docs/concepts/vivarium-workbench-model.md#skill--concept-map).
 
 ## Repo layout
 
@@ -75,6 +75,6 @@ pbg-superpowers/
 
 ## When in doubt
 
-- **What does this concept mean?** → `docs/concepts/vivarium-dashboard-model.md`.
+- **What does this concept mean?** → `docs/concepts/vivarium-workbench-model.md`.
 - **How is a composite/generator/etc. structured?** → `docs/conventions/`.
 - **What's the right endpoint to call?** → the concept map's API tables.

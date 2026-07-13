@@ -1,7 +1,7 @@
 """Emitter-type classification helpers used by the dashboard's Simulations DB.
 
 The workspace-wide run listing is owned by
-``vivarium_dashboard.lib.simulations_index.list_simulations`` (it discovers
+``vivarium_workbench.lib.simulations_index.list_simulations`` (it discovers
 SQLite/Parquet/XArray runs and tags them investigation/study). These helpers
 classify an emitter store path into its canonical type label and are reused
 by that endpoint; the drift guard keeps them byte-identical to the vendored

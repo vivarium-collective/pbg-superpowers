@@ -11,7 +11,7 @@
 Readouts are the natural coordination point for observables but are the most-drifted part of the schema. Grounding found:
 
 - **Three incompatible readout dialects** in real studies: `identifier: listeners.monomer_counts[3861]` + bracket-index (dnaa-1, dnaa-0); `store_path:` with *prose* placeholders (`bulk.<resolved-at-runtime...>`, `derived`) (dnaa-00/01/02); and the schema's `index_by{type,value}` — which **no code reads**. Plus `notes:` vs `description:`, and `status` values that don't match the schema enum.
-- **Readouts barely drive anything.** `collect_emit_paths_from_spec` (vivarium-dashboard `lib/composite_runs.py:480`) reads only `readouts[].store_path` — so the real dnaa studies (which use `identifier:`) contribute **zero** emit paths. The CLI/canonical path instead emits whole stores (`bulk`, `listeners`) regardless.
+- **Readouts barely drive anything.** `collect_emit_paths_from_spec` (vivarium-workbench `lib/composite_runs.py:480`) reads only `readouts[].store_path` — so the real dnaa studies (which use `identifier:`) contribute **zero** emit paths. The CLI/canonical path instead emits whole stores (`bulk`, `listeners`) regardless.
 - **Vector/bulk resolution is hand-baked or model-coupled.** `monomer_counts[3861]` is a magic index; "sum across DnaA forms" lives in a `notes:` string; and the form→index map for `monomer_counts` is **only recoverable from `sim_data`** (v2ecoli doesn't persist listener name catalogs). `bulk` is self-describing via the `bulk__id` column; listener vectors are not.
 - **No structure linkage.** Nothing validates a readout against what the composite actually exposes; `index_by` (the designed carrier) is dead.
 
@@ -53,7 +53,7 @@ study Readouts (index_by + aggregate)        ← validated/autocompleted against
 2. **RunReader catalog + id resolution** (pbg-emitters): `RunReader.catalog(observable)` and `series(id_by=…, aggregate=…)` — resolve a structured selector (and aggregate over a list of ids) to a numeric series from the self-describing store. Builds on #1; falls back to the existing `bulk__id` for bulk now.
 3. **Unified Readout schema + resolver** (pbg-template schema + pbg-superpowers): the canonical readout schema (`index_by`+`aggregate`); a resolver `readout → {emit_selector, evaluator_selector}`; migrate the 3 dialects.
 4. **Structure introspection/validation** (pbg-superpowers + a dashboard endpoint): enumerate available observables + id catalogs from the built composite (`collect_input_ports` + catalogs); validate readouts at author time; flag `aspirational`.
-5. **Emit-config generation from readouts** (vivarium-dashboard): `collect_emit_paths`/emitter injection honors `index_by`/`aggregate`, emitter-aware (incl. xarray packing). Replaces the store_path-only collector.
+5. **Emit-config generation from readouts** (vivarium-workbench): `collect_emit_paths`/emitter injection honors `index_by`/`aggregate`, emitter-aware (incl. xarray packing). Replaces the store_path-only collector.
 6. **Evaluator via readout resolution** (pbg-superpowers): B2 evaluator resolves `measure` through the readout resolver + RunReader catalog → computes the authored dnaa **vector** tests (the original B3 payoff). Adds the `per_minute` rate window.
 7. **Migration + goldens**: convert studies to the unified readouts; golden tests proving the dnaa vector verdicts now compute run-only.
 
@@ -67,7 +67,7 @@ study Readouts (index_by + aggregate)        ← validated/autocompleted against
 - **xarray packing specifics** (chunking, whether to pack whole arrays + id-coord vs selected indices) — settle at plan time for sub-project #1; default: whole array + `id` coord (flexible + self-describing), chunked.
 - **Migration of `monomer_counts[3861]` magic indices** → `index_by{type: monomer_id, value: …}` + `aggregate` needs the monomer catalog; do it after #1/#2 so the migration can validate.
 - **Backward read compatibility:** RunReader must still read old stores (no id catalog) via the current path + `sim_data` fallback.
-- **Scope:** this is ~7 sub-projects across pbg-emitters / pbg-superpowers / pbg-template / vivarium-dashboard / v2ecoli — sequence strictly; #1→#2 first (run-only resolution), then #3/#6 deliver the visible payoff.
+- **Scope:** this is ~7 sub-projects across pbg-emitters / pbg-superpowers / pbg-template / vivarium-workbench / v2ecoli — sequence strictly; #1→#2 first (run-only resolution), then #3/#6 deliver the visible payoff.
 
 ## 8. Recommended entry point
 Start with **#1 (self-describing emitters)** then **#2 (RunReader catalog/resolution)** — they make runs self-contained and unblock everything else. Best built once the foundation PRs (pbg-emitters #6 RunReader; pbg-superpowers #115 evaluator) merge, so #1/#2 extend RunReader on `main`.

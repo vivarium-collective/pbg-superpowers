@@ -4,7 +4,7 @@ Spine stage #2 (coded gate/verdict/acceptance roll-up).
 
 The verdict rule is the single canonical source replacing the three inline
 ``tests-passed`` re-implementations. The ``passed`` predicate EXACTLY matches
-``vivarium_dashboard.server._condition_satisfied`` ``tests-passed`` branch:
+``vivarium_workbench.lib.investigations_index._condition_satisfied`` ``tests-passed`` branch:
     counts["fail"] == 0 and counts["pass"] > 0
 
 Public API
