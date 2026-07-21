@@ -89,8 +89,8 @@ class TimeSeriesFromObservables(Visualization):
         "sources": {"_type": "list[string]", "_default": []},
         # Private — injected by the dashboard renderer; the schema
         # accepts string so YAML stays clean.
-        "_runs_db_path": {"_type": "string", "_default": ""},
-        "_study_yaml_path": {"_type": "string", "_default": ""},
+        "runs_db_path": {"_type": "string", "_default": ""},
+        "study_yaml_path": {"_type": "string", "_default": ""},
     }
 
     def inputs(self) -> dict:
@@ -301,8 +301,8 @@ def _render_html(cfg: dict) -> str:
             '</div>'
         )
 
-    runs = _load_runs(cfg.get("_runs_db_path"), cfg.get("sources") or [])
-    meta = _load_study_observable_meta(cfg.get("_study_yaml_path"))
+    runs = _load_runs(cfg.get("runs_db_path") or cfg.get("_runs_db_path"), cfg.get("sources") or [])
+    meta = _load_study_observable_meta(cfg.get("study_yaml_path") or cfg.get("_study_yaml_path"))
 
     if not runs:
         return (
