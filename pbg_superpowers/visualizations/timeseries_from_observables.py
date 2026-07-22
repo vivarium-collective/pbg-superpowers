@@ -89,8 +89,9 @@ class TimeSeriesFromObservables(Visualization):
         "sources": {"_type": "list[string]", "_default": []},
         # Private — injected by the dashboard renderer; the schema
         # accepts string so YAML stays clean.
-        "_runs_db_path": {"_type": "string", "_default": ""},
-        "_study_yaml_path": {"_type": "string", "_default": ""},
+        "runs_db_path": {"_type": "string", "_default": ""},
+        "run_id": {"_type": "string", "_default": ""},
+        "study_yaml_path": {"_type": "string", "_default": ""},
     }
 
     def inputs(self) -> dict:
@@ -139,7 +140,7 @@ def _load_study_observable_meta(study_yaml_path: str | None) -> dict[str, dict]:
     return out
 
 
-def _load_runs(runs_db_path: str | None, sources: list[str]) -> list[dict]:
+def _load_runs(runs_db_path: str | None, sources: list[str], run_id: str = "") -> list[dict]:
     """Read runs.db and return a list of ``{run_id, sim_name, params,
     observables, time}`` dicts.
 
@@ -181,6 +182,8 @@ def _load_runs(runs_db_path: str | None, sources: list[str]) -> list[dict]:
 
         out: list[dict] = []
         for r in meta_rows:
+            if run_id and r["run_id"] != run_id:
+                continue
             sim_name = r["sim_name"] or "default"
             if sources_set and sim_name not in sources_set:
                 continue
@@ -301,8 +304,8 @@ def _render_html(cfg: dict) -> str:
             '</div>'
         )
 
-    runs = _load_runs(cfg.get("_runs_db_path"), cfg.get("sources") or [])
-    meta = _load_study_observable_meta(cfg.get("_study_yaml_path"))
+    runs = _load_runs(cfg.get("runs_db_path") or cfg.get("_runs_db_path"), cfg.get("sources") or [], cfg.get("run_id") or "")
+    meta = _load_study_observable_meta(cfg.get("study_yaml_path") or cfg.get("_study_yaml_path"))
 
     if not runs:
         return (
