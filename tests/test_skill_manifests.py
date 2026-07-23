@@ -14,15 +14,17 @@ import pytest
 import yaml
 
 
-# The skills that ship with `user-invocable: true`. 14 user-facing skills +
+# The skills that ship with `user-invocable: true`. 15 user-facing skills +
 # `/pbg-init` (machine setup). `/pbg-suggest` is an internal dashboard callback
-# and is deliberately NOT user-invocable. Keep this in sync with docs/skills.md
-# and the counts in README.md / CLAUDE.md — the test below fails if it drifts.
+# and is deliberately NOT user-invocable. `/pbg-dashboard` is a deprecated alias
+# for `/pbg-workbench` and stays user-invocable for back-compat. Keep this in sync
+# with docs/skills.md and the counts in README.md / CLAUDE.md — the test below
+# fails if it drifts.
 USER_INVOCABLE_SKILLS = {
     "pbg-biology-forward", "pbg-catalog", "pbg-cite-bands", "pbg-dashboard",
     "pbg-expert", "pbg-explore", "pbg-init", "pbg-investigation", "pbg-navigate",
     "pbg-report", "pbg-run", "pbg-server", "pbg-status", "pbg-study", "pbg-viz",
-    "pbg-workspace",
+    "pbg-workbench", "pbg-workspace",
 }
 
 
