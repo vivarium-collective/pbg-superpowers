@@ -18,8 +18,8 @@
 | Skill | What it does |
 |---|---|
 | [`/pbg-workspace <name>`](../skills/pbg-workspace/SKILL.md) | Scaffold a fresh workspace — three modes: upstream-branch (clone an upstream model repo and create a workspace branch), standalone (clone `pbg-template`), or in-place (promote an existing checkout). |
-| [`/pbg-dashboard [start\|stop\|status\|open\|restart]`](../skills/pbg-dashboard/SKILL.md) | Start/stop/open the interactive vivarium-workbench (the side-rail-tabbed UI). The server the Studies skills depend on. Distinct from `/pbg-server`. |
-| [`/pbg-server [start\|stop\|status]`](../skills/pbg-server/SKILL.md) | Start/stop the **report-mirror** server (serves `reports/index.html`, proxies stage-skill events). NOT the interactive dashboard — that's `/pbg-dashboard`. |
+| [`/pbg-workbench [start\|stop\|status\|open\|restart]`](../skills/pbg-workbench/SKILL.md) | Start/stop/open the interactive vivarium-workbench (the side-rail-tabbed UI) and use its **session-per-tab** model — one workspace per browser tab. The server the Studies skills depend on. Distinct from `/pbg-server`. (Renamed from `/pbg-dashboard`, which stays as a deprecated alias.) |
+| [`/pbg-server [start\|stop\|status]`](../skills/pbg-server/SKILL.md) | Start/stop the **report-mirror** server (serves `reports/index.html`, proxies stage-skill events). NOT the interactive workbench — that's `/pbg-workbench`. |
 | [`/pbg-status`](../skills/pbg-status/SKILL.md) | Print workspace health: is this a workspace? server up? recent activity? Delegates the server-liveness section to `/pbg-server status`. |
 
 ## Catalog & registry
