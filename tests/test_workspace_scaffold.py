@@ -90,7 +90,8 @@ def test_scaffold_does_not_leak_template_dev_infra(tmp_path, plugin_root):
     # The scaffolded tests/ dir (if present) may contain ONLY the curated files
     # the template intentionally ships — not pbg-template's own dev test suite
     # (test_scaffold*.py, test_inplace*.py, conftest.py, etc.).
-    allowed_scaffolded_tests = {"test_core_registration.py"}
+    allowed_scaffolded_tests = {"test_core_registration.py",
+                                "test_composite_state_artifacts.py"}
     tests_dir = target / "tests"
     if tests_dir.is_dir():
         leaked = sorted(

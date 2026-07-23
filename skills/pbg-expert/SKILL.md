@@ -505,6 +505,17 @@ Rules:
   doesn't need this — its types are already in `build_core()`; it's for
   composites that pull in a *sibling* package's types.
 
+- **Check the new composite in the Composite Explorer before calling it done.**
+  The Explorer resolves a generator's wiring from its declared
+  `default_state_ref`, else a committed `reports/composite-state/<id>.json`,
+  else a live build. If it shows "default state for generator '<x>' is not
+  generated yet", do **not** paper over it by committing whatever a
+  regeneration script produced — that script may have serialized the *failure*
+  (`state: null`), which the resolver reads straight back, freezing the empty
+  Explorer into git behind a plausible-looking artifact. Fix the build, or leave
+  no artifact at all. See
+  [docs/conventions/composite_generators.md](../../docs/conventions/composite_generators.md#default-state-and-the-composite-explorer).
+
 A free `build_document(...)` function in `composites.py` is **not enough** —
 it isn't discoverable. Convert it to a `@composite_generator` and put it
 in the `composites/` subpackage as above.
