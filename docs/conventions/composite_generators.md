@@ -179,6 +179,38 @@ from . import spatial     # noqa: F401
 If a generator decorator never runs, its entry never makes it into
 `_REGISTRY`, and discovery won't find it.
 
+## Default state and the Composite Explorer
+
+The Explorer renders a generator's wiring from a *resolved default state*. The
+workbench looks for it in this order:
+
+1. the spec's declared `default_state_ref` artifact,
+2. a committed `reports/composite-state/<id>.json` in the workspace,
+3. a live build of the generator via the workspace env worker.
+
+Because of (3), a brand-new generator needs **no** artifact for the live
+dashboard — open the Explorer and it builds. Commit an artifact when the state
+must be available *without* a build: the published read-only bundle serves
+static state, and CI hosts usually lack the heavy build inputs (a ParCa cache, a
+licensed solver) that the generator needs.
+
+Two rules for whatever regenerates those artifacts:
+
+- **Never write an artifact whose `state` is null.** A resolver that cannot
+  produce wiring returns a *200 payload* with `state: null` and
+  `wiring_status: "unavailable"`. Serializing that payload verbatim writes a
+  plausible-looking file whose only content is the failure — and since the
+  resolver reads that same file back at step (2), the Explorer then reports
+  "default state for generator '<x>' is not generated yet" forever, with a
+  committed artifact making the gap look filled. Fail the regeneration instead;
+  a missing artifact is honest and step (3) still covers the live UI.
+  `pbg-template` ships `tests/test_composite_state_artifacts.py` to enforce this.
+- **Emit the alias id too.** Discovery canonicalizes `<module>.<name>` to
+  `<module>` when the module stem already is the name, but the workspace
+  manifest still advertises both forms and pop-out URLs are built from whichever
+  string the caller holds. Write the artifact under both ids, or the
+  un-canonicalized one renders empty.
+
 ## Trade-offs
 
 - **Discovery imports.** This is the biggest difference from static specs.
