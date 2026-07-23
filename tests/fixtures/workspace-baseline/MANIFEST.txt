@@ -34,6 +34,7 @@
 ./scripts/publish_investigation_reports.py
 ./scripts/render-dashboard.py
 ./scripts/serve.sh
+./tests/test_composite_state_artifacts.py
 ./tests/test_core_registration.py
 ./workspace.yaml
 ./workspace/datasets/README.md
