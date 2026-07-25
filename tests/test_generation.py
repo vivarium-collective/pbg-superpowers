@@ -1,9 +1,9 @@
-"""Tests for pbg_superpowers.generation (coordinated-generation model)."""
+"""Tests for viva_superpowers.generation (coordinated-generation model)."""
 from datetime import datetime, timezone
 
 import pytest
 
-from pbg_superpowers import generation as gen
+from viva_superpowers import generation as gen
 
 
 def test_new_generation_id_shape_and_uniqueness():

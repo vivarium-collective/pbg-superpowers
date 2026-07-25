@@ -1,4 +1,4 @@
-"""Tests for the calibration-sweep engine (pbg_superpowers.calibration_sweep).
+"""Tests for the calibration-sweep engine (viva_superpowers.calibration_sweep).
 
 The injected ``run_fn`` is always a pure, deterministic synthetic function with
 a known optimum, so the sweep's decision logic can be asserted exactly without
@@ -8,7 +8,7 @@ import math
 
 import pytest
 
-from pbg_superpowers.calibration_sweep import (
+from viva_superpowers.calibration_sweep import (
     AcceptanceBand,
     SweepSpec,
     enumerate_grid,

@@ -1,5 +1,5 @@
 from pathlib import Path
-from pbg_superpowers import run_registry
+from viva_superpowers import run_registry
 
 
 def test_list_runs_returns_rows_newest_first(tmp_path: Path):

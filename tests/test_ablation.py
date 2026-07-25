@@ -1,7 +1,7 @@
-"""Tests for the compositional ablation engine (pbg_superpowers.ablation)."""
+"""Tests for the compositional ablation engine (viva_superpowers.ablation)."""
 import pytest
 
-from pbg_superpowers.ablation import (
+from viva_superpowers.ablation import (
     generate_ablations, classify_ablation, run_ablation_suite,
 )
 

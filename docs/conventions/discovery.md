@@ -195,7 +195,7 @@ assert cls.__name__ == "FooProcess"
 You can also inspect discovered processes without running a simulation:
 
 ```python
-from pbg_superpowers.core_introspection import list_processes
+from viva_superpowers.core_introspection import list_processes
 
 procs = list_processes(core)
 assert "FooProcess" in procs

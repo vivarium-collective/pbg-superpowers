@@ -9,7 +9,7 @@ from threading import Lock
 
 import yaml
 
-from pbg_superpowers.workspace_paths import WorkspacePaths
+from viva_superpowers.workspace_paths import WorkspacePaths
 
 
 WORKSPACE: Path = Path("/")  # set by main()
@@ -106,7 +106,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._serve_file(files[0], "text/html")
 
     def _serve_composites(self):
-        from pbg_superpowers.composite_discovery import discover_all
+        from viva_superpowers.composite_discovery import discover_all
         extra_search_paths: list[Path] = []
         local_composites = _wp().composites
         if local_composites.is_dir():

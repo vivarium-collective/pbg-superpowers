@@ -12,7 +12,7 @@ import math
 
 import polars as pl
 
-from pbg_superpowers.study_evaluator import (
+from viva_superpowers.study_evaluator import (
     _clean_floats,
     _complete_generations,
     _eval_expression,

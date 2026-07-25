@@ -1,6 +1,6 @@
 import pytest
 import yaml
-from pbg_superpowers.workspace_yaml import (
+from viva_superpowers.workspace_yaml import (
     load_workspace, save_workspace, validate_workspace,
     WorkspaceValidationError,
 )

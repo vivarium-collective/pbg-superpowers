@@ -1,5 +1,5 @@
-"""Tests for the evidence & rigor scorecard (pbg_superpowers.rigor)."""
-from pbg_superpowers.rigor import (
+"""Tests for the evidence & rigor scorecard (viva_superpowers.rigor)."""
+from viva_superpowers.rigor import (
     study_rigor, investigation_rigor, finding_evidential_weight,
     is_descriptive_study, GAP, WARN, OK, NA,
 )
@@ -157,7 +157,7 @@ def test_pure_no_mutation_and_tolerant_of_empty():
 
 
 def test_next_steps_dimension():
-    from pbg_superpowers.rigor import study_rigor, GAP, OK
+    from viva_superpowers.rigor import study_rigor, GAP, OK
     assert _sev(study_rigor({}), "next_steps") == GAP
     assert _sev(study_rigor({"follow_up_studies": ["s2"]}), "next_steps") == OK
     assert _sev(study_rigor({"discovery_implications": {"followup_study_proposals": [{"id": "x"}]}}),
@@ -391,7 +391,7 @@ def test_finding_weight_tolerant_of_empty():
 # intent label, and framework_metrics (critiques #10, #18, #1, #26)
 # ---------------------------------------------------------------------------
 
-from pbg_superpowers.rigor import _study_type, framework_metrics
+from viva_superpowers.rigor import _study_type, framework_metrics
 
 
 def _dim_ids(scorecard):
@@ -514,7 +514,7 @@ def test_framework_metrics_tolerant_of_empty():
 # Run persistence / emitter coverage (future-proofing: real composites + emitters)
 # ---------------------------------------------------------------------------
 
-from pbg_superpowers.rigor import run_is_emitter_backed, EMITTER_KINDS
+from viva_superpowers.rigor import run_is_emitter_backed, EMITTER_KINDS
 
 
 def test_run_is_emitter_backed_predicate():

@@ -1,4 +1,4 @@
-"""TDD tests for pbg_superpowers.feedback_actions (SP3b — feedback → action).
+"""TDD tests for viva_superpowers.feedback_actions (SP3b — feedback → action).
 
 The feedback loop dead-ends today at a free-text status string. SP3b adds a
 deterministic ``actions:`` surface (parallel to ``responses:``) keyed by a
@@ -51,7 +51,7 @@ def _read_study(ws: Path, slug: str) -> dict:
 
 
 def test_feedback_item_id_stable():
-    from pbg_superpowers.feedback_actions import feedback_item_id
+    from viva_superpowers.feedback_actions import feedback_item_id
 
     a = feedback_item_id("study-s1", "2026-06-10T00:00", "alice")
     assert a == feedback_item_id("study-s1", "2026-06-10T00:00", "alice")  # stable
@@ -65,14 +65,14 @@ def test_feedback_item_id_stable():
 
 
 def test_actions_empty_when_no_investigations(ws):
-    from pbg_superpowers.feedback_actions import study_feedback_actions
+    from viva_superpowers.feedback_actions import study_feedback_actions
 
     res = study_feedback_actions(ws, "foo")
     assert res == {"items": [], "summary": {"open": 0, "applied": 0, "dismissed": 0, "total": 0}}
 
 
 def test_open_when_no_action(ws):
-    from pbg_superpowers.feedback_actions import study_feedback_actions
+    from viva_superpowers.feedback_actions import study_feedback_actions
 
     _write(
         ws / "investigations" / "inv1" / "feedback" / "r1.yaml",
@@ -100,7 +100,7 @@ def test_open_when_no_action(ws):
 
 
 def test_actions_join_annotation_and_action(ws):
-    from pbg_superpowers.feedback_actions import feedback_item_id, study_feedback_actions
+    from viva_superpowers.feedback_actions import feedback_item_id, study_feedback_actions
 
     iid = feedback_item_id("study-foo", "2026-01-01T10:00:00Z", "Alice")
     _write(
@@ -134,7 +134,7 @@ def test_actions_join_annotation_and_action(ws):
 
 
 def test_actions_status_applied_and_dismissed(ws):
-    from pbg_superpowers.feedback_actions import feedback_item_id, study_feedback_actions
+    from viva_superpowers.feedback_actions import feedback_item_id, study_feedback_actions
 
     iid_a = feedback_item_id("study-foo", "2026-01-02T10:00:00Z", "A")
     iid_d = feedback_item_id("study-foo", "2026-01-01T10:00:00Z", "D")
@@ -168,7 +168,7 @@ def test_actions_status_applied_and_dismissed(ws):
 
 
 def test_apply_next_action_writes_finding_next_action(ws):
-    from pbg_superpowers.feedback_actions import (
+    from viva_superpowers.feedback_actions import (
         apply_feedback_action,
         feedback_item_id,
         study_feedback_actions,
@@ -218,7 +218,7 @@ def test_apply_next_action_writes_finding_next_action(ws):
 
 def test_apply_preserves_comments(ws):
     """The actions-block write must be comment-preserving (ruamel)."""
-    from pbg_superpowers.feedback_actions import apply_feedback_action, feedback_item_id
+    from viva_superpowers.feedback_actions import apply_feedback_action, feedback_item_id
 
     _make_study(ws, "foo", [{"id": "F-01", "statement": "X"}])
     iid = feedback_item_id("study-foo", "2026-01-01T10:00:00Z", "Alice")
@@ -249,7 +249,7 @@ def test_apply_preserves_comments(ws):
 
 
 def test_apply_unknown_item_id(ws):
-    from pbg_superpowers.feedback_actions import apply_feedback_action
+    from viva_superpowers.feedback_actions import apply_feedback_action
 
     res = apply_feedback_action(ws, "deadbeef")
     assert res.get("applied") is not True
@@ -257,7 +257,7 @@ def test_apply_unknown_item_id(ws):
 
 
 def test_record_feedback_action_writes_block(ws):
-    from pbg_superpowers.feedback_actions import (
+    from viva_superpowers.feedback_actions import (
         feedback_item_id,
         record_feedback_action,
         study_feedback_actions,
@@ -298,13 +298,13 @@ def test_golden_apply_on_tmp_copy(tmp_path):
     next_action + flips the action applied; the real v2e-invest is untouched."""
     import shutil
 
-    from pbg_superpowers.feedback_actions import (
+    from viva_superpowers.feedback_actions import (
         apply_feedback_action,
         feedback_item_id,
         record_feedback_action,
         study_feedback_actions,
     )
-    from pbg_superpowers.workspace_paths import WorkspacePaths
+    from viva_superpowers.workspace_paths import WorkspacePaths
 
     slug = "dnaa-3-box-binding"
     wp_real = WorkspacePaths.load(REAL_WS)

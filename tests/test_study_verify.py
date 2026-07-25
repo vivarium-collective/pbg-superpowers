@@ -1,6 +1,6 @@
-"""Tests for ``/pbg-study verify`` spec verification.
+"""Tests for ``/viva-study verify`` spec verification.
 
-Pins the workspace-agnostic checks in :mod:`pbg_superpowers.study_verify`:
+Pins the workspace-agnostic checks in :mod:`viva_superpowers.study_verify`:
 
   - baseline shape & required fields
   - variants reference real baselines
@@ -19,7 +19,7 @@ from pathlib import Path
 
 import yaml
 
-from pbg_superpowers import study_verify as sv
+from viva_superpowers import study_verify as sv
 
 
 def _write_yaml(p: Path, data: dict) -> Path:
@@ -326,7 +326,7 @@ def test_cli_clean_study_exits_zero(tmp_path):
     ws = _make_workspace(tmp_path)
     sy = _make_clean_study(ws)
     cp = subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.study_verify", str(sy)],
+        [sys.executable, "-m", "viva_superpowers.study_verify", str(sy)],
         capture_output=True, text=True,
     )
     assert cp.returncode == 0, cp.stderr
@@ -340,7 +340,7 @@ def test_cli_error_study_exits_one(tmp_path):
     spec["behavior_tests"][0]["requires_simulation"] = "ghost"
     sy.write_text(yaml.safe_dump(spec))
     cp = subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.study_verify", str(sy)],
+        [sys.executable, "-m", "viva_superpowers.study_verify", str(sy)],
         capture_output=True, text=True,
     )
     assert cp.returncode == 1
@@ -354,12 +354,12 @@ def test_cli_strict_promotes_warnings_to_failure(tmp_path):
     spec["behavior_tests"][0]["cites"] = ["ghost"]  # warning, not error
     sy.write_text(yaml.safe_dump(spec))
     cp_default = subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.study_verify", str(sy)],
+        [sys.executable, "-m", "viva_superpowers.study_verify", str(sy)],
         capture_output=True, text=True,
     )
     assert cp_default.returncode == 0  # warnings don't fail by default
     cp_strict = subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.study_verify", str(sy), "--strict"],
+        [sys.executable, "-m", "viva_superpowers.study_verify", str(sy), "--strict"],
         capture_output=True, text=True,
     )
     assert cp_strict.returncode == 1
@@ -373,7 +373,7 @@ def test_cli_json_output_is_machine_readable(tmp_path):
     spec["behavior_tests"][0]["requires_simulation"] = "ghost"
     sy.write_text(yaml.safe_dump(spec))
     cp = subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.study_verify", str(sy),
+        [sys.executable, "-m", "viva_superpowers.study_verify", str(sy),
          "--json"],
         capture_output=True, text=True,
     )
@@ -387,7 +387,7 @@ def test_cli_json_output_is_machine_readable(tmp_path):
 
 def test_cli_missing_file_exits_two(tmp_path):
     cp = subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.study_verify",
+        [sys.executable, "-m", "viva_superpowers.study_verify",
          str(tmp_path / "nonexistent.yaml")],
         capture_output=True, text=True,
     )

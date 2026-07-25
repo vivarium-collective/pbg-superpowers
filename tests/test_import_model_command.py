@@ -26,7 +26,7 @@ def _git(*args, cwd):
 
 def _scaffold_workspace(target: Path, plugin_root: Path):
     subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.scaffold", "workspace",
+        [sys.executable, "-m", "viva_superpowers.scaffold", "workspace",
          "--name", "ws", "--target", str(target),
          "--template-source", str(PBG_TEMPLATE)],
         check=True, cwd=plugin_root,
@@ -49,7 +49,7 @@ def _make_external_repo(target: Path):
 
 
 def _import(plugin_root, ws, *, name, source, ref, mode, description=None):
-    args = [sys.executable, "-m", "pbg_superpowers.scaffold", "import-model",
+    args = [sys.executable, "-m", "viva_superpowers.scaffold", "import-model",
             "--workspace", str(ws),
             "--name", name, "--source", str(source),
             "--ref", ref, "--mode", mode]
@@ -108,7 +108,7 @@ def test_register_duplicate_fails(tmp_path, plugin_root):
     _scaffold_workspace(ws, plugin_root)
     _import(plugin_root, ws, name="x", source="s", ref="r", mode="fork-source")
     r = subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.scaffold", "import-model",
+        [sys.executable, "-m", "viva_superpowers.scaffold", "import-model",
          "--workspace", str(ws), "--name", "x", "--source", "s", "--ref", "r",
          "--mode", "fork-source"],
         cwd=plugin_root, capture_output=True, text=True,

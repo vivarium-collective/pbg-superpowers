@@ -46,7 +46,7 @@ pytest.importorskip(
 
 from process_bigraph import Composite, allocate_core
 
-from pbg_superpowers.visualization import Visualization
+from viva_superpowers.visualization import Visualization
 
 
 # ---------------------------------------------------------------------------
@@ -389,11 +389,11 @@ def test_dashboard_lib_imports_resolve():
 
 
 def test_pbg_runner_exposes_run_context():
-    """Smoke test: pbg_superpowers.runner.pbg_runner is the canonical
+    """Smoke test: viva_superpowers.runner.pbg_runner is the canonical
     context manager workspaces use to populate runs_meta. If its signature
     drifts, this fires before downstream tests that depend on it."""
     import inspect
-    from pbg_superpowers.runner import pbg_runner, RunContext
+    from viva_superpowers.runner import pbg_runner, RunContext
 
     sig = inspect.signature(pbg_runner)
     # Pin the keyword-only contract — name changes here mean every workspace's

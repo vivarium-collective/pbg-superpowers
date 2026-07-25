@@ -61,7 +61,7 @@ subsequent investigations.
 
 ### Discovery / paths
 
-- `pbg_superpowers/workspace_paths.py` (a.k.a. `paths.py`): study resolution becomes
+- `viva_superpowers/workspace_paths.py` (a.k.a. `paths.py`): study resolution becomes
   investigation-scoped. Add a resolver `study_dir(ws, study_slug)` that finds the study
   under its owning investigation (via `study.yaml.investigation` or by scanning
   `investigations/*/studies/<slug>/`). `studies_root` is no longer a single flat dir;
@@ -94,7 +94,7 @@ subsequent investigations.
 
 - **Top-left repo switcher** (replaces the investigation-level role of the current
   switcher). Data: `~/.pbg/workspaces.json` (+ live `~/.pbg/servers/*.json`). Selecting a
-  repo opens its dashboard URL, auto-starting the server (reuse `pbg_superpowers.dashboard`
+  repo opens its dashboard URL, auto-starting the server (reuse `viva_superpowers.dashboard`
   start logic) if no live server is registered. The existing cross-worktree/branch
   discovery stays available as a secondary affordance (Branch menu) but is no longer the
   top-left's job.
@@ -110,7 +110,7 @@ subsequent investigations.
 
 ### Migration
 
-- `pbg_superpowers/migrate_nested.py` (CLI `pbg-migrate-nested --workspace <ws> [--dry-run]`):
+- `viva_superpowers/migrate_nested.py` (CLI `pbg-migrate-nested --workspace <ws> [--dry-run]`):
   for each `investigations/<inv>/investigation.yaml`, move each member `studies/<slug>/`
   (resolved via `studies[]` + `study.yaml.investigation`) to
   `investigations/<inv>/studies/<slug>/` with `git mv` (preserve history); rewrite

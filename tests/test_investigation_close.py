@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers/investigation_close.py — S5 close-investigation
+"""Tests for viva_superpowers/investigation_close.py — S5 close-investigation
 workflow.
 
 Covers:
@@ -29,7 +29,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pbg_superpowers.investigation_close import (
+from viva_superpowers.investigation_close import (
     close_investigation,
     derive_contributors,
 )

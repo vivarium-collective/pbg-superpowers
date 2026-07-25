@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.study_evaluator (Tasks 1–4).
+"""Tests for viva_superpowers.study_evaluator (Tasks 1–4).
 
 Run with: .venv/bin/python -m pytest tests/test_study_evaluator.py -v
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
-from pbg_superpowers import study_evaluator as se
+from viva_superpowers import study_evaluator as se
 
 
 # ---------------------------------------------------------------------------

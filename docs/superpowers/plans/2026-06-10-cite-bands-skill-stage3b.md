@@ -11,7 +11,7 @@
 ---
 
 ## File map
-- Modify: `pbg_superpowers/band_provenance.py` (add `set_band_provenance` + a `_write_*_preserving_comments` clone).
+- Modify: `viva_superpowers/band_provenance.py` (add `set_band_provenance` + a `_write_*_preserving_comments` clone).
 - Create: `skills/pbg-cite-bands/SKILL.md`.
 - Test: `tests/test_set_band_provenance.py`.
 
@@ -33,10 +33,10 @@
 - [ ] **Step 1:** Create `skills/pbg-cite-bands/SKILL.md` with front-matter (`name: pbg-cite-bands`, a clear `description`, `user-invocable: true`, `allowed-tools: Bash(*) Read Edit`, `argument-hint: "<study-slug>"`). Follow the existing skill style (see `skills/pbg-status/SKILL.md`, `skills/pbg-report/SKILL.md`).
 - [ ] **Step 2:** The skill body documents the workflow precisely:
   1. **Preconditions:** a pbg workspace + the named study; `references/papers.bib` exists (the bib source).
-  2. **Find uncited bands:** `.venv/bin/python -c "import json; from pbg_superpowers.band_provenance import bands_missing_provenance; from pbg_superpowers.study_io import load_yaml_mapping; print(json.dumps(bands_missing_provenance(load_yaml_mapping('<study_dir>/study.yaml'))))"` → the list of `{name, kind, band, field_path}`.
-  3. **Surface candidate evidence per band:** `pbg_superpowers.expert_search.search_expert_docs(ws_root, terms=[...band/readout name + numeric bounds + domain terms...])` → `[{doc, page, snippet, term}]`. Show the candidates to the user.
+  2. **Find uncited bands:** `.venv/bin/python -c "import json; from viva_superpowers.band_provenance import bands_missing_provenance; from viva_superpowers.study_io import load_yaml_mapping; print(json.dumps(bands_missing_provenance(load_yaml_mapping('<study_dir>/study.yaml'))))"` → the list of `{name, kind, band, field_path}`.
+  3. **Surface candidate evidence per band:** `viva_superpowers.expert_search.search_expert_docs(ws_root, terms=[...band/readout name + numeric bounds + domain terms...])` → `[{doc, page, snippet, term}]`. Show the candidates to the user.
   4. **Agent judgment (the AI step):** read the candidate snippets (and, if needed, the cited PDF page) and choose the source — the bib_key in `references/papers.bib` and a verbatim quote — that establishes the band. If the source is NOT already in `papers.bib`, instruct the user to add the BibTeX entry first (the band→cites lint requires it); if the agent is UNCERTAIN or the expert didn't provide the source, record it in `investigation.yaml proposed_inputs` (pending expert accept) instead of asserting it on the band. NEVER fabricate a citation.
-  5. **Write provenance:** `pbg_superpowers.band_provenance.set_band_provenance(study_dir, test_name, cites=[bib_key], calibration_anchor={"literature_target": <midpoint>, "cites": [bib_key]})`.
+  5. **Write provenance:** `viva_superpowers.band_provenance.set_band_provenance(study_dir, test_name, cites=[bib_key], calibration_anchor={"literature_target": <midpoint>, "cites": [bib_key]})`.
   6. **Validate:** run the report linter (or note that `band_test_missing_cites` should now be clear and `band_cites_unknown_bib_key` must not fire) to confirm the provenance resolves.
   - Emphasize: surface-and-let-the-human/agent-decide; never auto-assert an unverified citation; all writes go through `set_band_provenance` (comment-preserving), never hand-edited YAML.
 - [ ] **Step 3:** If pbg-superpowers registers skills in a catalog/manifest (check `docs/skills.md`, `.claude-plugin/`), add `pbg-cite-bands` there. **Commit** — `feat(skill): pbg-cite-bands — guided band-provenance extraction`

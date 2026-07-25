@@ -1,10 +1,10 @@
 """Tests for the demo Visualization classes shipped with pbg-superpowers."""
-from pbg_superpowers._demo_visualizations import (
+from viva_superpowers._demo_visualizations import (
     DemoTimeSeriesPlot,
     DemoMultiTimeSeriesPlot,
     DemoListLinePlot,
 )
-from pbg_superpowers.visualization import Visualization
+from viva_superpowers.visualization import Visualization
 
 
 def test_time_series_plot_renders_a_single_step():

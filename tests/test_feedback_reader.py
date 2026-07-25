@@ -2,7 +2,7 @@
 import pytest
 import yaml
 
-from pbg_superpowers.feedback_import import (
+from viva_superpowers.feedback_import import (
     load_investigation_feedback, feedback_for_study,
     write_feedback_payload, FeedbackImportError,
 )

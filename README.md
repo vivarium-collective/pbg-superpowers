@@ -1,6 +1,6 @@
 # pbg-superpowers
 
-A Claude Code plugin for building **multiscale models in the Process Bigraph framework**. Ships 16 `/pbg-*` skills that scaffold the mechanical parts of compositional modeling — wrapping a simulator as a typed Process, composing Processes into a Composite, organizing the work as a reproducible workspace, and managing studies + runs + visualizations through a local dashboard.
+A Claude Code plugin for building **multiscale models in the Process Bigraph framework**. Ships 15 `/viva-*` skills that scaffold the mechanical parts of compositional modeling — wrapping a simulator as a typed Process, composing Processes into a Composite, organizing the work as a reproducible workspace, and managing studies + runs + visualizations through a local dashboard.
 
 For **computational biologists** who want their models to be reusable, recombinable, and runnable by others — without writing the registry, packaging, schema, and report boilerplate by hand. Framework background: [Agmon & Spangler (2026)](docs/references/papers/agmon-spangler-2026-process-bigraphs-main.pdf).
 
@@ -33,7 +33,7 @@ For testers evaluating the UI against an existing or scaffold-only workspace. No
     bash use-this-template-init.sh
     vivarium-workbench serve --workspace .
 
-Open the printed URL and browse the side-rail tabs — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB (the canonical set is owned by the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench); see `/pbg-workbench`). Create studies and investigations directly through the UI. Scaffolding details in the [pbg-template](https://github.com/vivarium-collective/pbg-template) README; serving details (ports, multi-workspace) in the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench) README.
+Open the printed URL and browse the side-rail tabs — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB (the canonical set is owned by the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench); see `/viva-workbench`). Create studies and investigations directly through the UI. Scaffolding details in the [pbg-template](https://github.com/vivarium-collective/pbg-template) README; serving details (ports, multi-workspace) in the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench) README.
 
 ### Path B — Dashboard + AI agent (pbg-superpowers integration)
 
@@ -58,14 +58,14 @@ Verify with `/help` — the `/pbg-*` skills should be listed.
 
 1. Scaffold a workspace (with an upstream model repo, or standalone if you omit `--upstream`):
 
-        /pbg-workspace my-project --upstream <owner/repo>
+        /viva-workspace my-project --upstream <owner/repo>
         cd my-project
 
 2. Boot the dashboard — Claude will print the local URL:
 
-        /pbg-server start
+        /viva-server start
 
-3. Start authoring in natural language. Ask Claude to wrap a simulator (`/pbg-expert <tool>` for a sibling package, or `/pbg-expert --lightweight <tool>` in-workspace), compose a model (`/pbg-expert <name> <tools…>`), or design a study (`/pbg-study new`).
+3. Start authoring in natural language. Ask Claude to wrap a simulator (`/viva-expert <tool>` for a sibling package, or `/viva-expert --lightweight <tool>` in-workspace), compose a model (`/viva-expert <name> <tools…>`), or design a study (`/viva-study new`).
 
 **What to expect**
 
@@ -78,7 +78,7 @@ Full skill catalog: [`docs/skills.md`](docs/skills.md).
 - **Workspace IS the model.** A git repo containing the model's Python package, tests, references, decisions log, and a `workspace.yaml`. The unit of reproducibility — clone a workspace, run it, get the same answer.
 - **Study.** A self-contained research unit — purpose, baseline composite(s), simulations, readouts, behavior tests, conclusion — moving through five phases (Design → Build → Simulate → Evaluate → Decide). Each phase has a distinct deliverable. See [`docs/concepts/vivarium-workbench-model.md`](docs/concepts/vivarium-workbench-model.md).
 - **Composite.** A typed graph of Processes wired to shared stores; itself a Process, so models compose recursively. JSON-serializable, so composites can be stored, exchanged, and executed across environments. See [`docs/conventions/composites.md`](docs/conventions/composites.md).
-- **Visualization.** A `Step` subclass auto-discovered alongside Processes; wireable into Composites and attachable to Studies. Generated from a natural-language description via `/pbg-viz`. See [`docs/conventions/visualizations.md`](docs/conventions/visualizations.md).
+- **Visualization.** A `Step` subclass auto-discovered alongside Processes; wireable into Composites and attachable to Studies. Generated from a natural-language description via `/viva-viz`. See [`docs/conventions/visualizations.md`](docs/conventions/visualizations.md).
 
 ### Workspace vs composite-only repo
 
@@ -89,7 +89,7 @@ Two surfaces commonly get confused when a new user says "make this a pbg-superpo
 | **Workspace** | yes | `studies/`, `investigations/`, `notes/`, `references/`, `scripts/serve.sh`, plus the model's Python package | the vivarium-workbench + the `/pbg-*` skills |
 | **Composite-only repo** | no | a single Process or Composite package (e.g. `pbg-mem3dg`, `pbg-readdy`) — `pyproject.toml`, `pbg_<slug>/`, `tests/`, `demo/` | imported by one or more workspaces via `workspace.yaml.imports` |
 
-A workspace can wrap or live beside one or more composite-only repos. Use `/pbg-workspace --in-place` to promote an existing composite-only repo into a workspace branch (adds the workspace artifacts on top without clobbering the composite's existing files).
+A workspace can wrap or live beside one or more composite-only repos. Use `/viva-workspace --in-place` to promote an existing composite-only repo into a workspace branch (adds the workspace artifacts on top without clobbering the composite's existing files).
 
 ## Skills
 
@@ -97,7 +97,7 @@ A workspace can wrap or live beside one or more composite-only repos. Use `/pbg-
 
 ## Companion repos
 
-- **[pbg-template](https://github.com/vivarium-collective/pbg-template)** — the workspace scaffold cloned by `/pbg-workspace`. Use the template directly if you want a workspace without the Claude Code plugin.
+- **[pbg-template](https://github.com/vivarium-collective/pbg-template)** — the workspace scaffold cloned by `/viva-workspace`. Use the template directly if you want a workspace without the Claude Code plugin.
 - **[vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench)** — the local web UI the skills drive. Browse composites, run studies, render visualizations.
 
 ## Reference

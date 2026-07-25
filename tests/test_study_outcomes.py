@@ -1,4 +1,4 @@
-from pbg_superpowers import study_outcomes as so
+from viva_superpowers import study_outcomes as so
 
 
 def test_canonical_prefers_flag_over_position():
@@ -32,7 +32,7 @@ def test_canonical_none_when_no_runs():
 # record_runs tests
 # ---------------------------------------------------------------------------
 from pathlib import Path
-from pbg_superpowers import study_io, run_registry
+from viva_superpowers import study_io, run_registry
 
 
 def _study(tmp_path: Path, spec: dict) -> Path:

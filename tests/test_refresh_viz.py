@@ -1,6 +1,6 @@
 from pathlib import Path
-from pbg_superpowers.refresh_viz import refresh_study_viz
-from pbg_superpowers.viz_freshness import read_meta, stamp_meta
+from viva_superpowers.refresh_viz import refresh_study_viz
+from viva_superpowers.viz_freshness import read_meta, stamp_meta
 
 def _study(tmp):
     d = tmp / "studies" / "s1"; (d / "charts").mkdir(parents=True); return d

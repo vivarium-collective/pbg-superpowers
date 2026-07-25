@@ -31,7 +31,7 @@ format with a DSL.
 ## Decorator API
 
 ```python
-from pbg_superpowers.composite_generator import composite_generator
+from viva_superpowers.composite_generator import composite_generator
 
 
 @composite_generator(
@@ -123,7 +123,7 @@ in when none is set. Resolution order, as wired in v2ecoli's baseline:
 ```
 
 ```python
-from pbg_superpowers.composite_generator import emitter_defaults
+from viva_superpowers.composite_generator import emitter_defaults
 
 emitter_defaults(baseline)        # [{"address": "local:ParquetEmitter", ...}]
 emitter_defaults(some_entry)      # same, from a GeneratorEntry
@@ -133,7 +133,7 @@ emitter_defaults(object())        # [] — safe on non-generators
 ## Discovery
 
 ```python
-from pbg_superpowers.composite_generator import discover_generators
+from viva_superpowers.composite_generator import discover_generators
 
 entries = discover_generators()
 # {"my_pkg.composites.metabolism.my_composite": <GeneratorEntry>, ...}
@@ -144,7 +144,7 @@ entries = discover_generators()
 dashboard surface:
 
 ```python
-from pbg_superpowers.composite_discovery import discover_all
+from viva_superpowers.composite_discovery import discover_all
 
 merged = discover_all(extra_search_paths=[Path("my_workspace/composites")])
 # Each entry has a `kind: "spec" | "generator"` tag.
@@ -153,7 +153,7 @@ merged = discover_all(extra_search_paths=[Path("my_workspace/composites")])
 ## Building and running
 
 ```python
-from pbg_superpowers.composite_generator import build_generator
+from viva_superpowers.composite_generator import build_generator
 
 entry = discover_generators()["my_pkg.composites.my_composite"]
 doc = build_generator(entry, overrides={"rate": 2.5})
@@ -227,6 +227,6 @@ Two rules for whatever regenerates those artifacts:
 ## See also
 
 - [Composite Spec Convention](composites.md) — the data-first sibling.
-- `pbg_superpowers.composite_generator` — module reference.
+- `viva_superpowers.composite_generator` — module reference.
 - Example use: `spatio_flux.composites.*` — 19 generators across 5 group
   modules.

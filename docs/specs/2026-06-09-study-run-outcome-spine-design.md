@@ -49,7 +49,7 @@ Source-of-truth: trajectories stay in the emitter store; **evaluated outcomes ar
 
 ### 4.1 One outcome engine (`study_outcomes`)
 
-A single module — `pbg_superpowers/study_outcomes.py`, alongside the existing `study_status` / `study_findings` / `study_verify` / `seed_from_followup` family — is the one place that knows how a run becomes outcomes. Pure function:
+A single module — `viva_superpowers/study_outcomes.py`, alongside the existing `study_status` / `study_findings` / `study_verify` / `seed_from_followup` family — is the one place that knows how a run becomes outcomes. Pure function:
 
 ```
 (study.yaml behavior_tests) + (a run's emitted data) ──▶ runs[].outcomes + per-run metrics stamp

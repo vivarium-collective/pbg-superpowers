@@ -4,7 +4,7 @@
 
 **Goal:** A **pure** evaluator that turns a study's behavior tests + a run's data into computed per-test outcomes — `evaluate_study(spec, run_reader) -> {test_name: outcome}` — using a closed `measure`/`pass_if` DSL over `pbg_emitters.RunReader`. **No `study.yaml` writes** (the stamp/reconciliation into study.yaml is a deliberate follow-on, B2b, so code's verdicts can be golden-tested before they touch authored studies).
 
-**Architecture:** `pbg_superpowers/study_evaluator.py`. For each behavior test: classify the `measure.kind` as run-data-evaluable or not (non-run-data kinds → `agent` bucket, never guessed); resolve the `path` to a series via `RunReader`; apply the `window`; reduce per the `kind`; apply the `pass_if` op → PASS/FAIL/PARTIAL + `measured_value` + provenance. Anything unresolvable (unknown observable, unsupported window/op, partial data) → `agent`/`needs_rerun` bucket — **never a fabricated PASS**.
+**Architecture:** `viva_superpowers/study_evaluator.py`. For each behavior test: classify the `measure.kind` as run-data-evaluable or not (non-run-data kinds → `agent` bucket, never guessed); resolve the `path` to a series via `RunReader`; apply the `window`; reduce per the `kind`; apply the `pass_if` op → PASS/FAIL/PARTIAL + `measured_value` + provenance. Anything unresolvable (unknown observable, unsupported window/op, partial data) → `agent`/`needs_rerun` bucket — **never a fabricated PASS**.
 
 **Tech Stack:** Python 3.11+, `pbg_emitters.RunReader` (returns polars DF `[generation,time,abs_time,value]`), polars, numpy; pytest. Spec: `docs/specs/2026-06-09-study-run-outcome-spine-design.md` §5. Operator set grounded in the v2e-invest census (program memory).
 
@@ -15,7 +15,7 @@
 ## Contract
 
 ```python
-# pbg_superpowers/study_evaluator.py
+# viva_superpowers/study_evaluator.py
 def evaluate_study(spec: dict, reader: "RunReader") -> dict[str, dict]: ...
 def evaluate_test(test: dict, reader: "RunReader") -> dict: ...
 
@@ -61,11 +61,11 @@ Unsupported op → agent bucket.
 
 ## Task 1: Module skeleton + bucket classifier + dep
 
-**Files:** Create `pbg_superpowers/study_evaluator.py`; Modify `pyproject.toml`; Test `tests/test_study_evaluator.py`.
+**Files:** Create `viva_superpowers/study_evaluator.py`; Modify `pyproject.toml`; Test `tests/test_study_evaluator.py`.
 
 - [ ] **Step 1: Failing test**
 ```python
-from pbg_superpowers import study_evaluator as se
+from viva_superpowers import study_evaluator as se
 def test_non_run_data_kind_routes_to_agent():
     out = se.evaluate_test({"name":"t","measure":{"kind":"tooling"},"pass_if":{"op":"eq","value":True}}, reader=None)
     assert out["evaluated_by"] == "agent"

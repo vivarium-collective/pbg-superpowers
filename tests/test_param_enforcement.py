@@ -1,7 +1,7 @@
-"""Tests for pbg_superpowers.param_enforcement (the enforcement gate, Thread D)."""
+"""Tests for viva_superpowers.param_enforcement (the enforcement gate, Thread D)."""
 import pytest
 
-from pbg_superpowers.param_enforcement import (
+from viva_superpowers.param_enforcement import (
     check_enforced_params, load_enforced_params, format_violations,
     ParamViolation,
 )

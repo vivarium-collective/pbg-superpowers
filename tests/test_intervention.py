@@ -1,10 +1,10 @@
-"""Tests for the reusable Intervention process (pbg_superpowers.intervention)."""
+"""Tests for the reusable Intervention process (viva_superpowers.intervention)."""
 import pytest
 
 from bigraph_schema import allocate_core
 from process_bigraph import Composite
 
-from pbg_superpowers.intervention import (
+from viva_superpowers.intervention import (
     Intervention, register_intervention, intervention_node,
 )
 

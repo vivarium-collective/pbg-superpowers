@@ -14,10 +14,10 @@
 
 ## File Structure
 
-- `pbg_superpowers/workspace_paths.py` — add `study_dir()`, `iter_study_dirs()`, `study_owner()`, nested detection. (VENDORED — mirror to vivarium-workbench in Task 6.)
-- `pbg_superpowers/paths.py` — expose `study_dir(slug)` CLI + import the new helpers.
-- `pbg_superpowers/migrate_nested.py` — NEW: flat→nested migration tool + CLI.
-- `pbg_superpowers/scaffold.py` — emit nested investigation scaffold.
+- `viva_superpowers/workspace_paths.py` — add `study_dir()`, `iter_study_dirs()`, `study_owner()`, nested detection. (VENDORED — mirror to vivarium-workbench in Task 6.)
+- `viva_superpowers/paths.py` — expose `study_dir(slug)` CLI + import the new helpers.
+- `viva_superpowers/migrate_nested.py` — NEW: flat→nested migration tool + CLI.
+- `viva_superpowers/scaffold.py` — emit nested investigation scaffold.
 - `tests/test_workspace_paths_nested.py` — NEW resolver tests.
 - `tests/test_migrate_nested.py` — NEW migration tests.
 - `vivarium-workbench/vivarium_workbench/lib/workspace_paths.py` — mirror the resolver additions (drift guard).
@@ -28,7 +28,7 @@
 ## Task 1: Nested study resolution in `workspace_paths.py`
 
 **Files:**
-- Modify: `pbg_superpowers/workspace_paths.py`
+- Modify: `viva_superpowers/workspace_paths.py`
 - Test: `tests/test_workspace_paths_nested.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -36,7 +36,7 @@
 ```python
 # tests/test_workspace_paths_nested.py
 from pathlib import Path
-from pbg_superpowers.workspace_paths import WorkspacePaths
+from viva_superpowers.workspace_paths import WorkspacePaths
 
 def _ws(tmp, nested: bool):
     (tmp / "workspace.yaml").write_text("name: demo\n", encoding="utf-8")
@@ -133,7 +133,7 @@ Expected: PASS (5 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pbg_superpowers/workspace_paths.py tests/test_workspace_paths_nested.py
+git add viva_superpowers/workspace_paths.py tests/test_workspace_paths_nested.py
 git commit -m "feat(paths): nested-aware study resolution (study_dir/iter_study_dirs/study_owner) + flat back-compat"
 ```
 
@@ -142,7 +142,7 @@ git commit -m "feat(paths): nested-aware study resolution (study_dir/iter_study_
 ## Task 2: Expose `study_dir` in `paths.py` CLI
 
 **Files:**
-- Modify: `pbg_superpowers/paths.py`
+- Modify: `viva_superpowers/paths.py`
 - Test: `tests/test_workspace_paths_nested.py` (append)
 
 - [ ] **Step 1: Write the failing test**
@@ -150,7 +150,7 @@ git commit -m "feat(paths): nested-aware study resolution (study_dir/iter_study_
 ```python
 def test_paths_cli_study_dir(tmp_path, capsys):
     _ws(tmp_path, nested=True)
-    from pbg_superpowers.paths import _main
+    from viva_superpowers.paths import _main
     rc = _main(["--study", "s1", "--workspace", str(tmp_path)])
     out = capsys.readouterr().out.strip()
     assert rc == 0
@@ -164,7 +164,7 @@ Expected: FAIL (`--study` not a recognized arg)
 
 - [ ] **Step 3: Add the `--study` branch to `_main`**
 
-In `pbg_superpowers/paths.py` `_main`, after the existing argparse setup add:
+In `viva_superpowers/paths.py` `_main`, after the existing argparse setup add:
 
 ```python
     ap.add_argument("--study", help="resolve a study dir by slug (nested-aware)")
@@ -188,8 +188,8 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pbg_superpowers/paths.py tests/test_workspace_paths_nested.py
-git commit -m "feat(paths): pbg_superpowers.paths --study resolves a study dir nested-aware"
+git add viva_superpowers/paths.py tests/test_workspace_paths_nested.py
+git commit -m "feat(paths): viva_superpowers.paths --study resolves a study dir nested-aware"
 ```
 
 ---
@@ -197,7 +197,7 @@ git commit -m "feat(paths): pbg_superpowers.paths --study resolves a study dir n
 ## Task 3: Migration tool `migrate_nested.py` — discovery + dry-run
 
 **Files:**
-- Create: `pbg_superpowers/migrate_nested.py`
+- Create: `viva_superpowers/migrate_nested.py`
 - Test: `tests/test_migrate_nested.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -206,7 +206,7 @@ git commit -m "feat(paths): pbg_superpowers.paths --study resolves a study dir n
 # tests/test_migrate_nested.py
 from pathlib import Path
 import subprocess
-from pbg_superpowers.migrate_nested import plan_migration
+from viva_superpowers.migrate_nested import plan_migration
 
 def _flat_ws(tmp):
     subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
@@ -234,12 +234,12 @@ def test_plan_maps_studies_to_owning_investigation(tmp_path):
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_migrate_nested.py -v`
-Expected: FAIL (`No module named pbg_superpowers.migrate_nested`)
+Expected: FAIL (`No module named viva_superpowers.migrate_nested`)
 
 - [ ] **Step 3: Implement `plan_migration`**
 
 ```python
-# pbg_superpowers/migrate_nested.py
+# viva_superpowers/migrate_nested.py
 """Migrate a workspace from flat studies/ to nested investigations/<inv>/studies/.
 
 Maps each flat studies/<slug>/ to its owning investigation (investigation.yaml
@@ -247,7 +247,7 @@ studies[] ∪ study.yaml `investigation:` back-ref), moves with `git mv` to pres
 history, rewrites workspace.yaml layout. Studies with no owner are reported as
 orphans and left in place. Idempotent.
 
-CLI: python -m pbg_superpowers.migrate_nested --workspace <ws> [--dry-run]
+CLI: python -m viva_superpowers.migrate_nested --workspace <ws> [--dry-run]
 """
 from __future__ import annotations
 import argparse, subprocess
@@ -304,7 +304,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pbg_superpowers/migrate_nested.py tests/test_migrate_nested.py
+git add viva_superpowers/migrate_nested.py tests/test_migrate_nested.py
 git commit -m "feat(migrate): plan_migration maps flat studies to owning investigation + orphan report"
 ```
 
@@ -313,13 +313,13 @@ git commit -m "feat(migrate): plan_migration maps flat studies to owning investi
 ## Task 4: Migration tool — apply with `git mv` + layout rewrite + idempotency
 
 **Files:**
-- Modify: `pbg_superpowers/migrate_nested.py`
+- Modify: `viva_superpowers/migrate_nested.py`
 - Test: `tests/test_migrate_nested.py` (append)
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-from pbg_superpowers.migrate_nested import migrate
+from viva_superpowers.migrate_nested import migrate
 
 def test_migrate_moves_and_is_idempotent(tmp_path):
     ws = _flat_ws(tmp_path)
@@ -403,7 +403,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pbg_superpowers/migrate_nested.py tests/test_migrate_nested.py
+git add viva_superpowers/migrate_nested.py tests/test_migrate_nested.py
 git commit -m "feat(migrate): apply migration with git mv + layout rewrite; idempotent"
 ```
 
@@ -419,7 +419,7 @@ git commit -m "feat(migrate): apply migration with git mv + layout rewrite; idem
 In `[project.scripts]` (next to `pbg-backfill-runs`/`pbg-scaffold`):
 
 ```toml
-pbg-migrate-nested = "pbg_superpowers.migrate_nested:main"
+pbg-migrate-nested = "viva_superpowers.migrate_nested:main"
 ```
 
 - [ ] **Step 2: Verify it resolves**
@@ -466,12 +466,12 @@ git commit -m "feat(paths): mirror nested study resolver (sync with pbg-superpow
 ## Task 7: Scaffold nested investigations (`scaffold.py`) + pbg-template
 
 **Files:**
-- Modify: `pbg_superpowers/scaffold.py` (and `tests/test_workspace_scaffold*.py` expectations)
+- Modify: `viva_superpowers/scaffold.py` (and `tests/test_workspace_scaffold*.py` expectations)
 - Modify: pbg-template (locate the template root referenced by scaffold)
 
 - [ ] **Step 1: Locate the template + read scaffold's investigation/study creation**
 
-Run: `grep -rn "investigations" pbg_superpowers/scaffold.py | head` and find where it writes `investigations/<slug>/` and `studies/<slug>/`. Identify the pbg-template path it copies from.
+Run: `grep -rn "investigations" viva_superpowers/scaffold.py | head` and find where it writes `investigations/<slug>/` and `studies/<slug>/`. Identify the pbg-template path it copies from.
 
 - [ ] **Step 2: Write/extend the failing test** — scaffold a new study under an investigation and assert it lands at `investigations/<inv>/studies/<study>/study.yaml` with `investigation: <inv>` back-ref. (Mirror the style of `tests/test_workspace_scaffold.py`; reuse its tmp-workspace fixture.)
 
@@ -484,7 +484,7 @@ Run: `grep -rn "investigations" pbg_superpowers/scaffold.py | head` and find whe
 - [ ] **Step 6: Commit**
 
 ```bash
-git add pbg_superpowers/scaffold.py tests/test_workspace_scaffold*.py
+git add viva_superpowers/scaffold.py tests/test_workspace_scaffold*.py
 git commit -m "feat(scaffold): create studies nested under their investigation (+ back-ref); nested template"
 ```
 

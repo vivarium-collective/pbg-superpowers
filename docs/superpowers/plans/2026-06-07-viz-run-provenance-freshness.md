@@ -6,7 +6,7 @@
 
 **Architecture:** A pure freshness core (`viz_freshness.py`) is the single source of truth, vendored into the dashboard (drift-guarded like `workspace_paths`). The per-study `runs.db` `runs_meta` table gains `emitter_path` and a `latest_run()` accessor; `visualizations[]` entries gain a `render:` command; each chart gets a `<chart>.meta.json` provenance sidecar. `refresh-viz` re-runs registered render commands against the latest run (auto on rerun, error-tolerant) and reports the rest. Detection lights up the linter, the dashboard study card, and the report.
 
-**Tech Stack:** Python 3.12 stdlib (sqlite3, json, hashlib, subprocess), pytest; vanilla-JS SPA (`walkthrough.js`); the existing `pbg_superpowers` package + `vivarium_workbench` package.
+**Tech Stack:** Python 3.12 stdlib (sqlite3, json, hashlib, subprocess), pytest; vanilla-JS SPA (`walkthrough.js`); the existing `viva_superpowers` package + `vivarium_workbench` package.
 
 **Spec:** `docs/superpowers/specs/2026-06-07-viz-run-provenance-freshness-design.md`.
 **Branches:** `pbg-superpowers feat/viz-run-provenance` (spec already committed here) + a matching `vivarium-workbench feat/viz-run-provenance`.
@@ -16,11 +16,11 @@
 ## File Structure
 
 **pbg-superpowers**
-- Create `pbg_superpowers/viz_freshness.py` — pure freshness core: read/stamp `<chart>.meta.json`, `chart_freshness()`, `manifest_diff()`. No I/O beyond the chart dir + meta files.
-- Create `pbg_superpowers/run_registry.py` — `latest_run(runs_db)` + `record_run(...)` thin wrappers over `runs_meta` (so runners + dashboard share one accessor). `emitter_path` column.
-- Modify `pbg_superpowers/backfill_runs.py` — discover + register parquet/zarr run dirs.
-- Create `pbg_superpowers/refresh_viz.py` — `refresh_study_viz(study_dir, spec, latest)` → runs `render:` commands, stamps meta, returns a per-chart result list (error-tolerant).
-- Modify `pbg_superpowers/report_linter.py` — `viz_stale_vs_latest_run` check; retire `figure_stale_vs_run`.
+- Create `viva_superpowers/viz_freshness.py` — pure freshness core: read/stamp `<chart>.meta.json`, `chart_freshness()`, `manifest_diff()`. No I/O beyond the chart dir + meta files.
+- Create `viva_superpowers/run_registry.py` — `latest_run(runs_db)` + `record_run(...)` thin wrappers over `runs_meta` (so runners + dashboard share one accessor). `emitter_path` column.
+- Modify `viva_superpowers/backfill_runs.py` — discover + register parquet/zarr run dirs.
+- Create `viva_superpowers/refresh_viz.py` — `refresh_study_viz(study_dir, spec, latest)` → runs `render:` commands, stamps meta, returns a per-chart result list (error-tolerant).
+- Modify `viva_superpowers/report_linter.py` — `viz_stale_vs_latest_run` check; retire `figure_stale_vs_run`.
 - Modify `skills/pbg-study/SKILL.md`, `skills/pbg-investigation/SKILL.md`, `docs/concepts/vivarium-workbench-model.md`.
 - Tests under `tests/`.
 
@@ -35,7 +35,7 @@
 ## Task 1: Freshness core — `chart_freshness()` + meta sidecar (pbg-superpowers, TDD)
 
 **Files:**
-- Create: `pbg_superpowers/viz_freshness.py`
+- Create: `viva_superpowers/viz_freshness.py`
 - Test: `tests/test_viz_freshness.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -44,7 +44,7 @@
 # tests/test_viz_freshness.py
 import json
 from pathlib import Path
-from pbg_superpowers.viz_freshness import (
+from viva_superpowers.viz_freshness import (
     stamp_meta, read_meta, chart_freshness, manifest_diff,
 )
 
@@ -104,7 +104,7 @@ def test_manifest_diff_flags_orphans(tmp_path):
 - [ ] **Step 3: Implement**
 
 ```python
-# pbg_superpowers/viz_freshness.py
+# viva_superpowers/viz_freshness.py
 """Pure run->chart freshness core (single source of truth; vendored into the
 dashboard). A chart's <chart>.meta.json records which run produced it; freshness
 compares that against the study's latest run."""
@@ -191,7 +191,7 @@ def manifest_diff(study_dir: Path, entries: list[dict]) -> dict:
 ## Task 2: `latest_run()` + `emitter_path` in the run registry (pbg-superpowers, TDD)
 
 **Files:**
-- Create: `pbg_superpowers/run_registry.py`
+- Create: `viva_superpowers/run_registry.py`
 - Modify: `vivarium_workbench/lib/composite_runs.py:_NEW_COLUMNS` (add `emitter_path`) — and mirror the column in the per-study runs.db writer.
 - Test: `tests/test_run_registry.py`
 
@@ -203,7 +203,7 @@ Context: `runs_meta` columns today are `run_id, spec_id, label, params_json, sta
 # tests/test_run_registry.py
 import sqlite3
 from pathlib import Path
-from pbg_superpowers.run_registry import latest_run, RUNS_META_DDL
+from viva_superpowers.run_registry import latest_run, RUNS_META_DDL
 
 def _db(tmp):
     p = tmp / "runs.db"; conn = sqlite3.connect(p); conn.executescript(RUNS_META_DDL)
@@ -234,7 +234,7 @@ def test_latest_run_missing_db(tmp_path):
 - [ ] **Step 3: Implement**
 
 ```python
-# pbg_superpowers/run_registry.py
+# viva_superpowers/run_registry.py
 """Thin read accessor over the per-study runs.db `runs_meta` table — the
 authoritative record of which runs belong to a study and which is latest."""
 from __future__ import annotations
@@ -297,7 +297,7 @@ def latest_run(runs_db: Path) -> dict | None:
 ## Task 3: Auto-register discovered parquet/zarr runs (pbg-superpowers, TDD)
 
 **Files:**
-- Modify: `pbg_superpowers/backfill_runs.py`
+- Modify: `viva_superpowers/backfill_runs.py`
 - Test: `tests/test_backfill_runs.py` (append)
 
 - [ ] **Step 1: Write failing test** — an on-disk emitter dir (e.g. `studies/s1/out/<run>/` containing a `*.parquet` or `*.zarr`) with no `runs_meta` row gets registered with `completed_at` = newest partition mtime.
@@ -305,8 +305,8 @@ def latest_run(runs_db: Path) -> dict | None:
 ```python
 def test_backfill_registers_discovered_parquet(tmp_path):
     import sqlite3
-    from pbg_superpowers.run_registry import RUNS_META_DDL, latest_run
-    from pbg_superpowers.backfill_runs import backfill_study_runs
+    from viva_superpowers.run_registry import RUNS_META_DDL, latest_run
+    from viva_superpowers.backfill_runs import backfill_study_runs
     sd = tmp_path / "studies" / "s1"; (sd / "out" / "r-disk").mkdir(parents=True)
     (sd / "out" / "r-disk" / "data.parquet").write_bytes(b"PAR1")
     db = sd / "runs.db"; sqlite3.connect(db).executescript(RUNS_META_DDL)
@@ -329,7 +329,7 @@ def test_backfill_registers_discovered_parquet(tmp_path):
 ## Task 4: `refresh-viz` core — re-run render commands + stamp meta (pbg-superpowers, TDD)
 
 **Files:**
-- Create: `pbg_superpowers/refresh_viz.py`
+- Create: `viva_superpowers/refresh_viz.py`
 - Test: `tests/test_refresh_viz.py`
 
 - [ ] **Step 1: Write failing tests**
@@ -337,8 +337,8 @@ def test_backfill_registers_discovered_parquet(tmp_path):
 ```python
 # tests/test_refresh_viz.py
 from pathlib import Path
-from pbg_superpowers.refresh_viz import refresh_study_viz
-from pbg_superpowers.viz_freshness import read_meta
+from viva_superpowers.refresh_viz import refresh_study_viz
+from viva_superpowers.viz_freshness import read_meta
 
 def _study(tmp):
     d = tmp / "studies" / "s1"; (d / "charts").mkdir(parents=True); return d
@@ -360,7 +360,7 @@ def test_refresh_runs_command_and_stamps(tmp_path):
 def test_refresh_failing_command_keeps_old_meta(tmp_path):
     d = _study(tmp_path)
     (d / "charts" / "c.svg").write_text("OLD")
-    from pbg_superpowers.viz_freshness import stamp_meta
+    from viva_superpowers.viz_freshness import stamp_meta
     stamp_meta(d / "charts" / "c.svg", source_run_id="rOLD",
                generation_id=None, rendered_at=1.0, command="x")
     spec = {"visualizations": [{"name": "v", "chart": "charts/c.svg",
@@ -381,7 +381,7 @@ def test_refresh_reports_entries_without_command(tmp_path):
 - [ ] **Step 3: Implement**
 
 ```python
-# pbg_superpowers/refresh_viz.py
+# viva_superpowers/refresh_viz.py
 """Re-run the render: command of each visualizations[] entry against the
 study's latest run, stamping provenance. Error-tolerant: a failed render leaves
 the old chart + meta in place (still flagged stale) and never raises."""
@@ -441,7 +441,7 @@ def refresh_study_viz(study_dir: Path, spec: dict, latest: dict | None) -> list[
 ## Task 5: Linter check `viz_stale_vs_latest_run` (pbg-superpowers, TDD)
 
 **Files:**
-- Modify: `pbg_superpowers/report_linter.py` (add check to `CHECKS`, the `_CHECK_FUNCS` list ~1866, and a `_check_viz_stale_vs_latest_run`; retire `_check_figure_stale_vs_run` / `figure_stale_vs_run`).
+- Modify: `viva_superpowers/report_linter.py` (add check to `CHECKS`, the `_CHECK_FUNCS` list ~1866, and a `_check_viz_stale_vs_latest_run`; retire `_check_figure_stale_vs_run` / `figure_stale_vs_run`).
 - Test: `tests/test_report_linter.py` (append)
 
 The check reuses `viz_freshness.chart_freshness` + `run_registry.latest_run`. `--strict` already threads through the CLI/`lint_workspace_report`; default level `warning`, `error` when strict.
@@ -452,9 +452,9 @@ The check reuses `viz_freshness.chart_freshness` + `run_registry.latest_run`. `-
 def test_viz_stale_vs_latest_run_fires_on_mismatch(tmp_path):
     import sqlite3
     from pathlib import Path
-    from pbg_superpowers.run_registry import RUNS_META_DDL
-    from pbg_superpowers.viz_freshness import stamp_meta
-    from pbg_superpowers.report_linter import _LintContext, _check_viz_stale_vs_latest_run
+    from viva_superpowers.run_registry import RUNS_META_DDL
+    from viva_superpowers.viz_freshness import stamp_meta
+    from viva_superpowers.report_linter import _LintContext, _check_viz_stale_vs_latest_run
     sd = tmp_path / "studies" / "s1"; (sd / "charts").mkdir(parents=True)
     (sd / "charts" / "c.svg").write_text("x")
     stamp_meta(sd / "charts" / "c.svg", source_run_id="OLD",
@@ -511,7 +511,7 @@ Add `"viz_stale_vs_latest_run"` to `CHECKS`, add `_check_viz_stale_vs_latest_run
 
 **Files:** `skills/pbg-study/SKILL.md`, `skills/pbg-investigation/SKILL.md`, `docs/concepts/vivarium-workbench-model.md`.
 
-- [ ] **Step 1:** In `pbg-study/SKILL.md` add the `refresh-viz <study> [--no-auto]` subcommand: resolve study dir via `python -m pbg_superpowers.paths --study <slug>`, call `refresh_study_viz(study_dir, spec, latest_run(runs.db))`, print the per-chart result list (rendered / error / needs_manual_refresh). Document `visualizations[].render` (with `{chart}` substitution + `PBG_RUN_DIR` / `PBG_RUN_ID` env) in the same file.
+- [ ] **Step 1:** In `pbg-study/SKILL.md` add the `refresh-viz <study> [--no-auto]` subcommand: resolve study dir via `python -m viva_superpowers.paths --study <slug>`, call `refresh_study_viz(study_dir, spec, latest_run(runs.db))`, print the per-chart result list (rendered / error / needs_manual_refresh). Document `visualizations[].render` (with `{chart}` substitution + `PBG_RUN_DIR` / `PBG_RUN_ID` env) in the same file.
 - [ ] **Step 2:** Add a `--no-refresh-viz` flag note to `run-baseline` / `run-variant` / `run-script`: after a successful run they invoke `refresh-viz` for that study unless the flag is set.
 - [ ] **Step 3:** In `pbg-investigation/SKILL.md` add `refresh-viz <inv> [--studies a,b]` orchestrating the study verb over members.
 - [ ] **Step 4:** In `docs/concepts/vivarium-workbench-model.md` document the provenance/freshness model (`render:`, `.meta.json`, fresh/stale/untracked, `latest_run`).
@@ -522,7 +522,7 @@ Add `"viz_stale_vs_latest_run"` to `CHECKS`, add `_check_viz_stale_vs_latest_run
 ## Task 7: Vendored freshness mirror + drift guard (vivarium-workbench, TDD)
 
 **Files:**
-- Create: `vivarium_workbench/lib/viz_freshness.py` (byte-copy of `pbg_superpowers/viz_freshness.py`).
+- Create: `vivarium_workbench/lib/viz_freshness.py` (byte-copy of `viva_superpowers/viz_freshness.py`).
 - Test: `tests/test_viz_freshness_mirror.py` (drift guard, same pattern as the `workspace_paths` mirror test).
 
 - [ ] **Step 1: Write failing test** asserting the two files' `chart_freshness`/`stamp_meta`/`manifest_diff` source bodies are identical (read both files, compare the function source via `inspect.getsource` or a normalized text compare of the shared region).

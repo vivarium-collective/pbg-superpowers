@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.investigation_status (Task 3).
+"""Tests for viva_superpowers.investigation_status (Task 3).
 
 Covers:
 - roll_up_acceptance: all-pass, any-fail, partial, in-progress, mixed
@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from pbg_superpowers import study_io
-from pbg_superpowers.investigation_status import (
+from viva_superpowers import study_io
+from viva_superpowers.investigation_status import (
     roll_up_acceptance,
     write_investigation_acceptance,
 )

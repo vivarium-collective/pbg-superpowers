@@ -15,7 +15,7 @@
 ---
 
 ## File map
-- Create: `pbg_superpowers/feedback_tracking.py`.
+- Create: `viva_superpowers/feedback_tracking.py`.
 - Test: `tests/test_feedback_tracking.py`.
 - Modify (dashboard): `vivarium_workbench/server.py` (`_collect_study_feedback` → tracked, or a new study-detail field) + `static/study-detail.js` (+/or `templates/study-detail.html`) for the render. Test: `tests/` mirror.
 
@@ -30,7 +30,7 @@
 ## Task 2: Surface on study-detail (vivarium-workbench, render only)
 - [ ] **Step 1:** Branch `feat/feedback-tracking-render` off origin/main. Find where feedback is currently surfaced: `server.py:_collect_study_feedback` (~1473) attaches `spec["expert_feedback"]`; find where the study-detail page renders it (study-detail.js / study-detail.html / or it isn't rendered there yet). 
 - [ ] **Step 2: Failing test** (Python, mirror `test_study_detail_page.py`) — the study-detail data/spec now carries the tracked feedback (`study_feedback_tracked` output) with `status` + `summary`; assert the served data includes it.
-- [ ] **Step 3: Implement** — `_collect_study_feedback` (or a new field, e.g. `spec["feedback_tracked"]`) calls `pbg_superpowers.feedback_tracking.study_feedback_tracked` (defensive import). In `study-detail.js` (or the template), render a **Feedback** panel: a summary line (`<O> open / <A> addressed / <D> dismissed`) + the items with a status badge each (open=highlight, addressed=muted + show the response, dismissed=muted-strike). Escape all text. Render nothing when there's no feedback. NO AI — pure render of the tracked data.
+- [ ] **Step 3: Implement** — `_collect_study_feedback` (or a new field, e.g. `spec["feedback_tracked"]`) calls `viva_superpowers.feedback_tracking.study_feedback_tracked` (defensive import). In `study-detail.js` (or the template), render a **Feedback** panel: a summary line (`<O> open / <A> addressed / <D> dismissed`) + the items with a status badge each (open=highlight, addressed=muted + show the response, dismissed=muted-strike). Escape all text. Render nothing when there's no feedback. NO AI — pure render of the tracked data.
 - [ ] **Step 4:** Run the touched dashboard tests green. **Step 5: Commit** — `feat(study-detail): render tracked feedback with status`
 
 ---

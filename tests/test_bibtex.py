@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.bibtex — the unified workspace bib-key source.
+"""Tests for viva_superpowers.bibtex — the unified workspace bib-key source.
 
 Locks in the correctness fix: study verify and the report linter must resolve
 the SAME bib file with the SAME parser (they used to disagree).
@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pbg_superpowers import bibtex
-from pbg_superpowers.study_findings import load_bib_keys
-from pbg_superpowers.study_verify import _load_bib_keys
+from viva_superpowers import bibtex
+from viva_superpowers.study_findings import load_bib_keys
+from viva_superpowers.study_verify import _load_bib_keys
 
 
 def _ws(tmp_path: Path) -> Path:

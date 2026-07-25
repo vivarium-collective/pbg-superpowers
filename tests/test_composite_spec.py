@@ -1,9 +1,9 @@
-"""Tests for pbg_superpowers.composite_spec + composite_discovery."""
+"""Tests for viva_superpowers.composite_spec + composite_discovery."""
 from pathlib import Path
 
 import pytest
 
-from pbg_superpowers.composite_spec import (
+from viva_superpowers.composite_spec import (
     load_spec, validate_spec, substitute_parameters, build_composite_from_spec,
 )
 
@@ -137,7 +137,7 @@ def test_build_composite_with_overrides():
 
 
 def test_discovery_finds_workspace_local_specs(tmp_path):
-    from pbg_superpowers.composite_discovery import discover_composites
+    from viva_superpowers.composite_discovery import discover_composites
     # Drop a fixture into a tmp dir and discover via extra_search_paths.
     spec_text = (FIXTURES / "baseline.composite.yaml").read_text()
     (tmp_path / "local.composite.yaml").write_text(spec_text)
@@ -153,7 +153,7 @@ def test_discovery_finds_workspace_local_specs(tmp_path):
 
 
 def test_build_composite_from_spec_uses_unified_substitution():
-    from pbg_superpowers.composite_spec import build_composite_from_spec
+    from viva_superpowers.composite_spec import build_composite_from_spec
     spec = {"name": "c", "parameters": {"seed": {"type": "int", "default": 2}},
             "state": {"v": "${seed}"}}
     comp = build_composite_from_spec(spec, overrides={"seed": 9})
@@ -162,6 +162,6 @@ def test_build_composite_from_spec_uses_unified_substitution():
 
 
 def test_substitute_parameters_delegates():
-    from pbg_superpowers import composite_spec as legacy
+    from viva_superpowers import composite_spec as legacy
     out = legacy.substitute_parameters({"a": "${x}"}, {"x": {"type": "int", "default": 0}}, {"x": 5})
     assert out == {"a": 5}

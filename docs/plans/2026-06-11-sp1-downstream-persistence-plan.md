@@ -4,7 +4,7 @@
 
 **Goal:** Wire the verified downstream-persistence gaps so a run's verdict/acceptance/runs/param-drift are written to disk automatically. Spec: `docs/specs/2026-06-11-sp1-downstream-persistence-design.md`.
 
-**Architecture:** New deterministic functions in `pbg_superpowers/`; the vivarium-workbench post-run hook calls them. Code-owned slots, fill-absent, ruamel round-trip, best-effort steps in `sync()` (errors captured), idempotent. Reuse existing verdict/acceptance/check logic — no new math.
+**Architecture:** New deterministic functions in `viva_superpowers/`; the vivarium-workbench post-run hook calls them. Code-owned slots, fill-absent, ruamel round-trip, best-effort steps in `sync()` (errors captured), idempotent. Reuse existing verdict/acceptance/check logic — no new math.
 
 **Tech Stack:** Python 3.11, ruamel.yaml, pytest. Repos: `pbg-superpowers` (logic + sync), `vivarium-workbench` (the hook call in Task 2).
 
@@ -14,12 +14,12 @@
 
 ## Task 1: `enforced_params` derivation + population
 
-**Files:** Modify `pbg_superpowers/param_enforcement.py`, `pbg_superpowers/study_outcomes.py`; Test `tests/test_param_enforcement.py`.
+**Files:** Modify `viva_superpowers/param_enforcement.py`, `viva_superpowers/study_outcomes.py`; Test `tests/test_param_enforcement.py`.
 
 - [ ] **Step 1: Write failing tests.**
 ```python
 # tests/test_param_enforcement.py
-from pbg_superpowers.param_enforcement import derive_enforced_params, load_enforced_params
+from viva_superpowers.param_enforcement import derive_enforced_params, load_enforced_params
 
 def test_derive_enforced_params_baseline_and_variants():
     spec = {"baseline": [{"params": {"a": 1, "b": 2}}],
@@ -31,7 +31,7 @@ def test_derive_enforced_params_empty():
 
 def test_populate_enforced_params_fills_then_idempotent(tmp_study_dir):
     # tmp_study_dir has a study.yaml with baseline/variant params, no enforced_params
-    from pbg_superpowers.param_enforcement import populate_enforced_params
+    from viva_superpowers.param_enforcement import populate_enforced_params
     r1 = populate_enforced_params(tmp_study_dir); assert r1["written"] is True
     enforced = load_enforced_params(_read_study_yaml(tmp_study_dir))
     assert "a" in enforced
@@ -45,12 +45,12 @@ def test_populate_enforced_params_fills_then_idempotent(tmp_study_dir):
 
 ## Task 2: Investigation acceptance auto-write
 
-**Files:** Modify `pbg_superpowers/study_outcomes.py` (or `investigation_status.py`), `vivarium-workbench/vivarium_workbench/server.py`; Test `tests/test_investigation_status.py` + a dashboard test.
+**Files:** Modify `viva_superpowers/study_outcomes.py` (or `investigation_status.py`), `vivarium-workbench/vivarium_workbench/server.py`; Test `tests/test_investigation_status.py` + a dashboard test.
 
 - [ ] **Step 1: Failing test (pbg-superpowers).**
 ```python
 def test_sync_investigation_writes_acceptance(tmp_investigation):
-    from pbg_superpowers.study_outcomes import sync_investigation
+    from viva_superpowers.study_outcomes import sync_investigation
     r = sync_investigation(tmp_investigation)  # inv dir with member studies that have verdicts
     spec = _read_yaml(tmp_investigation / "investigation.yaml")
     assert "computed_acceptance" in (spec.get("executive") or spec)  # match write_investigation_acceptance's slot
@@ -60,18 +60,18 @@ def test_sync_investigation_writes_acceptance(tmp_investigation):
 ```
 - [ ] **Step 2: fail. Step 3: implement** `sync_investigation(inv_dir, workspace=None) -> {"ok": bool, "changed": bool, "error"?: str}` — a thin best-effort wrapper over `investigation_status.write_investigation_acceptance(inv_dir, workspace)`. Match the exact slot `write_investigation_acceptance` writes (confirm: `executive.computed_acceptance` per the spec).
 - [ ] **Step 4: pass.**
-- [ ] **Step 5: Wire the dashboard post-run hook.** At the `study_outcomes.sync(study_dir)` call sites in `vivarium-workbench/vivarium_workbench/server.py` (~5036/5057/5419 — confirm), after the study sync, resolve the study's parent investigation dir via `WorkspacePaths` (nested `investigations/<inv>/studies/<slug>/`) and, if found, call `sync_investigation(parent_inv_dir)` (best-effort, behind the lazy `pbg_superpowers` import already used there). Add a dashboard test asserting the hook calls it (or a structural test that the call site exists).
+- [ ] **Step 5: Wire the dashboard post-run hook.** At the `study_outcomes.sync(study_dir)` call sites in `vivarium-workbench/vivarium_workbench/server.py` (~5036/5057/5419 — confirm), after the study sync, resolve the study's parent investigation dir via `WorkspacePaths` (nested `investigations/<inv>/studies/<slug>/`) and, if found, call `sync_investigation(parent_inv_dir)` (best-effort, behind the lazy `viva_superpowers` import already used there). Add a dashboard test asserting the hook calls it (or a structural test that the call site exists).
 - [ ] **Step 6: Commit** (pbg-superpowers) — `feat(investigation): sync_investigation auto-writes computed_acceptance`; then (vivarium-workbench, separate commit/branch) — `feat(server): auto-write investigation acceptance after study sync`
 
 ## Task 3: On-disk run reconcile (backfill)
 
-**Files:** Modify `pbg_superpowers/study_outcomes.py`; Test `tests/test_study_outcomes.py`.
+**Files:** Modify `viva_superpowers/study_outcomes.py`; Test `tests/test_study_outcomes.py`.
 
 - [ ] **Step 1: Failing test.**
 ```python
 def test_reconcile_runs_registers_ondisk_run_absent_from_yaml(tmp_study_with_ondisk_run):
     # a completed run exists on disk (parquet/sqlite) but study.yaml runs[] doesn't list it
-    from pbg_superpowers.study_outcomes import sync
+    from viva_superpowers.study_outcomes import sync
     sync(tmp_study_with_ondisk_run)
     runs = _read_study_yaml(tmp_study_with_ondisk_run).get("runs") or []
     assert any(r for r in runs if r["name"] == "ondisk-run-id")
@@ -88,7 +88,7 @@ def test_reconcile_runs_registers_ondisk_run_absent_from_yaml(tmp_study_with_ond
 
 - [ ] **Step 1 (skipif `/Users/eranagmon/code/v2e-invest` absent, READ-ONLY → tmp copy):** copy a real investigation + a member study (with runs) to tmp; run `sync(study)` + `sync_investigation(inv)`; assert the study has `enforced_params` populated and the investigation has `computed_acceptance` written. Never modify the real v2e-invest.
 - [ ] **Step 2:** Add a module docstring note to `roll_up.py` clarifying it is now the MANUAL/BULK re-persist tool (the common case is auto via `sync()` + the post-run hook); its `write_gate_evaluator` arm intentionally overlaps `sync()`. Do not delete it.
-- [ ] **Step 3:** Full suite green (`pbg_superpowers` tests + the touched dashboard tests). **Step 4: Commit** — `test(sp1): v2e-invest downstream-persistence golden + roll_up.py disposition note`
+- [ ] **Step 3:** Full suite green (`viva_superpowers` tests + the touched dashboard tests). **Step 4: Commit** — `test(sp1): v2e-invest downstream-persistence golden + roll_up.py disposition note`
 
 ---
 

@@ -4,7 +4,7 @@
 
 **Goal:** Run the B2 evaluator over a study's runs and stamp the computed verdicts into a **parallel, code-owned `computed_outcomes` block per run** in `study.yaml` — **never touching the hand-authored `outcomes`** — with a per-test `reconcile: agree|divergent|no_authored` flag. Comment-preserving (ruamel), idempotent.
 
-**Architecture:** `pbg_superpowers/study_evaluator.py` gains a write layer: `compute_outcomes(study_dir) -> summary`. For each run in `study.yaml runs[]`, resolve its store, open a `RunReader`, run `evaluate_study(spec, reader)`, and write `run["computed_outcomes"] = {test: outcome}` plus `run["computed_outcomes"]["<test>"]["reconcile"]` derived by comparing `outcome.result` to the authored `run["outcomes"][test].result` (if present). Authored `outcomes` is read-only here. Write via ruamel round-trip (preserve comments). Decision recorded: **parallel block, never overwrite authored** (user choice 2026-06-09).
+**Architecture:** `viva_superpowers/study_evaluator.py` gains a write layer: `compute_outcomes(study_dir) -> summary`. For each run in `study.yaml runs[]`, resolve its store, open a `RunReader`, run `evaluate_study(spec, reader)`, and write `run["computed_outcomes"] = {test: outcome}` plus `run["computed_outcomes"]["<test>"]["reconcile"]` derived by comparing `outcome.result` to the authored `run["outcomes"][test].result` (if present). Authored `outcomes` is read-only here. Write via ruamel round-trip (preserve comments). Decision recorded: **parallel block, never overwrite authored** (user choice 2026-06-09).
 
 **Repo:** pbg-superpowers, branch `feat/study-evaluator-b2` (extends the evaluator PR). Depends on RunReader (pbg-emitters, in venv) + `evaluate_study` (B2-core).
 
@@ -12,7 +12,7 @@
 
 ## Task 1: Store resolution per run
 
-**Files:** Modify `pbg_superpowers/study_evaluator.py`; Test `tests/test_computed_outcomes.py`.
+**Files:** Modify `viva_superpowers/study_evaluator.py`; Test `tests/test_computed_outcomes.py`.
 
 - [ ] **Step 1: Failing test** — given a run dict with `emitter.store` / `run_dir` / `parquet` fields and a workspace root, `_resolve_run_store(run, study_dir, ws_root)` returns the RunReader-openable path (the dir containing `history/` for parquet), or `None` if unresolvable. Test the precedence and the "descend to the experiment dir that holds history/" behavior with a tiny hive.
 - [ ] **Step 2: Run → fail.**

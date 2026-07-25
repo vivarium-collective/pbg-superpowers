@@ -1,7 +1,7 @@
 # Visualization convention
 
 Visualizations are `process_bigraph.Step` subclasses, specifically
-extending `pbg_superpowers.visualization.Visualization`. They are real
+extending `viva_superpowers.visualization.Visualization`. They are real
 Steps wireable into Composite specs — not just discoverable
 post-simulation renderers.
 
@@ -21,7 +21,7 @@ post-simulation renderers.
 ## The base class
 
 ```python
-from pbg_superpowers.visualization import Visualization
+from viva_superpowers.visualization import Visualization
 ```
 
 Subclasses MUST override `inputs()` and `update(state, interval)`:
@@ -68,8 +68,8 @@ resulting recomputation fine for typical workspace simulations.
 ## Canonical registration: subclass `Visualization`
 
 There is **one canonical way** to register a Visualization: subclass
-`pbg_superpowers.visualization.Visualization` directly. Every shipped
-Visualization in `pbg_superpowers.visualizations.*` follows this pattern,
+`viva_superpowers.visualization.Visualization` directly. Every shipped
+Visualization in `viva_superpowers.visualizations.*` follows this pattern,
 and every Visualization in real workspaces (v2ecoli) does too.
 
 The legacy `@as_visualization(...)` decorator continues to work for
@@ -242,7 +242,7 @@ the final simulation step.
 The dashboard uses this pattern to list registered visualizations:
 
 ```python
-from pbg_superpowers.visualization import Visualization
+from viva_superpowers.visualization import Visualization
 
 viz_classes = {
     name: cls for name, cls in core.link_registry.items()

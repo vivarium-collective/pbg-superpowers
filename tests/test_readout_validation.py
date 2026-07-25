@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from pbg_superpowers.readout_validation import (
+from viva_superpowers.readout_validation import (
     available_observables,
     validate_readouts,
 )

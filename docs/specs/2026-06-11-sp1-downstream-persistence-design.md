@@ -15,15 +15,15 @@ Complete the run → verdict → acceptance → param-drift persistence path so 
 
 ## Design
 
-Four small, independent wirings. All new logic is deterministic and lives in `pbg_superpowers/`; the vivarium-workbench post-run hook (the existing `study_outcomes.sync()` call sites, `server.py:~5036/5057/5419`) calls them. All writes are code-owned slots, fill-absent-only, never clobbering authored values, via the ruamel round-trip already used by `study_outcomes`.
+Four small, independent wirings. All new logic is deterministic and lives in `viva_superpowers/`; the vivarium-workbench post-run hook (the existing `study_outcomes.sync()` call sites, `server.py:~5036/5057/5419`) calls them. All writes are code-owned slots, fill-absent-only, never clobbering authored values, via the ruamel round-trip already used by `study_outcomes`.
 
 ### 1. Investigation acceptance auto-write
-- Add `sync_investigation(inv_dir, workspace=None) -> dict` to `pbg_superpowers/study_outcomes.py` (or `investigation_status.py`): a thin best-effort wrapper that calls `write_investigation_acceptance(inv_dir, workspace)` and returns a summary.
+- Add `sync_investigation(inv_dir, workspace=None) -> dict` to `viva_superpowers/study_outcomes.py` (or `investigation_status.py`): a thin best-effort wrapper that calls `write_investigation_acceptance(inv_dir, workspace)` and returns a summary.
 - Wire the dashboard post-run hook so that after a study's `sync()`, if the study belongs to an investigation, it also calls `sync_investigation(parent_inv_dir)`. The hook already resolves the study path; resolve its parent investigation via `WorkspacePaths` (nested `investigations/<inv>/studies/<slug>/`).
 - Study `sync()` stays study-scoped (no upward coupling); the investigation step is composed at the hook level where the investigation context is known.
 
 ### 2. `enforced_params` population + activation
-- Add `derive_enforced_params(study_spec) -> list` to `pbg_superpowers/param_enforcement.py`: returns the param **names** the study explicitly declares — the union of keys in each `baseline[].params` and each `variants[].parameter_overrides` (the params the study deliberately controls).
+- Add `derive_enforced_params(study_spec) -> list` to `viva_superpowers/param_enforcement.py`: returns the param **names** the study explicitly declares — the union of keys in each `baseline[].params` and each `variants[].parameter_overrides` (the params the study deliberately controls).
 - Add `populate_enforced_params(study_dir) -> dict`: if `enforced_params` is absent, write the derived set (fill-absent, author-overridable) via the ruamel round-trip; idempotent.
 - Add `populate_enforced_params` as a best-effort step in `study_outcomes.sync()` (after `record_runs`, before/with the detector). The existing `server.py` check path (`load_enforced_params` → `check_enforced_params`) then fires and surfaces violations.
 - **Field shape:** `enforced_params:` is a list of param names (matching what `load_enforced_params` already expects at `param_enforcement.py:109`). Confirm the expected shape during implementation and match it exactly.

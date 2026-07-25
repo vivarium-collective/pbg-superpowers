@@ -1,13 +1,13 @@
-"""Tests for pbg_superpowers.imports — catalog read/write."""
+"""Tests for viva_superpowers.imports — catalog read/write."""
 from pathlib import Path
 
 import pytest
 import yaml
 
-from pbg_superpowers.imports import (
+from viva_superpowers.imports import (
     register_import, list_imports, get_import, unregister_import,
 )
-from pbg_superpowers.workspace_yaml import (
+from viva_superpowers.workspace_yaml import (
     save_workspace, WorkspaceValidationError,
 )
 

@@ -18,7 +18,7 @@
 
 ## Task 1: Route element-kind through `resolve_readout`; dedup the literal-index regex
 
-**Files:** Modify `pbg_superpowers/study_evaluator.py`; Test `tests/test_study_evaluator_via_readouts.py` (+ the goldens as the net).
+**Files:** Modify `viva_superpowers/study_evaluator.py`; Test `tests/test_study_evaluator_via_readouts.py` (+ the goldens as the net).
 
 - [ ] **Step 1: Failing/characterizing test.** Confirm a literal-index path resolves via the resolver path and produces the SAME selector:
 ```python

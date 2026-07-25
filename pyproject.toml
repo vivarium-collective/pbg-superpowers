@@ -38,40 +38,59 @@ pbg-basic-processes = { git = "https://github.com/vivarium-collective/pbg-basic-
 investigation-contracts = { git = "https://github.com/vivarium-collective/investigation-contracts.git", branch = "main" }
 
 [project.scripts]
-pbg-scaffold = "pbg_superpowers.scaffold:cli"
-pbg-feedback-import = "pbg_superpowers.feedback_import:cli"
-pbg-migrate-nested = "pbg_superpowers.migrate_nested:main"
-pbg-migrate-inputs = "pbg_superpowers.migrate_inputs:main"
-pbg-backfill-runs = "pbg_superpowers.backfill_runs:main"
-pbg-compute-outcomes = "pbg_superpowers.study_evaluator:compute_outcomes_cli"
-pbg-sync-runs = "pbg_superpowers.study_outcomes:main"
-pbg-migrate-readouts = "pbg_superpowers.readout_migration:main"
-pbg-populate-simulation-set = "pbg_superpowers.simulation_set:main"
-pbg-populate-findings = "pbg_superpowers.finding_observations:main"
-pbg-roll-up = "pbg_superpowers.roll_up:main"
-pbg-citation-gaps = "pbg_superpowers.citation_gaps:main"
+# viva-* are the current CLI names; pbg-* are kept as back-compat aliases
+# (identical targets) during the deprecation window (pbg→viva rebrand).
+viva-scaffold = "viva_superpowers.scaffold:cli"
+viva-feedback-import = "viva_superpowers.feedback_import:cli"
+viva-migrate-nested = "viva_superpowers.migrate_nested:main"
+viva-migrate-inputs = "viva_superpowers.migrate_inputs:main"
+viva-backfill-runs = "viva_superpowers.backfill_runs:main"
+viva-compute-outcomes = "viva_superpowers.study_evaluator:compute_outcomes_cli"
+viva-sync-runs = "viva_superpowers.study_outcomes:main"
+viva-migrate-readouts = "viva_superpowers.readout_migration:main"
+viva-populate-simulation-set = "viva_superpowers.simulation_set:main"
+viva-populate-findings = "viva_superpowers.finding_observations:main"
+viva-roll-up = "viva_superpowers.roll_up:main"
+viva-citation-gaps = "viva_superpowers.citation_gaps:main"
+# --- deprecated pbg-* aliases (same targets) ---
+pbg-scaffold = "viva_superpowers.scaffold:cli"
+pbg-feedback-import = "viva_superpowers.feedback_import:cli"
+pbg-migrate-nested = "viva_superpowers.migrate_nested:main"
+pbg-migrate-inputs = "viva_superpowers.migrate_inputs:main"
+pbg-backfill-runs = "viva_superpowers.backfill_runs:main"
+pbg-compute-outcomes = "viva_superpowers.study_evaluator:compute_outcomes_cli"
+pbg-sync-runs = "viva_superpowers.study_outcomes:main"
+pbg-migrate-readouts = "viva_superpowers.readout_migration:main"
+pbg-populate-simulation-set = "viva_superpowers.simulation_set:main"
+pbg-populate-findings = "viva_superpowers.finding_observations:main"
+pbg-roll-up = "viva_superpowers.roll_up:main"
+pbg-citation-gaps = "viva_superpowers.citation_gaps:main"
 
-# Register pbg_superpowers' composite-generator discovery into the
+# Register viva_superpowers' composite-generator discovery into the
 # process_bigraph.spec_generators entry-point group. This lets
 # process_bigraph.composite_spec.discover_specs find generators via a plugin
-# entry point instead of hard-importing pbg_superpowers (the old dependency
+# entry point instead of hard-importing viva_superpowers (the old dependency
 # inversion). Takes effect on (re)install; once relied upon, the engine's legacy
 # import fallback can be removed.
 [project.entry-points."process_bigraph.spec_generators"]
-pbg_superpowers = "pbg_superpowers.composite_generator:discover_generators"
+viva_superpowers = "viva_superpowers.composite_generator:discover_generators"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["pbg_superpowers"]
+# `viva_superpowers` is the real package; `pbg_superpowers` is a back-compat shim
+# (renamed 2026 — pbg→viva). Both ship so existing `import pbg_superpowers` keeps
+# working during the deprecation window. The dist NAME stays `pbg-superpowers`
+# until consumers switch their dependency string (they pin it via git @main).
+packages = ["viva_superpowers", "pbg_superpowers"]
 # templates/ and server/ live outside the package but are required at runtime
 # (report renderer, scaffold helper, server scripts). Force-include them in the
 # wheel so non-editable installs still work.
 [tool.hatch.build.targets.wheel.force-include]
-"templates" = "pbg_superpowers/_templates"
-"server" = "pbg_superpowers/_server"
+"templates" = "viva_superpowers/_templates"
+"server" = "viva_superpowers/_server"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

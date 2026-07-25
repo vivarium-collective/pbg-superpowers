@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from pbg_superpowers.linkage_index import (
+from viva_superpowers.linkage_index import (
     build_index,
     ac_gating_matrix,
     studies_for_source,

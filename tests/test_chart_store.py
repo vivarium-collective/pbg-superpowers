@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.chart_store — run-tagged charts + auto-prune."""
+"""Tests for viva_superpowers.chart_store — run-tagged charts + auto-prune."""
 from __future__ import annotations
 
 import json
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pbg_superpowers import chart_store, viz_freshness
+from viva_superpowers import chart_store, viz_freshness
 
 
 def _study(tmp_path: Path, runs: list[dict],

@@ -4,7 +4,7 @@
 
 **Goal:** Roll per-test verdicts up into a **study verdict**, and study verdicts up into an **investigation acceptance**, in deterministic code — writing to the dedicated coded slots the schema already has (`pipeline_gate.gate_evaluator.result`; a computed investigation acceptance), **never overwriting the authored `gate_status`/`executive.verdict`**, and flagging divergence. Collapses the three disagreeing inline `tests-passed` re-implementations into one canonical source. Pure pbg-superpowers Python (mirror `study_outcomes`/`simulation_set`/`band_provenance`); the dashboard renders it; no AI.
 
-**Architecture:** (a) `pbg_superpowers/study_verdict.py`: `roll_up_verdict(spec) -> {result, blocked_by, evaluated_by}` + `write_gate_evaluator(study_dir) -> bool` (ruamel, parallel coded slot, divergence flag). (b) `pbg_superpowers/investigation_status.py`: `roll_up_acceptance(inv_spec, studies_by_name) -> {verdict_status, criteria, unmet}` + `write_investigation_acceptance(inv_dir, workspace) -> bool`. (c) wire `write_gate_evaluator` into `study_outcomes.sync`; an investigation CLI/hook for acceptance. (d) dashboard render of the computed verdict/acceptance + divergence (read-only).
+**Architecture:** (a) `viva_superpowers/study_verdict.py`: `roll_up_verdict(spec) -> {result, blocked_by, evaluated_by}` + `write_gate_evaluator(study_dir) -> bool` (ruamel, parallel coded slot, divergence flag). (b) `viva_superpowers/investigation_status.py`: `roll_up_acceptance(inv_spec, studies_by_name) -> {verdict_status, criteria, unmet}` + `write_investigation_acceptance(inv_dir, workspace) -> bool`. (c) wire `write_gate_evaluator` into `study_outcomes.sync`; an investigation CLI/hook for acceptance. (d) dashboard render of the computed verdict/acceptance + divergence (read-only).
 
 **Tech:** Python 3.11+, ruamel.yaml, pytest. `.venv/bin/python`. Inputs: `study_outcomes.canonical_outcomes(spec)`, `study_status.count_test_outcomes(spec, runs)`.
 
@@ -13,8 +13,8 @@
 ---
 
 ## File map
-- Create: `pbg_superpowers/study_verdict.py`, `pbg_superpowers/investigation_status.py`.
-- Modify: `pbg_superpowers/study_outcomes.py` (`sync` also writes the gate evaluator) + `pyproject.toml` (a `pbg-roll-up` CLI / extend sync CLI).
+- Create: `viva_superpowers/study_verdict.py`, `viva_superpowers/investigation_status.py`.
+- Modify: `viva_superpowers/study_outcomes.py` (`sync` also writes the gate evaluator) + `pyproject.toml` (a `pbg-roll-up` CLI / extend sync CLI).
 - Modify (dashboard): `vivarium_workbench/server.py` (surface computed verdict/acceptance) + `static/study-detail.js` / investigation render.
 - Test: `tests/test_study_verdict.py`, `tests/test_investigation_status.py` (+ dashboard test).
 

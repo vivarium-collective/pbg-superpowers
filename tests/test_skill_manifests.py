@@ -14,22 +14,27 @@ import pytest
 import yaml
 
 
-# The skills that ship with `user-invocable: true`. 15 user-facing skills +
-# `/pbg-init` (machine setup). `/pbg-suggest` is an internal dashboard callback
-# and is deliberately NOT user-invocable. `/pbg-dashboard` is a deprecated alias
-# for `/pbg-workbench` and stays user-invocable for back-compat. Keep this in sync
-# with docs/skills.md and the counts in README.md / CLAUDE.md — the test below
-# fails if it drifts.
-USER_INVOCABLE_SKILLS = {
-    "pbg-biology-forward", "pbg-catalog", "pbg-cite-bands", "pbg-dashboard",
-    "pbg-expert", "pbg-explore", "pbg-init", "pbg-investigation", "pbg-navigate",
-    "pbg-report", "pbg-run", "pbg-server", "pbg-status", "pbg-study", "pbg-viz",
-    "pbg-workbench", "pbg-workspace",
+# The skills that ship with `user-invocable: true`. Post pbg→viva rebrand: 16
+# user-facing `viva-*` skills (incl. `/viva-init` machine setup) — `/viva-suggest`
+# is an internal dashboard callback and is deliberately NOT user-invocable — plus
+# their `pbg-*` back-compat aliases (16 mirrors + `/pbg-dashboard`, the legacy
+# dashboard→workbench alias; `/pbg-suggest` mirrors `/viva-suggest` as non-invocable).
+# Keep in sync with docs/skills.md + README/CLAUDE counts — the test below fails on drift.
+_VIVA_INVOCABLE = {
+    "viva-biology-forward", "viva-catalog", "viva-cite-bands", "viva-expert",
+    "viva-explore", "viva-init", "viva-investigation", "viva-navigate",
+    "viva-report", "viva-run", "viva-server", "viva-status", "viva-study",
+    "viva-viz", "viva-workbench", "viva-workspace",
 }
+USER_INVOCABLE_SKILLS = (
+    _VIVA_INVOCABLE
+    | {name.replace("viva-", "pbg-", 1) for name in _VIVA_INVOCABLE}
+    | {"pbg-dashboard"}
+)
 
 
 REQUIRED_FIELDS = {"name", "description"}
-SKILL_NAME_RE = re.compile(r"^pbg-[a-z][a-z0-9-]*$")
+SKILL_NAME_RE = re.compile(r"^(?:viva|pbg)-[a-z][a-z0-9-]*$")
 
 
 def _frontmatter(text: str) -> dict:
@@ -89,13 +94,13 @@ def test_user_invocable_set_is_pinned(plugin_root):
 
 def test_docs_skill_count_matches(plugin_root):
     """docs/skills.md, README.md, CLAUDE.md must all cite the live count."""
-    n = len(USER_INVOCABLE_SKILLS) - 1  # exclude pbg-init (machine setup)
+    n = len(_VIVA_INVOCABLE) - 1  # exclude viva-init (machine setup)
     skills_md = (plugin_root / "docs" / "skills.md").read_text()
     assert f"{n} user-facing skills" in skills_md, (
         f"docs/skills.md should say '{n} user-facing skills'")
     readme = (plugin_root / "README.md").read_text()
-    assert f"Ships {n} `/pbg-*` skills" in readme, (
-        f"README.md should say 'Ships {n} `/pbg-*` skills'")
+    assert f"Ships {n} `/viva-*` skills" in readme, (
+        f"README.md should say 'Ships {n} `/viva-*` skills'")
     claude = (plugin_root / "CLAUDE.md").read_text()
     assert f"all {n} user-invocable" in claude, (
         f"CLAUDE.md should say 'all {n} user-invocable'")

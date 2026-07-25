@@ -21,7 +21,7 @@ from pathlib import Path
 
 import yaml
 
-from pbg_superpowers.visualizations.timeseries_from_observables import (
+from viva_superpowers.visualizations.timeseries_from_observables import (
     TimeSeriesFromObservables,
     _build_traces,
     _label_for_run,
@@ -464,6 +464,6 @@ def test_visualization_class_update_tolerates_missing_config(tmp_path):
 
 
 def test_class_is_exported_from_visualizations_package():
-    from pbg_superpowers import visualizations
+    from viva_superpowers import visualizations
     assert "TimeSeriesFromObservables" in visualizations.__all__
     assert visualizations.TimeSeriesFromObservables is TimeSeriesFromObservables

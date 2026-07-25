@@ -1,7 +1,7 @@
 """TDD tests for set_band_provenance (spine stage 3b, Task 1).
 
 Tests are written BEFORE the implementation (TDD red phase).
-set_band_provenance lives in pbg_superpowers.band_provenance.
+set_band_provenance lives in viva_superpowers.band_provenance.
 
 Covers:
   - Basic set on behavior_tests[]
@@ -95,12 +95,12 @@ def _make_study_dir(tmp_path: Path, content: str) -> Path:
 
 def test_import():
     """set_band_provenance is importable from band_provenance."""
-    from pbg_superpowers.band_provenance import set_band_provenance  # noqa: F401
+    from viva_superpowers.band_provenance import set_band_provenance  # noqa: F401
 
 
 def test_sets_cites_on_behavior_test(tmp_path):
     """Basic: sets cites on a behavior_test entry; returns True."""
-    from pbg_superpowers.band_provenance import set_band_provenance
+    from viva_superpowers.band_provenance import set_band_provenance
 
     study_dir = _make_study_dir(tmp_path, _STUDY_YAML)
     result = set_band_provenance(study_dir, "frac-test", cites=["boesen2024"])
@@ -115,7 +115,7 @@ def test_sets_cites_on_behavior_test(tmp_path):
 
 def test_sets_calibration_anchor(tmp_path):
     """calibration_anchor is written when provided."""
-    from pbg_superpowers.band_provenance import set_band_provenance
+    from viva_superpowers.band_provenance import set_band_provenance
 
     study_dir = _make_study_dir(tmp_path, _STUDY_YAML)
     anchor = {"literature_target": 0.35, "cites": ["boesen2024"]}
@@ -130,7 +130,7 @@ def test_sets_calibration_anchor(tmp_path):
 
 def test_other_entries_untouched(tmp_path):
     """After writing frac-test cites, mass-doubling entry is byte-identical."""
-    from pbg_superpowers.band_provenance import set_band_provenance
+    from viva_superpowers.band_provenance import set_band_provenance
 
     study_dir = _make_study_dir(tmp_path, _STUDY_YAML)
     set_band_provenance(study_dir, "frac-test", cites=["boesen2024"])
@@ -146,7 +146,7 @@ def test_other_entries_untouched(tmp_path):
 
 def test_comment_preservation(tmp_path):
     """Comments on untouched entries survive the ruamel round-trip."""
-    from pbg_superpowers.band_provenance import set_band_provenance
+    from viva_superpowers.band_provenance import set_band_provenance
 
     study_dir = _make_study_dir(tmp_path, _STUDY_YAML)
     set_band_provenance(study_dir, "frac-test", cites=["boesen2024"])
@@ -162,7 +162,7 @@ def test_comment_preservation(tmp_path):
 
 def test_idempotent_second_call_returns_false(tmp_path):
     """Second identical call returns False (no write)."""
-    from pbg_superpowers.band_provenance import set_band_provenance
+    from viva_superpowers.band_provenance import set_band_provenance
 
     study_dir = _make_study_dir(tmp_path, _STUDY_YAML)
     first = set_band_provenance(study_dir, "frac-test", cites=["boesen2024"])
@@ -181,7 +181,7 @@ def test_idempotent_second_call_returns_false(tmp_path):
 
 def test_nonexistent_name_returns_false(tmp_path):
     """A non-existent test name returns False; no entry is fabricated."""
-    from pbg_superpowers.band_provenance import set_band_provenance
+    from viva_superpowers.band_provenance import set_band_provenance
 
     study_dir = _make_study_dir(tmp_path, _STUDY_YAML)
     original_text = (study_dir / "study.yaml").read_text()
@@ -197,7 +197,7 @@ def test_nonexistent_name_returns_false(tmp_path):
 
 def test_merges_existing_cites_dedup(tmp_path):
     """Merges new keys into an existing cites list; existing keys stay; dedup."""
-    from pbg_superpowers.band_provenance import set_band_provenance
+    from viva_superpowers.band_provenance import set_band_provenance
 
     study_dir = _make_study_dir(tmp_path, _STUDY_WITH_CITES)
     result = set_band_provenance(
@@ -216,7 +216,7 @@ def test_merges_existing_cites_dedup(tmp_path):
 
 def test_merge_does_not_clobber_other_entries_cites(tmp_path):
     """other-test's cites list is untouched when we write to frac-test."""
-    from pbg_superpowers.band_provenance import set_band_provenance
+    from viva_superpowers.band_provenance import set_band_provenance
 
     study_dir = _make_study_dir(tmp_path, _STUDY_WITH_CITES)
     set_band_provenance(study_dir, "frac-test", cites=["new-ref"])
@@ -230,7 +230,7 @@ def test_merge_does_not_clobber_other_entries_cites(tmp_path):
 
 def test_works_for_tests_section(tmp_path):
     """set_band_provenance also finds entries in tests[] (not just behavior_tests[])."""
-    from pbg_superpowers.band_provenance import set_band_provenance
+    from viva_superpowers.band_provenance import set_band_provenance
 
     study_dir = _make_study_dir(tmp_path, _STUDY_TESTS_ONLY)
     result = set_band_provenance(study_dir, "v4-total-dnaa", cites=["ref2024"])
@@ -243,7 +243,7 @@ def test_works_for_tests_section(tmp_path):
 
 def test_behavior_tests_searched_before_tests(tmp_path):
     """When both sections have an entry with the same name, behavior_tests wins."""
-    from pbg_superpowers.band_provenance import set_band_provenance
+    from viva_superpowers.band_provenance import set_band_provenance
 
     ambiguous = """\
 name: ambiguous-study
@@ -274,7 +274,7 @@ tests:
 
 def test_frac_test_keys_preserved(tmp_path):
     """The targeted entry retains its existing keys (name, pass_if, etc.)."""
-    from pbg_superpowers.band_provenance import set_band_provenance
+    from viva_superpowers.band_provenance import set_band_provenance
 
     study_dir = _make_study_dir(tmp_path, _STUDY_YAML)
     set_band_provenance(study_dir, "frac-test", cites=["boesen2024"])
@@ -293,21 +293,21 @@ def test_frac_test_keys_preserved(tmp_path):
 
 
 def test_skill_file_exists():
-    """skills/pbg-cite-bands/SKILL.md exists."""
-    skill = Path(__file__).resolve().parents[1] / "skills" / "pbg-cite-bands" / "SKILL.md"
+    """skills/viva-cite-bands/SKILL.md exists."""
+    skill = Path(__file__).resolve().parents[1] / "skills" / "viva-cite-bands" / "SKILL.md"
     assert skill.is_file(), f"SKILL.md not found at {skill}"
 
 
 def test_skill_frontmatter_valid():
     """SKILL.md has required front-matter fields and expected values."""
     import yaml as _yaml
-    skill = Path(__file__).resolve().parents[1] / "skills" / "pbg-cite-bands" / "SKILL.md"
+    skill = Path(__file__).resolve().parents[1] / "skills" / "viva-cite-bands" / "SKILL.md"
     text = skill.read_text()
     assert text.startswith("---\n"), "SKILL.md must start with YAML front-matter"
     end = text.find("\n---\n", 4)
     assert end != -1, "SKILL.md front-matter not closed"
     fm = _yaml.safe_load(text[4:end]) or {}
-    assert fm.get("name") == "pbg-cite-bands"
+    assert fm.get("name") == "viva-cite-bands"
     assert fm.get("user-invocable") is True
     assert "description" in fm
     assert "allowed-tools" in fm
@@ -315,7 +315,7 @@ def test_skill_frontmatter_valid():
 
 def test_skill_references_helpers():
     """SKILL.md body references the three key helpers by exact Python name."""
-    skill = Path(__file__).resolve().parents[1] / "skills" / "pbg-cite-bands" / "SKILL.md"
+    skill = Path(__file__).resolve().parents[1] / "skills" / "viva-cite-bands" / "SKILL.md"
     body = skill.read_text()
     assert "bands_missing_provenance" in body, "skill must reference bands_missing_provenance"
     assert "search_expert_docs" in body, "skill must reference search_expert_docs"
@@ -324,13 +324,13 @@ def test_skill_references_helpers():
 
 def test_skill_references_proposed_inputs_guardrail():
     """SKILL.md documents the proposed_inputs / never-fabricate guardrail."""
-    skill = Path(__file__).resolve().parents[1] / "skills" / "pbg-cite-bands" / "SKILL.md"
+    skill = Path(__file__).resolve().parents[1] / "skills" / "viva-cite-bands" / "SKILL.md"
     body = skill.read_text()
     assert "proposed_inputs" in body, "skill must mention proposed_inputs fallback"
 
 
 def test_helpers_importable():
     """All helpers referenced by the skill are importable."""
-    from pbg_superpowers.band_provenance import bands_missing_provenance  # noqa: F401
-    from pbg_superpowers.band_provenance import set_band_provenance  # noqa: F401
-    from pbg_superpowers.expert_search import search_expert_docs  # noqa: F401
+    from viva_superpowers.band_provenance import bands_missing_provenance  # noqa: F401
+    from viva_superpowers.band_provenance import set_band_provenance  # noqa: F401
+    from viva_superpowers.expert_search import search_expert_docs  # noqa: F401

@@ -1,11 +1,11 @@
-"""Structural guard: the pbg-study skill documents the feedback-respond
+"""Structural guard: the viva-study skill documents the feedback-respond
 subcommand and references the SP3b primitives by name (the AI-free split).
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-SKILL = Path(__file__).resolve().parents[1] / "skills" / "pbg-study" / "SKILL.md"
+SKILL = Path(__file__).resolve().parents[1] / "skills" / "viva-study" / "SKILL.md"
 
 
 def test_skill_names_feedback_respond_and_primitives():

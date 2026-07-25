@@ -5,10 +5,10 @@ drift between the two silently mislabels scaffolded workspaces.
 """
 import tomllib
 
-import pbg_superpowers
+import viva_superpowers
 
 
 def test_version_matches_pyproject(plugin_root):
     pyproject = plugin_root / "pyproject.toml"
     data = tomllib.loads(pyproject.read_text())
-    assert pbg_superpowers.__version__ == data["project"]["version"]
+    assert viva_superpowers.__version__ == data["project"]["version"]

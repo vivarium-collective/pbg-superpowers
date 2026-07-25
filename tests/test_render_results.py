@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.visualization.render_results.
+"""Tests for viva_superpowers.visualization.render_results.
 
 Mirrors the shape of ``process_bigraph.emitter.gather_emitter_results``:
 returns a path-keyed dict whose values are the per-viz ``{'html': str}`` dicts.
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from process_bigraph import Composite, allocate_core
 
-from pbg_superpowers.visualization import (
+from viva_superpowers.visualization import (
     Visualization,
     as_visualization,
     render_results,

@@ -6,7 +6,7 @@ runtime, not by L1 tests. The cases below are the ones with pure-Python entry
 points: schema corruption."""
 import pytest
 
-from pbg_superpowers.workspace_yaml import (
+from viva_superpowers.workspace_yaml import (
     load_workspace, save_workspace, WorkspaceValidationError,
 )
 

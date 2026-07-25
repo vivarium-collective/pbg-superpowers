@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.linkage_index (SP4a).
+"""Tests for viva_superpowers.linkage_index (SP4a).
 
 The linkage index is a derived, EPHEMERAL knowledge graph over the workspace
 YAML — studies ↔ composites ↔ observables ↔ sources ↔ findings ↔ acceptance ↔
@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from pbg_superpowers import study_io
-from pbg_superpowers.linkage_index import (
+from viva_superpowers import study_io
+from viva_superpowers.linkage_index import (
     build_index,
     ac_gating_matrix,
     studies_for_source,

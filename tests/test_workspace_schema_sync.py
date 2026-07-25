@@ -5,7 +5,7 @@ Two on-disk copies of ``workspace.schema.json`` exist:
 
   - pbg-template/template/.pbg/schemas/workspace.schema.json  (CANONICAL —
     scaffolded into every workspace; what the workspace's own lint reads)
-  - pbg_superpowers/schemas/workspace.schema.json             (BUNDLED —
+  - viva_superpowers/schemas/workspace.schema.json             (BUNDLED —
     used by pbg-superpowers' scaffold + imports helpers in contexts where
     no workspace is available, e.g. unit tests or pre-scaffold validation)
 
@@ -20,7 +20,7 @@ sibling checkout via the $PBG_TEMPLATE env var).
 To resync after an INTENTIONAL pbg-template change::
 
     cp ~/code/pbg-template/template/.pbg/schemas/workspace.schema.json \\
-       pbg_superpowers/schemas/workspace.schema.json
+       viva_superpowers/schemas/workspace.schema.json
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expan
 CANONICAL = PBG_TEMPLATE / "template" / ".pbg" / "schemas" / "workspace.schema.json"
 BUNDLED = (
     Path(__file__).resolve().parent.parent
-    / "pbg_superpowers" / "schemas" / "workspace.schema.json"
+    / "viva_superpowers" / "schemas" / "workspace.schema.json"
 )
 
 
@@ -50,7 +50,7 @@ def test_workspace_schema_matches_pbg_template():
     have to match — JSON is line-noise without a stable serialization, and
     a `cp` from canonical is the only sanctioned migration path."""
     assert BUNDLED.read_text() == CANONICAL.read_text(), (
-        "pbg_superpowers/schemas/workspace.schema.json has drifted from "
+        "viva_superpowers/schemas/workspace.schema.json has drifted from "
         f"pbg-template's canonical copy at {CANONICAL}. "
         "Resync with:\n\n"
         f"    cp {CANONICAL} {BUNDLED}\n\n"

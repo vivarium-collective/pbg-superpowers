@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.study_verdict (Task 1 + Task 2).
+"""Tests for viva_superpowers.study_verdict (Task 1 + Task 2).
 
 Covers:
 - roll_up_verdict: all-pass, any-fail, partial, not-started, blocked
@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from pbg_superpowers import study_io
-from pbg_superpowers.study_verdict import (
+from viva_superpowers import study_io
+from viva_superpowers.study_verdict import (
     diverges_from_authored,
     roll_up_verdict,
     write_gate_evaluator,
@@ -61,7 +61,7 @@ class TestRollUpVerdictPassed:
 
     def test_pass_predicate_matches_server_condition_satisfied(self):
         """The passed rule MUST equal: fail==0 and pass>0 (server.py:9561)."""
-        from pbg_superpowers import study_status
+        from viva_superpowers import study_status
         spec = _spec(_named("t1", "t2"),
                      {"t1": {"result": "PASS"}, "t2": {"result": "ok"}})
         counts = study_status.count_test_outcomes(spec, spec.get("runs"))
@@ -338,7 +338,7 @@ runs:
 # Wave 3a — preregistration_status (critique #18)
 # ---------------------------------------------------------------------------
 
-from pbg_superpowers.study_verdict import preregistration_status
+from viva_superpowers.study_verdict import preregistration_status
 
 
 def test_preregistration_status_absent_block_degrades():

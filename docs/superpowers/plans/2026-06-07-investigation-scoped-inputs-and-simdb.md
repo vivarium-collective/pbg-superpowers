@@ -6,7 +6,7 @@
 
 **Architecture:** Pure helpers in pbg-superpowers (`inputs_dir`, `investigation_inputs`, `emitter_type_of`, `list_all_runs`), vendored into the dashboard (drift-guarded like `workspace_paths`/`viz_freshness`). The dashboard's inputs endpoint becomes investigation-scoped; SimulationsDB reads the run-registry sweep (built on the merged `emitter_path`/`backfill_study_runs`). Two independent phases: Inputs, then SimulationsDB.
 
-**Tech Stack:** Python 3.12 stdlib (sqlite3, json, pathlib), pytest; vanilla-JS SPA + Jinja template. Existing `pbg_superpowers` + `vivarium_workbench` packages.
+**Tech Stack:** Python 3.12 stdlib (sqlite3, json, pathlib), pytest; vanilla-JS SPA + Jinja template. Existing `viva_superpowers` + `vivarium_workbench` packages.
 
 **Spec:** `docs/superpowers/specs/2026-06-07-investigation-scoped-inputs-and-simdb-design.md`.
 **Branches:** `pbg-superpowers feat/inputs-simdb-redesign` + `vivarium-workbench feat/inputs-simdb-redesign`.
@@ -16,10 +16,10 @@
 ## File Structure
 
 **pbg-superpowers**
-- Modify `pbg_superpowers/workspace_paths.py` — add `inputs_dir(slug)`.
-- Create `pbg_superpowers/investigation_inputs.py` — `investigation_inputs(ws_root, slug)` (pure: resolve datasets/refs/expert_docs from `investigations/<slug>/inputs/` + `investigation.yaml.inputs`, with repo-level read-through).
-- Create `pbg_superpowers/runs_index.py` — `emitter_type_of(path)`, `_all_runs(runs_db)`, `list_all_runs(ws_root)`.
-- Create `pbg_superpowers/migrate_inputs.py` — `pbg-migrate-inputs`.
+- Modify `viva_superpowers/workspace_paths.py` — add `inputs_dir(slug)`.
+- Create `viva_superpowers/investigation_inputs.py` — `investigation_inputs(ws_root, slug)` (pure: resolve datasets/refs/expert_docs from `investigations/<slug>/inputs/` + `investigation.yaml.inputs`, with repo-level read-through).
+- Create `viva_superpowers/runs_index.py` — `emitter_type_of(path)`, `_all_runs(runs_db)`, `list_all_runs(ws_root)`.
+- Create `viva_superpowers/migrate_inputs.py` — `pbg-migrate-inputs`.
 - Modify `skills/pbg-investigation/SKILL.md`, `docs/concepts/vivarium-workbench-model.md`.
 
 **vivarium-workbench**
@@ -33,7 +33,7 @@
 
 ## Task 1: `inputs_dir(slug)` + vendored mirror (TDD)
 
-**Files:** Modify `pbg_superpowers/workspace_paths.py`; Test `tests/test_workspace_paths_nested.py` (append). Then mirror into `vivarium_workbench/lib/workspace_paths.py` + its drift-guard test.
+**Files:** Modify `viva_superpowers/workspace_paths.py`; Test `tests/test_workspace_paths_nested.py` (append). Then mirror into `vivarium_workbench/lib/workspace_paths.py` + its drift-guard test.
 
 - [ ] **Step 1: Failing test** (append to `tests/test_workspace_paths_nested.py`):
 
@@ -61,7 +61,7 @@ def test_inputs_dir_nested(tmp_path):
 
 ## Task 2: `investigation_inputs()` resolver (TDD, pbg-superpowers)
 
-**Files:** Create `pbg_superpowers/investigation_inputs.py`; Test `tests/test_investigation_inputs.py`.
+**Files:** Create `viva_superpowers/investigation_inputs.py`; Test `tests/test_investigation_inputs.py`.
 
 - [ ] **Step 1: Failing tests**
 
@@ -69,7 +69,7 @@ def test_inputs_dir_nested(tmp_path):
 # tests/test_investigation_inputs.py
 from pathlib import Path
 import yaml
-from pbg_superpowers.investigation_inputs import investigation_inputs
+from viva_superpowers.investigation_inputs import investigation_inputs
 
 def _ws(tmp):
     (tmp / "workspace.yaml").write_text("name: demo\n", encoding="utf-8")
@@ -109,7 +109,7 @@ def test_repo_fallback_when_unmigrated(tmp_path):
 - [ ] **Step 3: Implement**
 
 ```python
-# pbg_superpowers/investigation_inputs.py
+# viva_superpowers/investigation_inputs.py
 """Resolve an investigation's owned inputs (datasets / references / expert docs)
 from investigations/<slug>/inputs/ + investigation.yaml's `inputs:` block, with an
 optional transitional read-through to repo-level datasets/ during migration."""
@@ -177,7 +177,7 @@ def investigation_inputs(ws_root: Path, slug: str, *, repo_fallback: bool = Fals
 
 ## Task 5: `pbg-migrate-inputs` + skill docs (pbg-superpowers, TDD)
 
-**Files:** Create `pbg_superpowers/migrate_inputs.py` + `[project.scripts] pbg-migrate-inputs`; Test `tests/test_migrate_inputs.py`; docs `skills/pbg-investigation/SKILL.md`, `docs/concepts/vivarium-workbench-model.md`.
+**Files:** Create `viva_superpowers/migrate_inputs.py` + `[project.scripts] pbg-migrate-inputs`; Test `tests/test_migrate_inputs.py`; docs `skills/pbg-investigation/SKILL.md`, `docs/concepts/vivarium-workbench-model.md`.
 
 - [ ] **Step 1: Failing test** — a workspace with repo-level `datasets/d1.csv` used (referenced in study.yaml) by exactly one investigation's study → `plan_inputs_migration(ws_root)` assigns `d1.csv` to that investigation; a dataset referenced by two investigations OR an imported source package → STAYS global (reported, not assigned).
 - [ ] **Step 2: Run — FAIL.**
@@ -192,13 +192,13 @@ def investigation_inputs(ws_root: Path, slug: str, *, repo_fallback: bool = Fals
 
 ## Task 6: `emitter_type_of(path)` (TDD, pbg-superpowers)
 
-**Files:** Create `pbg_superpowers/runs_index.py`; Test `tests/test_runs_index.py`.
+**Files:** Create `viva_superpowers/runs_index.py`; Test `tests/test_runs_index.py`.
 
 - [ ] **Step 1: Failing tests**
 
 ```python
 # tests/test_runs_index.py
-from pbg_superpowers.runs_index import emitter_type_of
+from viva_superpowers.runs_index import emitter_type_of
 
 def test_emitter_types():
     assert emitter_type_of("out/r/data.parquet") == "Parquet"
@@ -213,7 +213,7 @@ def test_emitter_types():
 - [ ] **Step 3: Implement**
 
 ```python
-# pbg_superpowers/runs_index.py
+# viva_superpowers/runs_index.py
 """Global run index across all studies, tagged by investigation/study/emitter."""
 from __future__ import annotations
 
@@ -237,9 +237,9 @@ def emitter_type_of(emitter_path: str | None) -> str:
 
 ## Task 7: `list_all_runs(ws_root)` (TDD, pbg-superpowers)
 
-**Files:** Modify `pbg_superpowers/runs_index.py`; Test `tests/test_runs_index.py` (append).
+**Files:** Modify `viva_superpowers/runs_index.py`; Test `tests/test_runs_index.py` (append).
 
-- [ ] **Step 1: Failing test** — a nested workspace, one study with a `runs.db` `runs_meta` row (`emitter_path='out/r/data.parquet'`) → `list_all_runs(ws)` returns one dict with `investigation`, `study`, `run_id`, `emitter_type=='Parquet'`. (Use `pbg_superpowers.run_registry.RUNS_META_DDL` to build the db; create `investigation.yaml` with `studies: [s1]` so `study_owner` resolves.)
+- [ ] **Step 1: Failing test** — a nested workspace, one study with a `runs.db` `runs_meta` row (`emitter_path='out/r/data.parquet'`) → `list_all_runs(ws)` returns one dict with `investigation`, `study`, `run_id`, `emitter_type=='Parquet'`. (Use `viva_superpowers.run_registry.RUNS_META_DDL` to build the db; create `investigation.yaml` with `studies: [s1]` so `study_owner` resolves.)
 
 - [ ] **Step 2: Run — FAIL.**
 

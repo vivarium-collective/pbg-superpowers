@@ -1,4 +1,4 @@
-from pbg_superpowers.composite_generator import composite_generator
+from viva_superpowers.composite_generator import composite_generator
 
 
 @composite_generator(

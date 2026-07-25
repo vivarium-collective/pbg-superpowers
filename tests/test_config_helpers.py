@@ -1,7 +1,7 @@
-"""Tests for pbg_superpowers.config_helpers.normalize_config_list (v2ecoli #3)."""
+"""Tests for viva_superpowers.config_helpers.normalize_config_list (v2ecoli #3)."""
 import pytest
 
-from pbg_superpowers.config_helpers import normalize_config_list
+from viva_superpowers.config_helpers import normalize_config_list
 
 
 def test_list_passthrough():

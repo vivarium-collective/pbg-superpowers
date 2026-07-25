@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from pbg_superpowers.viz_freshness import (
+from viva_superpowers.viz_freshness import (
     stamp_meta, read_meta, chart_freshness, manifest_diff,
 )
 

@@ -4,7 +4,7 @@
 
 **Goal:** A `readout_resolver` that normalizes a study's readouts (any of the 3 dialects) into a **canonical selector** the evaluator (#6) + `RunReader` (#2) can consume, plus the canonical readout schema for new studies. Normalize-on-read so existing studies work WITHOUT rewriting the user's investigation data; prose-laden/ambiguous readouts are flagged unresolved (never-guess).
 
-**Architecture:** `pbg_superpowers/readout_resolver.py`. `resolve_readout(readout: dict) -> ResolvedReadout | UnresolvedReadout`. It parses, in priority order: canonical `index_by`/`aggregate` → used directly; else the `identifier`/`store_path` string into a canonical selector. The canonical selector aligns with B2's existing `study_evaluator` expression/observable handling and #2's `RunReader.select`/`aggregate_series` (`index_by={type,value}`, expressions over observable ids). Schema formalized additively in pbg-template (keep `identifier`/`store_path` tolerated for back-compat).
+**Architecture:** `viva_superpowers/readout_resolver.py`. `resolve_readout(readout: dict) -> ResolvedReadout | UnresolvedReadout`. It parses, in priority order: canonical `index_by`/`aggregate` → used directly; else the `identifier`/`store_path` string into a canonical selector. The canonical selector aligns with B2's existing `study_evaluator` expression/observable handling and #2's `RunReader.select`/`aggregate_series` (`index_by={type,value}`, expressions over observable ids). Schema formalized additively in pbg-template (keep `identifier`/`store_path` tolerated for back-compat).
 
 **Tech:** Python 3.11+, pytest. Spec: `docs/specs/2026-06-09-readout-coordination-design.md` (#3). No pbg-emitters/RunReader dependency (that's #6 — this only produces the normalized selector).
 
@@ -40,7 +40,7 @@ class UnresolvedReadout:
 ```
 
 ## File map
-- Create: `pbg_superpowers/readout_resolver.py`.
+- Create: `viva_superpowers/readout_resolver.py`.
 - Modify: `pbg-template/template/.pbg/schemas/study.schema.json` (formalize canonical readout — additive).
 - Test: `tests/test_readout_resolver.py`.
 
@@ -77,6 +77,6 @@ class UnresolvedReadout:
 
 ## Notes for executor
 - `.venv/bin/python -m pytest`.
-- Read `pbg_superpowers/study_evaluator.py`'s expression resolver and REUSE its id-tokenizer (don't fork the grammar) so #6 evaluates the readout expression the same way.
+- Read `viva_superpowers/study_evaluator.py`'s expression resolver and REUSE its id-tokenizer (don't fork the grammar) so #6 evaluates the readout expression the same way.
 - Do NOT modify any real study under v2e-invest; tests use copied/inline readout dicts.
 - The pbg-template schema change is a SEPARATE commit in a different repo (note it; the orchestrator may PR it separately).

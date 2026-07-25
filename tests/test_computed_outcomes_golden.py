@@ -15,7 +15,7 @@ import yaml
 
 pytest.importorskip("pbg_emitters")
 
-from pbg_superpowers import study_evaluator as se
+from viva_superpowers import study_evaluator as se
 
 # ---------------------------------------------------------------------------
 # Real paths (read-only; test is skipped when absent)

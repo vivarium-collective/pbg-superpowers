@@ -133,12 +133,12 @@ rerun study
 ## Components & files (one shipment)
 
 **pbg-superpowers**
-- `pbg_superpowers/composite_runs.py` (or runner modules): add `emitter_path` to
+- `viva_superpowers/composite_runs.py` (or runner modules): add `emitter_path` to
   `runs_meta`; write the row from each runner; `latest_run(slug)` helper.
-- `pbg_superpowers/backfill_runs.py`: discover + register parquet/zarr run dirs.
-- `pbg_superpowers/viz_freshness.py` (new): `chart_freshness()`, meta read/stamp,
+- `viva_superpowers/backfill_runs.py`: discover + register parquet/zarr run dirs.
+- `viva_superpowers/viz_freshness.py` (new): `chart_freshness()`, meta read/stamp,
   manifest-vs-charts diff. Pure, unit-tested.
-- `pbg_superpowers/report_linter.py`: `viz_stale_vs_latest_run` check (warning;
+- `viva_superpowers/report_linter.py`: `viz_stale_vs_latest_run` check (warning;
   error under `--strict`); retire/fold `figure_stale_vs_run`.
 - `skills/pbg-study/SKILL.md`: `refresh-viz` subcommand + `visualizations[].render`
   convention + `--no-refresh-viz` on the run-* verbs.

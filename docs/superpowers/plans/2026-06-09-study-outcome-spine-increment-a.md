@@ -4,7 +4,7 @@
 
 **Goal:** Auto-record a study's runs into `study.yaml` and make the verdict pills *and* the DAG gate read **one** outcome source (the canonical run), eliminating the hand-transcription and the "place the canonical run last" hack.
 
-**Architecture:** A new `pbg_superpowers/study_outcomes.py` reconciles the study's `runs.db` into `study.yaml`'s `runs[]` (mechanical fields only; authored `outcomes`/prose preserved) and exposes `canonical_run(...)`. `study_status.count_test_outcomes` and the dashboard DAG gate both switch to reading the **canonical** run's `outcomes` (today they read `runs[-1]` and `tests[].status` respectively — two of three divergent sources). The dashboard's post-run path and a new `sync-runs` CLI/endpoint trigger the reconciliation. No evaluator yet (Increment B); no `pbg-emitters` reader extraction yet (only needed when reading series in B).
+**Architecture:** A new `viva_superpowers/study_outcomes.py` reconciles the study's `runs.db` into `study.yaml`'s `runs[]` (mechanical fields only; authored `outcomes`/prose preserved) and exposes `canonical_run(...)`. `study_status.count_test_outcomes` and the dashboard DAG gate both switch to reading the **canonical** run's `outcomes` (today they read `runs[-1]` and `tests[].status` respectively — two of three divergent sources). The dashboard's post-run path and a new `sync-runs` CLI/endpoint trigger the reconciliation. No evaluator yet (Increment B); no `pbg-emitters` reader extraction yet (only needed when reading series in B).
 
 **Tech Stack:** Python 3.11+, PyYAML, sqlite3 (stdlib), argparse; pytest. Spec: `docs/specs/2026-06-09-study-run-outcome-spine-design.md`.
 
@@ -15,9 +15,9 @@
 ## File Structure
 
 **pbg-superpowers**
-- Create: `pbg_superpowers/study_outcomes.py` — canonical-run selection + run reconciliation + `sync()` + CLI.
-- Modify: `pbg_superpowers/run_registry.py` — add `list_runs(runs_db) -> list[dict]`.
-- Modify: `pbg_superpowers/study_status.py` — `count_test_outcomes` reads canonical run, not `runs[-1]`.
+- Create: `viva_superpowers/study_outcomes.py` — canonical-run selection + run reconciliation + `sync()` + CLI.
+- Modify: `viva_superpowers/run_registry.py` — add `list_runs(runs_db) -> list[dict]`.
+- Modify: `viva_superpowers/study_status.py` — `count_test_outcomes` reads canonical run, not `runs[-1]`.
 - Modify: `pyproject.toml` — add `pbg-sync-runs` console script.
 - Test: `tests/test_study_outcomes.py`, additions to `tests/test_study_status.py` (or new `tests/test_canonical_run.py`), `tests/test_run_registry_list.py`.
 
@@ -32,7 +32,7 @@
 ### Task 1: `run_registry.list_runs`
 
 **Files:**
-- Modify: `pbg_superpowers/run_registry.py`
+- Modify: `viva_superpowers/run_registry.py`
 - Test: `tests/test_run_registry_list.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -40,7 +40,7 @@
 ```python
 # tests/test_run_registry_list.py
 from pathlib import Path
-from pbg_superpowers import run_registry
+from viva_superpowers import run_registry
 
 def test_list_runs_returns_rows_newest_first(tmp_path: Path):
     db = tmp_path / "runs.db"
@@ -59,7 +59,7 @@ def test_list_runs_missing_db_is_empty(tmp_path: Path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_run_registry_list.py -v`
-Expected: FAIL — `AttributeError: module 'pbg_superpowers.run_registry' has no attribute 'list_runs'`
+Expected: FAIL — `AttributeError: module 'viva_superpowers.run_registry' has no attribute 'list_runs'`
 
 - [ ] **Step 3: Implement `list_runs`**
 
@@ -97,7 +97,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pbg_superpowers/run_registry.py tests/test_run_registry_list.py
+git add viva_superpowers/run_registry.py tests/test_run_registry_list.py
 git commit -m "feat(run_registry): list_runs() — all runs_meta rows newest-first"
 ```
 
@@ -106,14 +106,14 @@ git commit -m "feat(run_registry): list_runs() — all runs_meta rows newest-fir
 ### Task 2: `canonical_run` selection
 
 **Files:**
-- Create: `pbg_superpowers/study_outcomes.py`
+- Create: `viva_superpowers/study_outcomes.py`
 - Test: `tests/test_study_outcomes.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_study_outcomes.py
-from pbg_superpowers import study_outcomes as so
+from viva_superpowers import study_outcomes as so
 
 def test_canonical_prefers_flag_over_position():
     spec = {"runs": [
@@ -142,12 +142,12 @@ def test_canonical_none_when_no_runs():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_study_outcomes.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'pbg_superpowers.study_outcomes'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'viva_superpowers.study_outcomes'`
 
 - [ ] **Step 3: Create the module with `canonical_run`**
 
 ```python
-# pbg_superpowers/study_outcomes.py
+# viva_superpowers/study_outcomes.py
 """Reconcile a study's runs.db into study.yaml and expose the canonical outcome
 surface. Mechanical run fields are code-owned; authored outcomes/prose are preserved.
 Increment A: record + single-source. (Evaluation of measure/pass_if is Increment B.)"""
@@ -196,7 +196,7 @@ Expected: PASS (4 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pbg_superpowers/study_outcomes.py tests/test_study_outcomes.py
+git add viva_superpowers/study_outcomes.py tests/test_study_outcomes.py
 git commit -m "feat(study_outcomes): canonical_run/canonical_outcomes selection"
 ```
 
@@ -205,7 +205,7 @@ git commit -m "feat(study_outcomes): canonical_run/canonical_outcomes selection"
 ### Task 3: `record_runs` — reconcile runs.db into study.yaml (preserve authored fields)
 
 **Files:**
-- Modify: `pbg_superpowers/study_outcomes.py`
+- Modify: `viva_superpowers/study_outcomes.py`
 - Test: `tests/test_study_outcomes.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -213,7 +213,7 @@ git commit -m "feat(study_outcomes): canonical_run/canonical_outcomes selection"
 ```python
 # append to tests/test_study_outcomes.py
 from pathlib import Path
-from pbg_superpowers import study_io, run_registry, study_outcomes as so
+from viva_superpowers import study_io, run_registry, study_outcomes as so
 
 def _study(tmp_path: Path, spec: dict) -> Path:
     d = tmp_path / "studies" / "s1"; d.mkdir(parents=True)
@@ -258,7 +258,7 @@ def test_record_is_idempotent(tmp_path: Path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/bin/python -m pytest tests/test_study_outcomes.py -k record -v`
-Expected: FAIL — `AttributeError: module 'pbg_superpowers.study_outcomes' has no attribute 'record_runs'`
+Expected: FAIL — `AttributeError: module 'viva_superpowers.study_outcomes' has no attribute 'record_runs'`
 
 - [ ] **Step 3: Implement `record_runs` (+ helpers)**
 
@@ -355,7 +355,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pbg_superpowers/study_outcomes.py tests/test_study_outcomes.py
+git add viva_superpowers/study_outcomes.py tests/test_study_outcomes.py
 git commit -m "feat(study_outcomes): record_runs reconciles runs.db into study.yaml (preserve authored)"
 ```
 
@@ -366,14 +366,14 @@ git commit -m "feat(study_outcomes): record_runs reconciles runs.db into study.y
 ### Task 4: `count_test_outcomes` uses the canonical run, not `runs[-1]`
 
 **Files:**
-- Modify: `pbg_superpowers/study_status.py` (`count_test_outcomes`, ~`:144-159`)
+- Modify: `viva_superpowers/study_status.py` (`count_test_outcomes`, ~`:144-159`)
 - Test: `tests/test_study_status.py` (add) or `tests/test_canonical_run.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_canonical_run.py
-from pbg_superpowers import study_status
+from viva_superpowers import study_status
 
 def test_count_uses_canonical_flag_not_last_run():
     spec = {
@@ -413,7 +413,7 @@ Change the run selection line (currently `latest = _latest_run(runs if runs is n
 
 (Leave the rest of `count_test_outcomes` — the per-test loop reading `outcomes.get(name)` — unchanged. `_latest_run` may remain for other callers.)
 
-> Import-cycle check: `study_outcomes` imports `study_io` + `run_registry` only (not `study_status`), so `study_status → study_outcomes` is acyclic. Verify with `.venv/bin/python -c "import pbg_superpowers.study_status"`.
+> Import-cycle check: `study_outcomes` imports `study_io` + `run_registry` only (not `study_status`), so `study_status → study_outcomes` is acyclic. Verify with `.venv/bin/python -c "import viva_superpowers.study_status"`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -423,7 +423,7 @@ Expected: PASS (new test passes; existing study_status tests still pass).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pbg_superpowers/study_status.py tests/test_canonical_run.py
+git add viva_superpowers/study_status.py tests/test_canonical_run.py
 git commit -m "fix(study_status): count_test_outcomes reads the canonical run, not runs[-1]"
 ```
 
@@ -434,7 +434,7 @@ git commit -m "fix(study_status): count_test_outcomes reads the canonical run, n
 ### Task 5: `pbg-sync-runs` CLI
 
 **Files:**
-- Modify: `pbg_superpowers/study_outcomes.py` (add `main`)
+- Modify: `viva_superpowers/study_outcomes.py` (add `main`)
 - Modify: `pyproject.toml` (`[project.scripts]`)
 - Test: `tests/test_study_outcomes_cli.py`
 
@@ -443,7 +443,7 @@ git commit -m "fix(study_status): count_test_outcomes reads the canonical run, n
 ```python
 # tests/test_study_outcomes_cli.py
 from pathlib import Path
-from pbg_superpowers import study_io, run_registry, study_outcomes as so
+from viva_superpowers import study_io, run_registry, study_outcomes as so
 
 def test_cli_syncs_named_study(tmp_path, capsys):
     (tmp_path / "workspace.yaml").write_text("name: ws\n")
@@ -501,7 +501,7 @@ if __name__ == "__main__":
 In `pyproject.toml` `[project.scripts]` add:
 
 ```toml
-pbg-sync-runs = "pbg_superpowers.study_outcomes:main"
+pbg-sync-runs = "viva_superpowers.study_outcomes:main"
 ```
 
 - [ ] **Step 5: Run test + reinstall entry point**
@@ -512,7 +512,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add pbg_superpowers/study_outcomes.py pyproject.toml tests/test_study_outcomes_cli.py
+git add viva_superpowers/study_outcomes.py pyproject.toml tests/test_study_outcomes_cli.py
 git commit -m "feat(study_outcomes): pbg-sync-runs CLI (--study/--all)"
 ```
 
@@ -528,7 +528,7 @@ git commit -m "feat(study_outcomes): pbg-sync-runs CLI (--study/--all)"
 
 ```python
 # vivarium-workbench/tests/test_gate_canonical_source.py
-from pbg_superpowers import study_status
+from viva_superpowers import study_status
 
 def _passed(parent):
     counts = study_status.count_test_outcomes(parent, parent.get("runs"))
@@ -560,7 +560,7 @@ Expected: the agreement assertion FAILS against the current `_condition_satisfie
 
 - [ ] **Step 3: Rewrite the "tests-passed" branch**
 
-In `_condition_satisfied` (`server.py:8615`), replace the `tests[].status` / `tests.last_results` logic with the shared canonical-outcome count. At the top of `_get_investigations` (or module scope) ensure `from pbg_superpowers import study_status`. Then:
+In `_condition_satisfied` (`server.py:8615`), replace the `tests[].status` / `tests.last_results` logic with the shared canonical-outcome count. At the top of `_get_investigations` (or module scope) ensure `from viva_superpowers import study_status`. Then:
 
 ```python
     if condition == "tests-passed":
@@ -597,7 +597,7 @@ Drive the `_for_test` helper directly (no HTTP). If the run launcher is hard to 
 ```python
 # vivarium-workbench/tests/test_post_run_records.py
 from pathlib import Path
-from pbg_superpowers import study_io, run_registry, study_outcomes
+from viva_superpowers import study_io, run_registry, study_outcomes
 
 def test_record_runs_after_run_picks_up_db_row(tmp_path: Path):
     d = tmp_path / "studies" / "s1"; d.mkdir(parents=True)
@@ -620,7 +620,7 @@ In `server.py`, inside `_post_study_run_baseline_for_test` and `_post_study_run_
 
 ```python
         try:
-            from pbg_superpowers import study_outcomes
+            from viva_superpowers import study_outcomes
             study_outcomes.record_runs(study_dir)
         except Exception as exc:  # never fail a successful run on a record error
             print(f"[study_outcomes] record_runs failed: {exc}", file=sys.stderr)
@@ -650,7 +650,7 @@ git commit -m "feat(server): record runs into study.yaml after a successful base
 ```python
 # vivarium-workbench/tests/test_study_sync_runs_endpoint.py
 from pathlib import Path
-from pbg_superpowers import study_io, run_registry
+from viva_superpowers import study_io, run_registry
 from vivarium_workbench import server
 
 def test_sync_runs_for_test(tmp_path: Path):
@@ -675,8 +675,8 @@ Add the module-level function (mirror existing `_post_study_*_for_test` shape):
 
 ```python
 def _post_study_sync_runs_for_test(ws_root, body: dict):
-    from pbg_superpowers import study_outcomes
-    from pbg_superpowers.workspace_paths import WorkspacePaths
+    from viva_superpowers import study_outcomes
+    from viva_superpowers.workspace_paths import WorkspacePaths
     slug = (body or {}).get("study")
     if not slug:
         return {"error": "study slug required"}, 400
@@ -729,7 +729,7 @@ In `skills/pbg-study/SKILL.md`, in the `run-script` section, after "exit 0 → a
 
 ```
 - After a successful run (exit 0), also run:
-      python -m pbg_superpowers.study_outcomes --workspace <ws> --study <slug>
+      python -m viva_superpowers.study_outcomes --workspace <ws> --study <slug>
   to record the run into study.yaml's runs[] (mechanical fields; authored
   outcomes are preserved). Skip with --no-sync-runs.
 ```
@@ -755,7 +755,7 @@ Expected: all green (pre-existing unrelated failures, if any, unchanged).
 
 ```bash
 cd v2e-invest && /Users/eranagmon/code/pbg-superpowers/.venv/bin/python \
-  -m pbg_superpowers.study_outcomes --workspace . --all
+  -m viva_superpowers.study_outcomes --workspace . --all
 git diff --stat
 ```
 Expected: `runs[]` mechanical fields populated/refreshed from each study's `runs.db`; authored `outcomes`/prose untouched (inspect `studies/dnaa-1-expression/study.yaml` — the canonical run's `outcomes:` block and prose `result:` are preserved). **Do not commit changes to v2e-invest** — this is verification only.
@@ -785,5 +785,5 @@ Pick a study where the gate and verdict previously diverged; confirm after sync 
 
 ## Notes for the executor
 - Run pbg-superpowers tests via `.venv/bin/python -m pytest` (bare `python` lacks deps).
-- The dashboard imports `pbg-superpowers`; ensure the dashboard `.venv` has the local pbg-superpowers (editable) so `from pbg_superpowers import study_outcomes` resolves to this branch.
+- The dashboard imports `pbg-superpowers`; ensure the dashboard `.venv` has the local pbg-superpowers (editable) so `from viva_superpowers import study_outcomes` resolves to this branch.
 - Branch per repo; do not push or open PRs until the user reviews.

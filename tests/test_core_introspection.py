@@ -1,6 +1,6 @@
 import pytest
 
-from pbg_superpowers.core_introspection import (
+from viva_superpowers.core_introspection import (
     list_processes, list_types, registry_snapshot,
 )
 
