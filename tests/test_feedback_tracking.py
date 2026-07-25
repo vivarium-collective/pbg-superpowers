@@ -1,4 +1,4 @@
-"""TDD tests for pbg_superpowers.feedback_tracking.study_feedback_tracked.
+"""TDD tests for viva_superpowers.feedback_tracking.study_feedback_tracked.
 
 Stage 3c: tracked, status-bearing index per study.
 Status derivation: addressed if responses[section].status in {done, addressed, resolved};
@@ -31,13 +31,13 @@ def ws(tmp_path) -> Path:
 
 
 def test_empty_when_no_investigations(ws):
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
     result = study_feedback_tracked(ws, "foo")
     assert result == {"items": [], "summary": {"open": 0, "addressed": 0, "dismissed": 0, "total": 0}}
 
 
 def test_open_items_when_no_responses(ws):
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
     _write(
         ws / "investigations" / "inv1" / "feedback" / "r1.yaml",
         {
@@ -74,7 +74,7 @@ def test_open_items_when_no_responses(ws):
 
 
 def test_addressed_when_response_status_done(ws):
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
     _write(
         ws / "investigations" / "inv1" / "feedback" / "r1.yaml",
         {
@@ -109,7 +109,7 @@ def test_addressed_when_response_status_done(ws):
 
 def test_addressed_aliases(ws):
     """'addressed' and 'resolved' also map to addressed status."""
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
     for status_val in ("addressed", "resolved"):
         ws2 = ws / f"ws_{status_val}"
         ws2.mkdir()
@@ -128,7 +128,7 @@ def test_addressed_aliases(ws):
 
 
 def test_dismissed_status(ws):
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
     for status_val in ("dismissed", "wontfix"):
         ws2 = ws / f"ws_{status_val}"
         ws2.mkdir()
@@ -149,7 +149,7 @@ def test_dismissed_status(ws):
 
 def test_multiple_annotations_per_section_share_section_status(ws):
     """Multiple annotations under the same section all get the same status."""
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
     _write(
         ws / "investigations" / "inv1" / "feedback" / "r1.yaml",
         {
@@ -182,7 +182,7 @@ def test_multiple_annotations_per_section_share_section_status(ws):
 
 def test_mixed_statuses(ws):
     """open, addressed, and dismissed items across sections."""
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
     _write(
         ws / "investigations" / "inv1" / "feedback-2026-01" / "feedback.yaml",
         {
@@ -212,7 +212,7 @@ def test_mixed_statuses(ws):
 
 def test_across_multiple_investigations(ws):
     """Feedback from different investigations for the same study is merged."""
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
     _write(
         ws / "investigations" / "inv-a" / "feedback" / "r1.yaml",
         {
@@ -242,7 +242,7 @@ def test_across_multiple_investigations(ws):
 
 def test_tolerates_malformed_files(ws):
     """Malformed files are skipped gracefully."""
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
     bad_path = ws / "investigations" / "inv1" / "feedback" / "bad.yaml"
     bad_path.parent.mkdir(parents=True)
     bad_path.write_text("not: valid: yaml: [{")
@@ -262,7 +262,7 @@ def test_tolerates_malformed_files(ws):
 
 
 def test_item_carries_report_id(ws):
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
     _write(
         ws / "investigations" / "inv1" / "feedback" / "r1.yaml",
         {
@@ -278,7 +278,7 @@ def test_item_carries_report_id(ws):
 
 def test_items_newest_first_across_sections(ws):
     """Global sort is newest-first regardless of section."""
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
     _write(
         ws / "investigations" / "inv1" / "feedback" / "r1.yaml",
         {
@@ -307,7 +307,7 @@ def test_golden_dnaa_3_box_binding_has_addressed_items():
     The real feedback at investigations/dnaa-replication/feedback-2026-06-06-1544/feedback.yaml
     has responses: {study-dnaa-3-box-binding-charts: {status: done}}.
     """
-    from pbg_superpowers.feedback_tracking import study_feedback_tracked
+    from viva_superpowers.feedback_tracking import study_feedback_tracked
 
     result = study_feedback_tracked(REAL_WS, "dnaa-3-box-binding")
     items = result["items"]

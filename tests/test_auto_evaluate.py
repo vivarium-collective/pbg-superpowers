@@ -1,4 +1,4 @@
-"""Unit tests for pbg_superpowers.auto_evaluate — auto-record behavior-test
+"""Unit tests for viva_superpowers.auto_evaluate — auto-record behavior-test
 outcomes into runs[].outcomes on canonical-run completion.
 
 Uses an injected fake test_runner so the orchestration is exercised with no
@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pbg_superpowers import auto_evaluate as ae
-from pbg_superpowers import study_io
+from viva_superpowers import auto_evaluate as ae
+from viva_superpowers import study_io
 
 
 def _write_study(tmp_path: Path, text: str) -> Path:

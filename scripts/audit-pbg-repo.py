@@ -2,7 +2,7 @@
 """Maintainer-facing CLI for auditing a single pbg-* repo.
 
 Replaces the user-invocable /pbg-package skill (removed in v0.9.0). The
-underlying audit logic still lives in pbg_superpowers.package_audit; this
+underlying audit logic still lives in viva_superpowers.package_audit; this
 script is the convenience entry point.
 
 Usage:
@@ -23,11 +23,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Make the local pbg_superpowers package importable without an editable install.
+# Make the local viva_superpowers package importable without an editable install.
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
 
-from pbg_superpowers.package_audit import main  # noqa: E402
+from viva_superpowers.package_audit import main  # noqa: E402
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

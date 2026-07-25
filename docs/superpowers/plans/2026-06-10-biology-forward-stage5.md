@@ -4,7 +4,7 @@
 
 **Goal:** Bring the quantitative biology forward into the structured finding slots the report renderer ALREADY draws — `evidence.observed`, `expected.range`/`cites`, `provenance.run_ids`, divergence — by filling them deterministically from the data that now exists (computed_outcomes + band provenance + readouts + canonical run), so the science renders as structured data instead of trapped prose. The mechanism narrative stays authored, guided by a skill. Two parts: a deterministic writer (pbg-superpowers, wired into sync, dashboard renders) + a biology-forward authoring skill (the only AI part).
 
-**Architecture:** (a) `pbg_superpowers/finding_observations.py`: `populate_finding_observations(study_dir) -> {filled, skipped}` — for each finding with a resolvable test link (`evidence.from_test`, or finding id/ref matching a test name), fill ONLY ABSENT code-owned sub-fields from that test's computed_outcome + band + readout units + canonical run; never touch authored prose; never fabricate (no test link → skip). Mirror `band_provenance`/`simulation_set` (ruamel comment-preserving, idempotent). (b) wire into `study_outcomes.sync` (4th best-effort, AFTER compute_outcomes so measured_value exists). (c) a `/pbg-biology-forward` skill that, after the numbers are filled, guides the agent to author the mechanism prose using the auto-filled observed-vs-band as scaffold.
+**Architecture:** (a) `viva_superpowers/finding_observations.py`: `populate_finding_observations(study_dir) -> {filled, skipped}` — for each finding with a resolvable test link (`evidence.from_test`, or finding id/ref matching a test name), fill ONLY ABSENT code-owned sub-fields from that test's computed_outcome + band + readout units + canonical run; never touch authored prose; never fabricate (no test link → skip). Mirror `band_provenance`/`simulation_set` (ruamel comment-preserving, idempotent). (b) wire into `study_outcomes.sync` (4th best-effort, AFTER compute_outcomes so measured_value exists). (c) a `/pbg-biology-forward` skill that, after the numbers are filled, guides the agent to author the mechanism prose using the auto-filled observed-vs-band as scaffold.
 
 **Tech:** Python 3.11+, ruamel.yaml, pytest. `.venv/bin/python`.
 
@@ -14,8 +14,8 @@
 ---
 
 ## File map
-- Create: `pbg_superpowers/finding_observations.py`, `skills/pbg-biology-forward/SKILL.md`.
-- Modify: `pbg_superpowers/study_outcomes.py` (`sync` 4th step) + `pyproject.toml` (CLI) + skill catalog (`docs/skills.md`, manifest).
+- Create: `viva_superpowers/finding_observations.py`, `skills/pbg-biology-forward/SKILL.md`.
+- Modify: `viva_superpowers/study_outcomes.py` (`sync` 4th step) + `pyproject.toml` (CLI) + skill catalog (`docs/skills.md`, manifest).
 - Test: `tests/test_finding_observations.py`.
 
 ---

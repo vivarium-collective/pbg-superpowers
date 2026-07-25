@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pbg_superpowers.report_linter import (
+from viva_superpowers.report_linter import (
     _check_narrative_spine_completeness,
     _LintContext,
     has_blocking_errors,

@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from pbg_superpowers import study_io, run_registry
-from pbg_superpowers import study_outcomes as so
+from viva_superpowers import study_io, run_registry
+from viva_superpowers import study_outcomes as so
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ class TestRollUpCLI:
             "runs": [{"name": "r1", "status": "completed",
                       "outcomes": {"t1": {"result": "PASS"}}}],
         })
-        from pbg_superpowers.roll_up import main
+        from viva_superpowers.roll_up import main
         rc = main(["--workspace", str(ws), "--study", "my-study"])
         assert rc == 0
         spec = study_io.load_yaml_mapping(sd / "study.yaml")
@@ -117,7 +117,7 @@ class TestRollUpCLI:
                 "runs": [],
             })
         (ws / "workspace.yaml").write_text("name: ws\n")
-        from pbg_superpowers.roll_up import main
+        from viva_superpowers.roll_up import main
         rc = main(["--workspace", str(ws), "--all"])
         assert rc == 0
         for slug in ("s1", "s2"):
@@ -141,7 +141,7 @@ class TestRollUpCLI:
             "name": "my-inv",
             "acceptance_criteria": [{"study": "s1", "behavior": "beh-a"}],
         })
-        from pbg_superpowers.roll_up import main
+        from viva_superpowers.roll_up import main
         rc = main(["--workspace", str(ws), "--investigation", "my-inv"])
         assert rc == 0
         spec = study_io.load_yaml_mapping(inv_dir / "investigation.yaml")

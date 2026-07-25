@@ -16,11 +16,11 @@
 
 ## Task 1: `readout_migration_status` (pure classify)
 
-**Files:** `pbg_superpowers/readout_migration.py`; Test `tests/test_readout_migration.py`.
+**Files:** `viva_superpowers/readout_migration.py`; Test `tests/test_readout_migration.py`.
 
 - [ ] **Step 1: Failing tests.**
 ```python
-from pbg_superpowers.readout_migration import readout_migration_status
+from viva_superpowers.readout_migration import readout_migration_status
 
 def test_status_classifies_canonical_migratable_needs_human(tmp_study_mixed_readouts):
     # study has: 1 already-canonical (index_by), 1 migratable (clean identifier/store_path), 1 prose needs_human
@@ -40,7 +40,7 @@ def test_status_pure_read(tmp_study_mixed_readouts):
 
 ## Task 2: report_linter surface
 
-**Files:** `pbg_superpowers/report_linter.py`; Test `tests/test_report_linter.py`.
+**Files:** `viva_superpowers/report_linter.py`; Test `tests/test_report_linter.py`.
 
 - [ ] **Step 1: Failing test** — a study with migratable + needs_human readouts produces a lint finding naming both counts.
 ```python

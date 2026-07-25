@@ -20,8 +20,8 @@ This alias stays functional for back-compat. The backing CLI is unchanged and
 available under both module names:
 
 ```bash
-python -m pbg_superpowers.workbench start   # preferred
-python -m pbg_superpowers.dashboard start   # back-compat alias (identical)
+python -m viva_superpowers.workbench start   # preferred
+python -m viva_superpowers.dashboard start   # back-compat alias (identical)
 ```
 
 Nothing else here — do not maintain launch details in two places. All guidance

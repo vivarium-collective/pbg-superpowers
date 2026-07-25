@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.backfill_runs — register on-disk emitter runs.
+"""Tests for viva_superpowers.backfill_runs — register on-disk emitter runs.
 
 Covers the dashboard-blindspot case: a bespoke sweep persists a zarr/parquet
 store under .pbg/runs/<id>/ but never writes a `simulations` row, so the Sim DB
@@ -8,7 +8,7 @@ study/investigation from the run_id), and completes stale `running` rows.
 import sqlite3
 from pathlib import Path
 
-from pbg_superpowers.backfill_runs import backfill
+from viva_superpowers.backfill_runs import backfill
 
 
 def _make_ws(tmp_path: Path) -> Path:

@@ -72,7 +72,7 @@ Investigations aggregate over their constituent studies: an Investigation card s
 
 A recurring reviewer complaint is "I can't tell which studies ran, whether the tests ran, or whether the study passed." The fix is **derive-on-read + single-sourced**, not hand-set fields:
 
-- **`pbg_superpowers.study_status.study_clarity_summary(spec, runs)`** is the single source of truth. It returns one normalized object — `{ran, tests, verdict, ambiguities}` — that every renderer reads, so the run/test/verdict markers are computed **once** and shown consistently.
+- **`viva_superpowers.study_status.study_clarity_summary(spec, runs)`** is the single source of truth. It returns one normalized object — `{ran, tests, verdict, ambiguities}` — that every renderer reads, so the run/test/verdict markers are computed **once** and shown consistently.
 - **The test markers mirror the renderer exactly.** A study's per-test pill is derived from the **latest run's `outcomes[test_name].result`** (PASS/FAIL/SKIP), **not** from the test's own `status:` field. A test with `status: passed` but no recorded run-outcome renders **⏳ pending**. So to make a passing test *show* as passing, record `runs[].outcomes: {<test_name>: {result: PASS}}` on the latest run — see [handling investigation feedback](../conventions/handling-investigation-feedback.md).
 - **`simulation_status` / `evaluation_status` are derived from `runs`**, never trusted from the stored field; a study that declares `status: completed` but records no `runs:` derives `not_run` and renders as "pending" despite the headline.
 - **The downloadable report** (`walkthrough.js` `_buildInvestigationReportHtml`) renders a per-study **"Ran · Tests · Verdict" strip** from `study_clarity_summary` (server-injected as `spec.clarity_summary`, with an equivalent client-side fallback).
@@ -381,7 +381,7 @@ discovery_implications:
       motivation: <text>
 ```
 
-It is **optional and unenforced** — absent → the section is simply omitted (which is why minimal/programmatic studies often lack it). The **rigor scorecard** (`pbg_superpowers.rigor`) flags a study that declares neither `discovery_implications` nor `follow_up_studies` with a `next_steps` gap, so the Decide phase is surfaced as feedback without becoming a hard gate.
+It is **optional and unenforced** — absent → the section is simply omitted (which is why minimal/programmatic studies often lack it). The **rigor scorecard** (`viva_superpowers.rigor`) flags a study that declares neither `discovery_implications` nor `follow_up_studies` with a `next_steps` gap, so the Decide phase is surfaced as feedback without becoming a hard gate.
 
 ### Baseline
 
@@ -522,7 +522,7 @@ A named visualization config attached to a study. Renders run output to HTML.
 
 Every `visualizations[]` entry may declare an optional `render:` command string. When present, `/pbg-study refresh-viz` (and the auto-refresh that fires after a successful `run-baseline` / `run-variant` / `run-script`) uses it to regenerate the chart against the latest run.
 
-**`runs.db` as the authoritative run↔study record.** Each study's `runs.db` (SQLite) holds a `runs_meta` table that is the single source of truth for run provenance: `run_id`, `started_at`, `completed_at`, `composite`, `variant`, `emitter_path`, and `generation_id`. `pbg_superpowers.run_registry.latest_run(runs_db_path)` returns the most-recently-completed row; `refresh-viz` queries it before every invocation.
+**`runs.db` as the authoritative run↔study record.** Each study's `runs.db` (SQLite) holds a `runs_meta` table that is the single source of truth for run provenance: `run_id`, `started_at`, `completed_at`, `composite`, `variant`, `emitter_path`, and `generation_id`. `viva_superpowers.run_registry.latest_run(runs_db_path)` returns the most-recently-completed row; `refresh-viz` queries it before every invocation.
 
 **`visualizations[].render` contract.** `render:` is a shell command run with `cwd` = the study directory. Two substitutions happen before execution:
 
@@ -748,11 +748,11 @@ Pass 10A and D, E in Pass 10B.
 
 | Component | Status | Where |
 |---|---|---|
-| A. `/pbg-study findings` interactive walk | shipped (10A) | `skills/pbg-study/SKILL.md` → `pbg_superpowers/study_findings.py` |
-| B. `search_expert_docs()` helper | shipped (10A) | `pbg_superpowers/expert_search.py` |
-| C. Findings linter | shipped (10A) | `pbg_superpowers/report_linter.py` (4 new checks) |
-| D. Cross-study findings index on `/pbg-report` | shipped (10B) | `pbg_superpowers/report.py:render_workspace_findings_index` → `reports/findings.html` |
-| E. Findings-aware `seed-from-followup` | shipped (10B) | `skills/pbg-study/SKILL.md` `--from-finding <id>` → `pbg_superpowers/seed_from_followup.py` |
+| A. `/pbg-study findings` interactive walk | shipped (10A) | `skills/pbg-study/SKILL.md` → `viva_superpowers/study_findings.py` |
+| B. `search_expert_docs()` helper | shipped (10A) | `viva_superpowers/expert_search.py` |
+| C. Findings linter | shipped (10A) | `viva_superpowers/report_linter.py` (4 new checks) |
+| D. Cross-study findings index on `/pbg-report` | shipped (10B) | `viva_superpowers/report.py:render_workspace_findings_index` → `reports/findings.html` |
+| E. Findings-aware `seed-from-followup` | shipped (10B) | `skills/pbg-study/SKILL.md` `--from-finding <id>` → `viva_superpowers/seed_from_followup.py` |
 
 The four new linter checks (C):
 
@@ -785,7 +785,7 @@ links to the page and badges the total count.
 **E. Findings-aware `seed-from-followup`.** The Pass 8
 `/pbg-study seed-from-followup <parent> <proposal-id>` subcommand takes
 an optional `--from-finding <finding-id>` flag. When passed, the helper
-at `pbg_superpowers/seed_from_followup.py` reads the finding off the
+at `viva_superpowers/seed_from_followup.py` reads the finding off the
 parent and pre-populates the child's `purpose:` + `key_assumptions:`
 from `next_action` / `explanation` / `evidence.smoking_gun` (mapping
 documented in `skills/pbg-study/SKILL.md` and the helper's docstring).
@@ -868,7 +868,7 @@ rather than guessing at a shape mismatch.
 `/pbg-report`'s structural lint (Pass B) warns on common empty-field gaps in
 `studies/<slug>/study.yaml` so a study card isn't half-blank. The check ids
 below are the literal `check=` values emitted by
-`pbg_superpowers.report_linter`; the field set + enum values themselves are
+`viva_superpowers.report_linter`; the field set + enum values themselves are
 defined by [`study.schema.json`](https://github.com/vivarium-collective/pbg-template/blob/main/template/.pbg/schemas/study.schema.json)
 (see the [multi-axis status](#multi-axis-status) table for the status enums).
 **All of these are non-blocking** — a study still passes lint with them; they

@@ -1,8 +1,8 @@
-"""Tests for the framework house plotting style (pbg_superpowers.plot_style)."""
+"""Tests for the framework house plotting style (viva_superpowers.plot_style)."""
 import numpy as np
 import pytest
 
-from pbg_superpowers.plot_style import stitch_minutes, gen_boundaries, wrap
+from viva_superpowers.plot_style import stitch_minutes, gen_boundaries, wrap
 
 
 # --------------------------------------------------------------------------- #

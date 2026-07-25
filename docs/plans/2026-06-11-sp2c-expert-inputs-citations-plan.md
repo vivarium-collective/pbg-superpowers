@@ -14,11 +14,11 @@
 
 ## Task 1: `investigation_citation_gaps` (pure surface)
 
-**Files:** Create `pbg_superpowers/citation_gaps.py`; Test `tests/test_citation_gaps.py`.
+**Files:** Create `viva_superpowers/citation_gaps.py`; Test `tests/test_citation_gaps.py`.
 
 - [ ] **Step 1: Failing tests.**
 ```python
-from pbg_superpowers.citation_gaps import investigation_citation_gaps
+from viva_superpowers.citation_gaps import investigation_citation_gaps
 
 def test_gaps_surfaces_uncited_bands_x_investigation_refs(tmp_inv_with_uncited_band):
     # investigation has inputs.references: [ref-a, ref-b]; member study has a band with no cites
@@ -40,10 +40,10 @@ def test_empty_when_no_member_studies(tmp_empty_inv):
 
 ## Task 2: CLI entry for the gaps (so the skill + future dashboard can call it)
 
-**Files:** `pbg_superpowers/citation_gaps.py` (a `main`), `pyproject.toml` (console script); Test `tests/test_citation_gaps.py`.
+**Files:** `viva_superpowers/citation_gaps.py` (a `main`), `pyproject.toml` (console script); Test `tests/test_citation_gaps.py`.
 
 - [ ] **Step 1: Failing test** — `main(["--workspace", ws, "--investigation", "the-inv"])` prints JSON of the gaps (capture stdout, parse, assert the structure).
-- [ ] **Step 2: fail. Step 3: implement** a `main(argv=None)` that prints `json.dumps(investigation_citation_gaps(...))`; add `pbg-citation-gaps = "pbg_superpowers.citation_gaps:main"` to `pyproject.toml`.
+- [ ] **Step 2: fail. Step 3: implement** a `main(argv=None)` that prints `json.dumps(investigation_citation_gaps(...))`; add `pbg-citation-gaps = "viva_superpowers.citation_gaps:main"` to `pyproject.toml`.
 - [ ] **Step 4: pass. Step 5: commit** — `feat(citation-gaps): pbg-citation-gaps CLI`
 
 ## Task 3: Extend `/pbg-cite-bands` skill to pull investigation references

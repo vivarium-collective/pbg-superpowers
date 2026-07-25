@@ -53,17 +53,17 @@ investigations/, notes/, dashboard scripts) on top of them as a new branch.
 2. **Branch (n/a)** — there is no parent branch yet; the bootstrap will create the workspace's `main`.
 3. **Walkthrough** — confirm the workspace name, the parent directory, and (optionally) override the template source.
 4. **Edits + commits**:
-   - `python -m pbg_superpowers.scaffold workspace --name $NAME --target $TARGET`
+   - `python -m viva_superpowers.scaffold workspace --name $NAME --target $TARGET`
      (clones / copies pbg-template; runs `template-init.sh` non-interactively).
    - `cd $TARGET && git init -q`
    - `uv venv .venv && source .venv/bin/activate`
    - `uv pip install -e .[dev]` (workspace's own pyproject)
    - `git add -A && git commit -m 'feat(stage-0): workspace bootstrap'`
-   - `python -m pbg_superpowers.workspace_catalog add --path "$TARGET" --name "$NAME" --package "$PKG"`
+   - `python -m viva_superpowers.workspace_catalog add --path "$TARGET" --name "$NAME" --package "$PKG"`
      (registers the workspace in `~/.pbg/workspaces.json` so it appears in the
      dashboard's workspace switcher; idempotent — safe to re-run).
 
-   Note: subsequent `/pbg-*` skills invoke the plugin via `python -m pbg_superpowers.scaffold`
+   Note: subsequent `/pbg-*` skills invoke the plugin via `python -m viva_superpowers.scaffold`
    (or other module paths) from the Claude Code host environment, NOT from inside the
    workspace `.venv`. The workspace `.venv` only needs to install the workspace's own
    `pyproject.toml` deps for `pytest` and model imports.
@@ -99,11 +99,11 @@ v2ecoli yourself and want to scaffold workspace files on top), the skill:
    workspace name and `package_path = pbg_<repo_name_normalized>`.
 5. Commit: `git add -A && git commit -m "feat(workspace): scaffold {NAME} on top of existing checkout"`.
 6. Register in the workspace catalog (`~/.pbg/workspaces.json`):
-   `python -m pbg_superpowers.workspace_catalog add --path . --name <name> --package <pkg>`.
+   `python -m viva_superpowers.workspace_catalog add --path . --name <name> --package <pkg>`.
 
 **Note:** `scaffold.py --in-place` flag is declared but the full implementation
 is a follow-up TODO. Follow the manual steps above until that lands. The
-`python -m pbg_superpowers.scaffold workspace --in-place` command will print a
+`python -m viva_superpowers.scaffold workspace --in-place` command will print a
 clear error message pointing to this document.
 
 ## Safety (mirror spec §12)

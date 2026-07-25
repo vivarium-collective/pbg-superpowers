@@ -39,7 +39,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         target = Path(tmp) / "ws"
         subprocess.run(
-            [sys.executable, "-m", "pbg_superpowers.scaffold", "workspace",
+            [sys.executable, "-m", "viva_superpowers.scaffold", "workspace",
              "--name", args.workspace_name,
              "--target", str(target),
              "--template-source", template_source],

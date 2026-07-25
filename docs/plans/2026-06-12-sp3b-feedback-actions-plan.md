@@ -16,11 +16,11 @@
 
 ## Task 1: `feedback_item_id` + `study_feedback_actions` aggregator (pbg-superpowers, pure)
 
-**Files:** Create `pbg_superpowers/feedback_actions.py`; Test `tests/test_feedback_actions.py`.
+**Files:** Create `viva_superpowers/feedback_actions.py`; Test `tests/test_feedback_actions.py`.
 
 - [ ] **Step 1: Failing tests.**
 ```python
-from pbg_superpowers.feedback_actions import feedback_item_id, study_feedback_actions
+from viva_superpowers.feedback_actions import feedback_item_id, study_feedback_actions
 
 def test_feedback_item_id_stable():
     a = feedback_item_id("study-s1", "2026-06-10T00:00", "alice")
@@ -40,13 +40,13 @@ def test_study_feedback_actions_joins_annotation_and_action(tmp_inv_with_feedbac
 
 ## Task 2: `apply_feedback_action` primitives (pbg-superpowers)
 
-**Files:** `pbg_superpowers/feedback_actions.py`; Test `tests/test_feedback_actions.py`.
+**Files:** `viva_superpowers/feedback_actions.py`; Test `tests/test_feedback_actions.py`.
 
 - [ ] **Step 1: Failing test** — applying a `kind: next_action` action writes the finding's `next_action` (the SP3a join) + flips the action to `applied`:
 ```python
 def test_apply_next_action_writes_finding_next_action(tmp_inv_with_action):
     # action = {item_id, kind: next_action, target_study: s1, target_finding: F-01, proposed_text: "test X"}
-    from pbg_superpowers.feedback_actions import apply_feedback_action
+    from viva_superpowers.feedback_actions import apply_feedback_action
     res = apply_feedback_action(ws, item_id)
     spec = _read_study_yaml(ws, "s1")
     f = next(f for f in spec["findings"] if f["id"] == "F-01")

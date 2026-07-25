@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.visualization.Visualization.
+"""Tests for viva_superpowers.visualization.Visualization.
 
 The baseclass now orchestrates accumulate/render with ``render_mode='end'``
 as the default. Subclasses MAY override ``update(state)`` directly to keep
@@ -7,7 +7,7 @@ the legacy streaming contract; both paths are exercised here.
 import pytest
 
 from process_bigraph import Step
-from pbg_superpowers.visualization import Visualization, as_visualization
+from viva_superpowers.visualization import Visualization, as_visualization
 
 
 # --- legacy subclass: overrides update() directly --------------------------

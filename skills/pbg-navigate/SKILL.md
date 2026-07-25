@@ -12,7 +12,7 @@ Transversal, **read-only** skill. Queries the workspace **linkage index** — a
 derived, ephemeral knowledge graph over the YAML (studies ↔ composites ↔
 observables ↔ sources ↔ findings ↔ acceptance ↔ study-DAG). It NEVER writes to
 YAML and adds NO AI judgment: it surfaces the deterministic index built by
-`pbg_superpowers.linkage_index` so you don't have to grep.
+`viva_superpowers.linkage_index` so you don't have to grep.
 
 **Lead with `decisions <inv>`.** When you arrive at an investigation, the first
 question is "what needs my decision?" — so run the **decisions-needed scan**
@@ -22,8 +22,8 @@ subcommands answer the follow-up "where does this link?" questions.
 
 There are two equivalent backends; prefer whichever is available:
 
-- **Direct (no server):** call `pbg_superpowers.linkage_index` /
-  `pbg_superpowers.needs_attention` via `.venv/bin/python`.
+- **Direct (no server):** call `viva_superpowers.linkage_index` /
+  `viva_superpowers.needs_attention` via `.venv/bin/python`.
 - **Via the dashboard:** `GET /api/linkage-index` / `GET /api/needs-attention`
   (when the dashboard server is running) — the same deterministic derive,
   TTL-cached.
@@ -46,7 +46,7 @@ The signals: `uncovered_ac` (high), `verdict_divergence` (high), `param_drift`
 ```bash
 .venv/bin/python - "$INV" <<'PY'
 import sys
-from pbg_superpowers.needs_attention import scan_investigation
+from viva_superpowers.needs_attention import scan_investigation
 res = scan_investigation(".", sys.argv[1])
 order = {"high": 0, "medium": 1, "low": 2}
 last = None
@@ -77,7 +77,7 @@ they make the report claim coverage that nothing actually gates (e.g.
 ```bash
 .venv/bin/python - "$INV" <<'PY'
 import sys, json
-from pbg_superpowers.linkage_index import ac_gating_matrix
+from viva_superpowers.linkage_index import ac_gating_matrix
 m = ac_gating_matrix(".", sys.argv[1])
 for r in m["criteria"]:
     flag = "  ⚠ GAP (no study linked)" if r["gap"] else ""
@@ -96,7 +96,7 @@ cites on tests/readouts).
 ```bash
 .venv/bin/python - "$KEY" <<'PY'
 import sys
-from pbg_superpowers.linkage_index import studies_for_source
+from viva_superpowers.linkage_index import studies_for_source
 print("\n".join(studies_for_source(".", sys.argv[1])) or "(no studies cite this key)")
 PY
 ```
@@ -111,7 +111,7 @@ finding's `evidence.from_test` → the test's `measure.{path,field}`).
 ```bash
 .venv/bin/python - "$TOKEN" <<'PY'
 import sys
-from pbg_superpowers.linkage_index import findings_for_observable
+from viva_superpowers.linkage_index import findings_for_observable
 for f in findings_for_observable(".", sys.argv[1]):
     print(f"- {f['finding']}  (study {f['study']})")
 PY
@@ -127,7 +127,7 @@ edges from each study's `pipeline_gate`).
 ```bash
 .venv/bin/python - "$INV" <<'PY'
 import sys
-from pbg_superpowers.linkage_index import study_dag
+from viva_superpowers.linkage_index import study_dag
 d = study_dag(".", sys.argv[1])
 for e in d["edges"]:
     print(f"{e['from']} → {e['to']}")
@@ -153,7 +153,7 @@ composites" — so it needs the real composite build behind
 ```bash
 .venv/bin/python - "$TOKEN" <<'PY'
 import sys
-from pbg_superpowers.linkage_index import studies_for_observable
+from viva_superpowers.linkage_index import studies_for_observable
 # observables_for_ref is the dashboard's _observables_for_ref (the real build).
 from vivarium_workbench.lib.observables_views import _observables_for_ref
 res = studies_for_observable(".", sys.argv[1], observables_for_ref=_observables_for_ref)
@@ -175,7 +175,7 @@ Also triggers a composite build (cached).
 ```bash
 .venv/bin/python - "$ID" <<'PY'
 import sys
-from pbg_superpowers.linkage_index import composite_emits
+from viva_superpowers.linkage_index import composite_emits
 from vivarium_workbench.lib.observables_views import _observables_for_ref
 res = composite_emits(".", sys.argv[1], observables_for_ref=_observables_for_ref)
 print("emits:", ", ".join(res["emits"]) or "(none)")

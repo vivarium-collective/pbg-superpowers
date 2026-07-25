@@ -2,7 +2,7 @@
 
 A skeptical reviewer of a simulation-based investigation asks the same questions
 every time. The dashboard now answers them deterministically with the **evidence
-& rigor scorecard** (`pbg_superpowers.rigor`): it reads declared fields and
+& rigor scorecard** (`viva_superpowers.rigor`): it reads declared fields and
 reports, per study, `ok` / `warn` / `gap` on each dimension below, plus an
 investigation roll-up. **A missing field is a `gap`** — that is the feedback.
 
@@ -23,7 +23,7 @@ feedback — but a finished study should address every dimension or say why not.
 | Dimension | Field(s) to declare | How to satisfy |
 |---|---|---|
 | **Replication** | `robustness: {n_replicates, seeds, parameter_sweep}` (or `simulation_set[].seeds`) | Stochastic model → ≥3 seeds; deterministic → a parameter sweep (`parameter_sweep: true`). One run is a `gap`. |
-| **Controls & calibration** | `controls: [{name, kind: negative\|positive\|borderline\|adversarial, hypothesis, expected, observed, result: PASS\|FAIL}]` | A system that SHOULD fail (negative) **and** a clearly-passing/borderline case (positive) to calibrate the metric across its range. Build the negative control with the **Intervention process** (`pbg_superpowers.intervention` — clamp/knockout/scale a store, e.g. an externally-supplied component). |
+| **Controls & calibration** | `controls: [{name, kind: negative\|positive\|borderline\|adversarial, hypothesis, expected, observed, result: PASS\|FAIL}]` | A system that SHOULD fail (negative) **and** a clearly-passing/borderline case (positive) to calibrate the metric across its range. Build the negative control with the **Intervention process** (`viva_superpowers.intervention` — clamp/knockout/scale a store, e.g. an externally-supplied component). |
 | **Alternative hypotheses** | `alternative_hypotheses: [{claim, discriminated_by, status: excluded\|not-excluded\|untested}]` (or `discovery_implications.alternate_hypotheses`) | List the competing explanation(s) for each interpretation and how the evidence (often a control) discriminates them. `status: excluded` is the goal. |
 | **Claim discipline** | finding `tier: observation \| mechanism \| interpretation` (+ `evidence.from_test`) | Separate what was measured (observation) from the mechanistic reading and the theoretical interpretation; interpretation claims must carry evidence. |
 | **Falsifiability** | `falsifiability:` (str) or per behavior_test `could_fail_if` | State plainly how the claim could fail — what result would overturn it (often: "if the negative control behaved like the positive"). |

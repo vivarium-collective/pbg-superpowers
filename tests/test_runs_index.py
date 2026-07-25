@@ -1,4 +1,4 @@
-from pbg_superpowers.runs_index import emitter_type_of
+from viva_superpowers.runs_index import emitter_type_of
 
 def test_emitter_types():
     assert emitter_type_of("out/r/data.parquet") == "Parquet"
@@ -10,7 +10,7 @@ def test_emitter_types():
 
 
 def test_store_emitter_type_dir_detection(tmp_path):
-    from pbg_superpowers.runs_index import _store_emitter_type
+    from viva_superpowers.runs_index import _store_emitter_type
     # name hints
     (tmp_path / "run_parquet").mkdir()
     assert _store_emitter_type(tmp_path / "run_parquet") == "Parquet"

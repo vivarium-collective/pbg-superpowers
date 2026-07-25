@@ -18,11 +18,11 @@
 
 ## Task 1: `linkage_index.build_index` + reverse-query helpers (pbg-superpowers, pure)
 
-**Files:** Create `pbg_superpowers/linkage_index.py`; Test `tests/test_linkage_index.py`.
+**Files:** Create `viva_superpowers/linkage_index.py`; Test `tests/test_linkage_index.py`.
 
 - [ ] **Step 1: Failing tests.**
 ```python
-from pbg_superpowers.linkage_index import (
+from viva_superpowers.linkage_index import (
     build_index, ac_gating_matrix, studies_for_source, findings_for_observable, study_dag)
 
 def test_ac_gating_matrix_flags_unkeyed_criteria(tmp_inv_mixed_ac):
@@ -58,7 +58,7 @@ def test_linkage_index_endpoint(tmp_ws):
     d = json.loads(body); assert code == 200
     assert "ac_matrix" in d or "nodes" in d   # the matrix + the graph
 ```
-- [ ] **Step 2: fail. Step 3: implement** `_linkage_index(ws_root, *, investigation=None, source=None, observable=None) -> (body, code)`: lazy-import `pbg_superpowers.linkage_index` (tolerant → empty); param-dispatch to the right query (or the full graph); return JSON. Add the `do_GET` branch `/api/linkage-index` (pre-alias block, like `/api/report-lint`) + a TTL cache keyed `("linkage", ws_root)` (mirror `_REGISTRY_CACHE`). Never 500.
+- [ ] **Step 2: fail. Step 3: implement** `_linkage_index(ws_root, *, investigation=None, source=None, observable=None) -> (body, code)`: lazy-import `viva_superpowers.linkage_index` (tolerant → empty); param-dispatch to the right query (or the full graph); return JSON. Add the `do_GET` branch `/api/linkage-index` (pre-alias block, like `/api/report-lint`) + a TTL cache keyed `("linkage", ws_root)` (mirror `_REGISTRY_CACHE`). Never 500.
 - [ ] **Step 4: pass. Step 5: commit** — `feat(server): GET /api/linkage-index (linkage queries, TTL-cached, tolerant)`
 
 ## Task 3: `/pbg-navigate` skill (pbg-superpowers)

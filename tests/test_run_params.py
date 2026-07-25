@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.run_params — per-run parameter provenance capture,
+"""Tests for viva_superpowers.run_params — per-run parameter provenance capture,
 ruamel-preserving write into runs[].provenance.params, and table-ready render."""
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pbg_superpowers import run_params as rp
+from viva_superpowers import run_params as rp
 
 
 # ---------------------------------------------------------------------------

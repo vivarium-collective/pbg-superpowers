@@ -3,7 +3,7 @@ import subprocess
 
 import yaml
 
-from pbg_superpowers.migrate_nested import plan_migration, migrate
+from viva_superpowers.migrate_nested import plan_migration, migrate
 
 
 def _flat_ws(tmp):

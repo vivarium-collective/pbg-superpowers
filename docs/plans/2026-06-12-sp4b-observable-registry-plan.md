@@ -16,11 +16,11 @@
 
 ## Task 1: `enrich_observable_edges` + the observable-registry queries (pbg-superpowers)
 
-**Files:** Modify `pbg_superpowers/linkage_index.py`; Test `tests/test_linkage_index.py`.
+**Files:** Modify `viva_superpowers/linkage_index.py`; Test `tests/test_linkage_index.py`.
 
 - [ ] **Step 1: Failing tests** (inject a STUB `observables_for_ref` — no real build needed for the unit test):
 ```python
-from pbg_superpowers.linkage_index import build_index, enrich_observable_edges, studies_for_observable, composite_emits
+from viva_superpowers.linkage_index import build_index, enrich_observable_edges, studies_for_observable, composite_emits
 
 def _stub_obs(ref):  # the injected build
     return {"leaves": ["agents.0.listeners.mass.cell_mass", "agents.0.bulk[ATP[c]]"], "catalogs": {}} if "baseline" in ref else {"leaves": [], "catalogs": {}}

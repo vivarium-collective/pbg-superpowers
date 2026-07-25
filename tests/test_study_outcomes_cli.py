@@ -1,5 +1,5 @@
 from pathlib import Path
-from pbg_superpowers import study_io, run_registry, study_outcomes as so
+from viva_superpowers import study_io, run_registry, study_outcomes as so
 
 
 def test_cli_syncs_named_study(tmp_path, capsys):

@@ -1,6 +1,6 @@
 from pathlib import Path
 import yaml
-from pbg_superpowers.migrate_inputs import plan_inputs_migration
+from viva_superpowers.migrate_inputs import plan_inputs_migration
 
 def _ws(tmp):
     (tmp / "workspace.yaml").write_text("name: demo\n", encoding="utf-8")

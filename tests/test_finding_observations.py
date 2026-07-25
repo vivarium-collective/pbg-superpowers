@@ -212,7 +212,7 @@ findings:
 
 def test_populate_import():
     """The module and function are importable."""
-    from pbg_superpowers.finding_observations import populate_finding_observations  # noqa: F401
+    from viva_superpowers.finding_observations import populate_finding_observations  # noqa: F401
 
 
 def test_populate_returns_filled_skipped(tmp_path):
@@ -221,7 +221,7 @@ def test_populate_returns_filled_skipped(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _BASE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     result = populate_finding_observations(study_dir)
     assert isinstance(result, dict), "must return dict"
     assert "filled" in result and "skipped" in result
@@ -235,7 +235,7 @@ def test_populate_fills_evidence_observed(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _BASE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     result = populate_finding_observations(study_dir)
 
     assert result["filled"] == 1
@@ -251,7 +251,7 @@ def test_populate_fills_evidence_units(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _BASE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     doc = _load(study_dir / "study.yaml")
@@ -265,7 +265,7 @@ def test_populate_fills_expected_range(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _BASE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     doc = _load(study_dir / "study.yaml")
@@ -279,7 +279,7 @@ def test_populate_fills_expected_cites(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _BASE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     doc = _load(study_dir / "study.yaml")
@@ -293,7 +293,7 @@ def test_populate_fills_provenance_run_ids(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _BASE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     doc = _load(study_dir / "study.yaml")
@@ -307,7 +307,7 @@ def test_populate_fills_divergence_factor_inside_band(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _BASE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     doc = _load(study_dir / "study.yaml")
@@ -346,7 +346,7 @@ findings:
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", study_yaml)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     doc = _load(study_dir / "study.yaml")
@@ -386,7 +386,7 @@ findings:
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", study_yaml)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     doc = _load(study_dir / "study.yaml")
@@ -401,7 +401,7 @@ def test_populate_skips_finding_with_no_test_link(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _STUDY_NO_TEST_LINK)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     result = populate_finding_observations(study_dir)
 
     assert result["skipped"] >= 1
@@ -420,7 +420,7 @@ def test_populate_idempotent(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _BASE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     r1 = populate_finding_observations(study_dir)
     mtime1 = (study_dir / "study.yaml").stat().st_mtime
 
@@ -473,7 +473,7 @@ findings:
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", study_yaml)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     doc = _load(study_dir / "study.yaml")
@@ -521,7 +521,7 @@ findings:
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", study_yaml)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     doc = _load(study_dir / "study.yaml")
@@ -535,7 +535,7 @@ def test_populate_mixed_findings_only_fills_linked(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _STUDY_MIXED)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     result = populate_finding_observations(study_dir)
 
     assert result["filled"] == 1
@@ -554,7 +554,7 @@ def test_populate_calibration_anchor_fills_observed_value(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _STUDY_WITH_CALIBRATION_ANCHOR)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     doc = _load(study_dir / "study.yaml")
@@ -575,7 +575,7 @@ def test_populate_calibration_anchor_never_touches_literature_target(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _STUDY_WITH_CALIBRATION_ANCHOR)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     doc = _load(study_dir / "study.yaml")
@@ -590,7 +590,7 @@ def test_populate_comments_preserved(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _BASE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     text = (study_dir / "study.yaml").read_text(encoding="utf-8")
@@ -627,7 +627,7 @@ findings:
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", study_yaml)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     result = populate_finding_observations(study_dir)
 
     # skipped when measured_value is absent
@@ -658,7 +658,7 @@ findings:
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", study_yaml)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     result = populate_finding_observations(study_dir)
 
     assert result["filled"] == 0
@@ -700,7 +700,7 @@ findings:
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", study_yaml)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     result = populate_finding_observations(study_dir)
     # Should not raise; divergence_factor may be computed or None
     assert result["filled"] >= 0  # at minimum, doesn't crash
@@ -730,7 +730,7 @@ runs:
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", study_yaml)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     result = populate_finding_observations(study_dir)
 
     assert result["filled"] == 0
@@ -749,11 +749,11 @@ def test_sync_includes_findings_key(tmp_path, monkeypatch):
     _write_study(study_dir / "study.yaml", "name: sync-test-study\nruns: []\n")
 
     # Monkeypatch populate_finding_observations to return a known value
-    import pbg_superpowers.finding_observations as fo
+    import viva_superpowers.finding_observations as fo
     monkeypatch.setattr(fo, "populate_finding_observations",
                         lambda *a, **k: {"filled": 2, "skipped": 1})
 
-    from pbg_superpowers import study_outcomes as so
+    from viva_superpowers import study_outcomes as so
     result = so.sync(study_dir)
 
     assert "findings" in result, "sync must include findings key"
@@ -769,10 +769,10 @@ def test_sync_findings_best_effort_does_not_raise_on_error(tmp_path, monkeypatch
     def _boom(*a, **k):
         raise RuntimeError("boom")
 
-    import pbg_superpowers.finding_observations as fo
+    import viva_superpowers.finding_observations as fo
     monkeypatch.setattr(fo, "populate_finding_observations", _boom)
 
-    from pbg_superpowers import study_outcomes as so
+    from viva_superpowers import study_outcomes as so
     result = so.sync(study_dir)
 
     assert "findings" in result
@@ -879,7 +879,7 @@ def test_golden_synthetic_dnaa_like_populate(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _DNAA_LIKE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     result = populate_finding_observations(study_dir)
 
     assert result["filled"] == 2, f"both findings should be filled; got {result}"
@@ -921,7 +921,7 @@ def test_golden_synthetic_dnaa_like_comments_preserved(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _DNAA_LIKE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     populate_finding_observations(study_dir)
 
     text = (study_dir / "study.yaml").read_text(encoding="utf-8")
@@ -937,7 +937,7 @@ def test_golden_synthetic_dnaa_like_idempotent(tmp_path):
     study_dir.mkdir()
     _write_study(study_dir / "study.yaml", _DNAA_LIKE_STUDY)
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
     r1 = populate_finding_observations(study_dir)
     mtime1 = (study_dir / "study.yaml").stat().st_mtime
 
@@ -969,7 +969,7 @@ def test_golden_dnaa2_v2einvest_untouched(tmp_path):
     """
     import subprocess
 
-    from pbg_superpowers.finding_observations import populate_finding_observations
+    from viva_superpowers.finding_observations import populate_finding_observations
 
     # Record mtime before
     original_mtime = DNAA2_STUDY_YAML.stat().st_mtime
@@ -1052,8 +1052,8 @@ def test_skill_references_search_expert_docs():
 
 def test_skill_referenced_symbols_importable():
     """All Python symbols referenced by the skill are importable."""
-    from pbg_superpowers.finding_observations import populate_finding_observations  # noqa: F401
-    from pbg_superpowers.expert_search import search_expert_docs  # noqa: F401
+    from viva_superpowers.finding_observations import populate_finding_observations  # noqa: F401
+    from viva_superpowers.expert_search import search_expert_docs  # noqa: F401
 
 
 def test_skill_registered_in_docs_skills_md():

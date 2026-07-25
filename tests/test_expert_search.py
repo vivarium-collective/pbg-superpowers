@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.expert_search (Pass 10A findings helper).
+"""Tests for viva_superpowers.expert_search (Pass 10A findings helper).
 
 The expert-PDF search powers the ``/pbg-study findings`` walk's
 "candidate quotes" step. These tests exercise:
@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pbg_superpowers import expert_search
+from viva_superpowers import expert_search
 
 
 @pytest.fixture(autouse=True)

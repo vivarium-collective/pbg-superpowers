@@ -84,7 +84,7 @@ def test_pbg_server_documents_cleanup_subcommand():
     )
     assert "cleanup-servers" in text, (
         "pbg-server cleanup must shell out to "
-        "`python -m pbg_superpowers.workspace_catalog cleanup-servers`."
+        "`python -m viva_superpowers.workspace_catalog cleanup-servers`."
     )
 
 

@@ -1,11 +1,11 @@
 """Tests for the vendored workspace-layout resolver + a drift guard.
 
-``pbg_superpowers/workspace_paths.py`` is a vendored copy of the canonical
+``viva_superpowers/workspace_paths.py`` is a vendored copy of the canonical
 resolver that lives in ``vivarium-workbench`` (pbg-superpowers does not depend
 on it). The drift guard below pins ``LAYOUT_DEFAULTS`` to the canonical map so
 the two copies can't silently diverge.
 """
-from pbg_superpowers.workspace_paths import (
+from viva_superpowers.workspace_paths import (
     WorkspacePaths, LAYOUT_DEFAULTS, package_slug,
 )
 
@@ -60,7 +60,7 @@ def test_layout_overrides(tmp_path):
 
 def test_workspace_dir_cli(tmp_path, capsys):
     """The paths CLI resolves a dir name honoring layout (skills rely on this)."""
-    from pbg_superpowers.paths import _main, workspace_dir
+    from viva_superpowers.paths import _main, workspace_dir
     (tmp_path / "workspace.yaml").write_text(
         "name: w\nlayout:\n  investigations: workspace/investigations\n"
     )

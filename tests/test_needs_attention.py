@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.needs_attention (SP5 — the "decisions needed" scan).
+"""Tests for viva_superpowers.needs_attention (SP5 — the "decisions needed" scan).
 
 SP5 is a PURE, deterministic aggregator: it gathers + ranks the divergences/gaps
 SP1–SP4 already compute (uncovered ACs, verdict divergence, open feedback, param
@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from pbg_superpowers import study_io
-from pbg_superpowers.needs_attention import (
+from viva_superpowers import study_io
+from viva_superpowers.needs_attention import (
     scan_investigation, _stale_findings, open_epistemic_debts,
 )
 
@@ -468,7 +468,7 @@ def test_golden_scan_real_investigation_read_only():
 # confirmatory-not-preregistered (#18), diagnostic_branch_needed (#19)
 # ---------------------------------------------------------------------------
 
-from pbg_superpowers.needs_attention import (
+from viva_superpowers.needs_attention import (
     _stale_finding_items,
     _unregistered_confirmatory_items,
     _diagnostic_branch_items,

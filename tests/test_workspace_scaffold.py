@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pbg_superpowers.workspace_paths import WorkspacePaths
+from viva_superpowers.workspace_paths import WorkspacePaths
 
 
 PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser().resolve()
@@ -21,7 +21,7 @@ def _check_template_exists():
 def _scaffold(tmp_path, plugin_root, name="demo-ws"):
     target = tmp_path / name
     subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.scaffold", "workspace",
+        [sys.executable, "-m", "viva_superpowers.scaffold", "workspace",
          "--name", name, "--target", str(target),
          "--template-source", str(PBG_TEMPLATE)],
         check=True, cwd=plugin_root,
@@ -175,7 +175,7 @@ def _run_inplace(repo: Path, plugin_root: Path, name: str = "demo-composite",
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.scaffold", "workspace",
+        [sys.executable, "-m", "viva_superpowers.scaffold", "workspace",
          "--name", name, "--target", str(repo),
          "--template-source", str(PBG_TEMPLATE),
          "--in-place"],

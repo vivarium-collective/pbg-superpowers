@@ -1,5 +1,5 @@
 """Tests for the 5 default Visualization classes (v2: update(state))."""
-from pbg_superpowers.visualizations import TimeSeriesPlot
+from viva_superpowers.visualizations import TimeSeriesPlot
 
 
 def _trajectory_state():
@@ -37,7 +37,7 @@ def test_time_series_plot_multi_run():
     assert 'rate=3.0' in html['html']
 
 
-from pbg_superpowers.visualizations import ParamVsObservable
+from viva_superpowers.visualizations import ParamVsObservable
 
 
 def test_param_vs_observable():
@@ -53,7 +53,7 @@ def test_param_vs_observable():
     assert '15' in out['html']
 
 
-from pbg_superpowers.visualizations import Distribution
+from viva_superpowers.visualizations import Distribution
 
 
 def test_distribution_histogram():
@@ -65,7 +65,7 @@ def test_distribution_histogram():
     assert 'histogram' in out['html'].lower()
 
 
-from pbg_superpowers.visualizations import PhaseSpace
+from viva_superpowers.visualizations import PhaseSpace
 
 
 def test_phase_space():
@@ -76,7 +76,7 @@ def test_phase_space():
     assert 'Plotly.newPlot' in out['html']
 
 
-from pbg_superpowers.visualizations import Heatmap
+from viva_superpowers.visualizations import Heatmap
 
 
 def test_heatmap():

@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.citation_gaps — investigation references x uncited bands."""
+"""Tests for viva_superpowers.citation_gaps — investigation references x uncited bands."""
 from pathlib import Path
 
 import pytest
@@ -6,7 +6,7 @@ import yaml
 
 import json
 
-from pbg_superpowers.citation_gaps import investigation_citation_gaps, main
+from viva_superpowers.citation_gaps import investigation_citation_gaps, main
 
 
 # --------------------------------------------------------------------------- #

@@ -1,4 +1,4 @@
-"""Tests for the Pass B report linter (pbg_superpowers.report_linter).
+"""Tests for the Pass B report linter (viva_superpowers.report_linter).
 
 One test per check, plus override-file roundtrip + render-blocking
 integration tests.
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from pbg_superpowers.report_linter import (
+from viva_superpowers.report_linter import (
     LintFinding,
     apply_overrides,
     format_findings,
@@ -636,7 +636,7 @@ def test_write_override_is_idempotent(tmp_path):
 
 
 def test_render_workspace_report_blocks_on_lint_errors(tmp_path):
-    from pbg_superpowers.report import render_workspace_report, ReportLintBlocked
+    from viva_superpowers.report import render_workspace_report, ReportLintBlocked
 
     ws = _copy_fixture("incomplete-summary", tmp_path / "ws")
     with pytest.raises(ReportLintBlocked) as excinfo:
@@ -648,7 +648,7 @@ def test_render_workspace_report_blocks_on_lint_errors(tmp_path):
 
 def test_render_workspace_report_force_logs_overrides_and_proceeds(tmp_path):
     """--force writes overrides AND renders. Re-run is then clean."""
-    from pbg_superpowers.report import render_workspace_report
+    from viva_superpowers.report import render_workspace_report
 
     ws = _copy_fixture("incomplete-summary", tmp_path / "ws")
 
@@ -674,7 +674,7 @@ def test_render_workspace_report_force_logs_overrides_and_proceeds(tmp_path):
 
 def test_render_workspace_report_lint_false_bypasses_check(tmp_path):
     """lint=False preserves pre-Pass-B unconditional behavior."""
-    from pbg_superpowers.report import render_workspace_report
+    from viva_superpowers.report import render_workspace_report
 
     ws = _copy_fixture("incomplete-summary", tmp_path / "ws")
     # The linter would otherwise block; with lint=False we skip it
@@ -683,12 +683,12 @@ def test_render_workspace_report_lint_false_bypasses_check(tmp_path):
     try:
         render_workspace_report(ws, today="2026-05-17", lint=False)
     except Exception as e:
-        from pbg_superpowers.report import ReportLintBlocked
+        from viva_superpowers.report import ReportLintBlocked
         assert not isinstance(e, ReportLintBlocked)
 
 
 # ---------------------------------------------------------------------------
-# CLI: python -m pbg_superpowers.report_linter
+# CLI: python -m viva_superpowers.report_linter
 # ---------------------------------------------------------------------------
 
 
@@ -789,9 +789,9 @@ def test_speculative_readout_paths_fires_per_entry(tmp_path):
 
 def test_viz_stale_vs_latest_run_fires_on_mismatch(tmp_path):
     import sqlite3
-    from pbg_superpowers.run_registry import RUNS_META_DDL
-    from pbg_superpowers.viz_freshness import stamp_meta
-    from pbg_superpowers.report_linter import _LintContext, _check_viz_stale_vs_latest_run
+    from viva_superpowers.run_registry import RUNS_META_DDL
+    from viva_superpowers.viz_freshness import stamp_meta
+    from viva_superpowers.report_linter import _LintContext, _check_viz_stale_vs_latest_run
     sd = tmp_path / "studies" / "s1"; (sd / "charts").mkdir(parents=True)
     (sd / "charts" / "c.svg").write_text("x")
     stamp_meta(sd / "charts" / "c.svg", source_run_id="OLD",
@@ -812,7 +812,7 @@ def test_viz_stale_vs_latest_run_fires_on_mismatch(tmp_path):
 def test_viz_stale_folds_untracked_into_one_info(tmp_path):
     """N unregistered on-disk charts produce ONE info finding, not N warnings,
     so the viz_stale noise stops counting as a gap (gaps = error+warning)."""
-    from pbg_superpowers.report_linter import _LintContext, _check_viz_stale_vs_latest_run
+    from viva_superpowers.report_linter import _LintContext, _check_viz_stale_vs_latest_run
     sd = tmp_path / "studies" / "s1"; (sd / "charts").mkdir(parents=True)
     for n in ("a", "b", "c"):
         (sd / "charts" / f"{n}.svg").write_text("x")
@@ -828,9 +828,9 @@ def test_viz_stale_folds_untracked_into_one_info(tmp_path):
 
 def test_viz_stale_error_under_strict(tmp_path):
     import sqlite3
-    from pbg_superpowers.run_registry import RUNS_META_DDL
-    from pbg_superpowers.viz_freshness import stamp_meta
-    from pbg_superpowers.report_linter import _LintContext, _check_viz_stale_vs_latest_run
+    from viva_superpowers.run_registry import RUNS_META_DDL
+    from viva_superpowers.viz_freshness import stamp_meta
+    from viva_superpowers.report_linter import _LintContext, _check_viz_stale_vs_latest_run
     sd = tmp_path / "studies" / "s1"; (sd / "charts").mkdir(parents=True)
     (sd / "charts" / "c.svg").write_text("x")
     stamp_meta(sd / "charts" / "c.svg", source_run_id="OLD",
@@ -846,7 +846,7 @@ def test_viz_stale_error_under_strict(tmp_path):
 def test_finding_without_statement_fires_for_empty_or_missing(tmp_path):
     """finding_without_statement is error-level for empty/missing statements."""
     from pathlib import Path
-    from pbg_superpowers.report_linter import (
+    from viva_superpowers.report_linter import (
         _LintContext,
         _check_finding_without_statement,
     )

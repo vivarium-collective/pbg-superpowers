@@ -26,7 +26,7 @@
 
 ## Task 1: `needs_attention.scan_investigation` — the pure aggregator (signals 1,2,3,5,6)
 
-**Files:** Create `pbg_superpowers/needs_attention.py`; Test `tests/test_needs_attention.py`.
+**Files:** Create `viva_superpowers/needs_attention.py`; Test `tests/test_needs_attention.py`.
 
 **The item shape (one normalized dict per finding-of-attention):**
 ```python
@@ -43,7 +43,7 @@
 
 - [ ] **Step 1: Failing tests** (build small tmp workspaces with `study_io`; reuse the fixture style in `tests/test_linkage_index.py`):
 ```python
-from pbg_superpowers.needs_attention import scan_investigation, _stale_findings
+from viva_superpowers.needs_attention import scan_investigation, _stale_findings
 
 def test_uncovered_ac_surfaces_high(tmp_inv_with_unlinked_ac):
     res = scan_investigation(ws, "inv")
@@ -94,7 +94,7 @@ def test_summary_ranks_by_severity(tmp_inv_mixed):
 
 ## Task 2: opt-in phantom-observable signal (the only build-requiring source)
 
-**Files:** `pbg_superpowers/needs_attention.py`; Test `tests/test_needs_attention.py`.
+**Files:** `viva_superpowers/needs_attention.py`; Test `tests/test_needs_attention.py`.
 
 - [ ] **Step 1: Failing test** (inject a STUB `observables_for_ref` — no real build):
 ```python

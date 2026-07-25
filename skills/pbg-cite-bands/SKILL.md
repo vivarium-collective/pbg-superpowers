@@ -38,8 +38,8 @@ lack a `cites` field:
 STUDY_DIR="<workspace-root>/studies/<study-slug>"
 .venv/bin/python -c "
 import json
-from pbg_superpowers.band_provenance import bands_missing_provenance
-from pbg_superpowers.study_io import load_yaml_mapping
+from viva_superpowers.band_provenance import bands_missing_provenance
+from viva_superpowers.study_io import load_yaml_mapping
 spec = load_yaml_mapping('$STUDY_DIR/study.yaml')
 print(json.dumps(bands_missing_provenance(spec), indent=2))
 "
@@ -73,11 +73,11 @@ WS_ROOT="<workspace-root>"
 INV_SLUG="<investigation-slug>"   # the owning investigation of the study
 .venv/bin/python -c "
 import json
-from pbg_superpowers.citation_gaps import investigation_citation_gaps
+from viva_superpowers.citation_gaps import investigation_citation_gaps
 print(json.dumps(investigation_citation_gaps('$WS_ROOT', '$INV_SLUG'), indent=2))
 "
 # equivalently:
-.venv/bin/python -m pbg_superpowers.citation_gaps --workspace "$WS_ROOT" --investigation "$INV_SLUG"
+.venv/bin/python -m viva_superpowers.citation_gaps --workspace "$WS_ROOT" --investigation "$INV_SLUG"
 # or the console script: pbg-citation-gaps --workspace "$WS_ROOT" --investigation "$INV_SLUG"
 ```
 
@@ -122,7 +122,7 @@ WS_ROOT="<workspace-root>"
 .venv/bin/python -c "
 import json
 from pathlib import Path
-from pbg_superpowers.expert_search import search_expert_docs
+from viva_superpowers.expert_search import search_expert_docs
 hits = search_expert_docs(
     Path('$WS_ROOT'),
     terms=['<test-name>', '<numeric-bound>', '<domain-term>'],
@@ -189,7 +189,7 @@ no comments or unrelated keys are disturbed:
 ```bash
 .venv/bin/python -c "
 from pathlib import Path
-from pbg_superpowers.band_provenance import set_band_provenance
+from viva_superpowers.band_provenance import set_band_provenance
 changed = set_band_provenance(
     Path('$STUDY_DIR'),
     test_name='<test-name>',
@@ -216,8 +216,8 @@ Re-run `bands_missing_provenance` to confirm the band is no longer listed:
 ```bash
 .venv/bin/python -c "
 import json
-from pbg_superpowers.band_provenance import bands_missing_provenance
-from pbg_superpowers.study_io import load_yaml_mapping
+from viva_superpowers.band_provenance import bands_missing_provenance
+from viva_superpowers.study_io import load_yaml_mapping
 spec = load_yaml_mapping('$STUDY_DIR/study.yaml')
 remaining = bands_missing_provenance(spec)
 print(json.dumps(remaining, indent=2))
@@ -232,7 +232,7 @@ Then run the band→cites linter to confirm:
 .venv/bin/python -c "
 import json
 from pathlib import Path
-from pbg_superpowers.report_linter import lint_workspace_report
+from viva_superpowers.report_linter import lint_workspace_report
 ws = Path('$WS_ROOT')
 findings = lint_workspace_report(ws)
 band_checks = [f.__dict__ for f in findings if 'band' in f.check]
@@ -260,8 +260,8 @@ print(json.dumps(band_checks, indent=2))
 # 1. Find uncited bands
 .venv/bin/python -c "
 import json
-from pbg_superpowers.band_provenance import bands_missing_provenance
-from pbg_superpowers.study_io import load_yaml_mapping
+from viva_superpowers.band_provenance import bands_missing_provenance
+from viva_superpowers.study_io import load_yaml_mapping
 spec = load_yaml_mapping('studies/dnaa-2/study.yaml')
 print(json.dumps(bands_missing_provenance(spec), indent=2))
 "
@@ -270,7 +270,7 @@ print(json.dumps(bands_missing_provenance(spec), indent=2))
 .venv/bin/python -c "
 import json
 from pathlib import Path
-from pbg_superpowers.expert_search import search_expert_docs
+from viva_superpowers.expert_search import search_expert_docs
 hits = search_expert_docs(Path('.'), terms=['DnaA-ATP', '0.2', '0.5', 'fraction'], max_hits=5)
 print(json.dumps(hits, indent=2))
 "
@@ -280,7 +280,7 @@ print(json.dumps(hits, indent=2))
 # 4. Write provenance
 .venv/bin/python -c "
 from pathlib import Path
-from pbg_superpowers.band_provenance import set_band_provenance
+from viva_superpowers.band_provenance import set_band_provenance
 set_band_provenance(
     Path('studies/dnaa-2'),
     test_name='frac-test',
@@ -292,8 +292,8 @@ set_band_provenance(
 # 5. Validate
 .venv/bin/python -c "
 import json
-from pbg_superpowers.band_provenance import bands_missing_provenance
-from pbg_superpowers.study_io import load_yaml_mapping
+from viva_superpowers.band_provenance import bands_missing_provenance
+from viva_superpowers.study_io import load_yaml_mapping
 print(json.dumps(bands_missing_provenance(load_yaml_mapping('studies/dnaa-2/study.yaml')), indent=2))
 "
 ```

@@ -29,7 +29,7 @@ If either is missing, the skill should fail with a clear actionable error pointi
 
 - **Don't add features the plan doesn't call for.** Each skill has a tight scope; keep it.
 - **One change per commit.** Rebasing/squashing later is fine; cohesive diffs are better than big PRs.
-- **Tests live in `tests/`.** Most skills don't have unit tests (they're shell + curl); the Python package `pbg_superpowers/` does. Run `pytest -q` before committing Python changes.
+- **Tests live in `tests/`.** Most skills don't have unit tests (they're shell + curl); the Python package `viva_superpowers/` does. Run `pytest -q` before committing Python changes.
 - **Don't commit secrets, credentials, or workspace data** (no `.pbg/` state, no `workspace.yaml` from real workspaces).
 - **Cleanup PRs must spare `notes/` and `references/notes/` in workspaces.** Those directories hold the field records (friction logs, walkthroughs, agent transcripts, per-paper notes) that feed the next round of infrastructure improvements. A `chore(cleanup): …` PR that deletes anything under those paths is suspect — surface the deletion to the user and ask for per-file confirmation. See the scaffold's `notes/README.md` for the convention.
 
@@ -61,7 +61,7 @@ For the full set of skill commands, see [`docs/concepts/vivarium-workbench-model
 ```
 pbg-superpowers/
 ├── .claude-plugin/        # plugin.json + marketplace.json (manifest format)
-├── pbg_superpowers/       # Python package (schemas, visualizations, helpers)
+├── viva_superpowers/       # Python package (schemas, visualizations, helpers)
 ├── server/                # the report-mirror server (NOT the dashboard — see pbg-server skill)
 ├── skills/                # 13 user-invocable `/pbg-*` skills + `/pbg-init` (machine setup) + `/pbg-suggest` (internal dashboard callback)
 ├── templates/             # Jinja templates for scaffolding workspaces + models

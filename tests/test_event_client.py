@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from pbg_superpowers.event_client import EventClient, on_finding_created
+from viva_superpowers.event_client import EventClient, on_finding_created
 
 
 def _event(eid, etype="FindingCreated", study="demo", fid="fX"):

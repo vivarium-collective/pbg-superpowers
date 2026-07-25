@@ -17,7 +17,7 @@ Studies live **nested under their investigation**:
 back-ref. The investigation's publication/report lives at `investigations/<inv>/reports/`
 (per-investigation — there is **no global repo-wide report**).
 
-- **Resolve a study dir** (nested- and flat-aware): `python -m pbg_superpowers.paths --study <slug>`.
+- **Resolve a study dir** (nested- and flat-aware): `python -m viva_superpowers.paths --study <slug>`.
 - **Create a new study** under `$INVESTIGATIONS_DIR/<inv>/studies/<slug>/` (write the `investigation:` back-ref).
 - Legacy flat `studies/<slug>/` still resolves (back-compat) until a repo is migrated with `pbg-migrate-nested`.
 
@@ -52,7 +52,7 @@ A Study is a self-contained research unit holding one-or-more baseline composite
    (use the steady-state window/average, not the warm-up); axis labels with units;
    and run-config provenance (record the exact parameter set used for each run).
 5. **CALIBRATE WITH A SWEEP, not one value at a time.** To put a knob in a band,
-   use `pbg_superpowers.calibration_sweep` (grid × multiseed in one pass → the
+   use `viva_superpowers.calibration_sweep` (grid × multiseed in one pass → the
    recommended in-band point with provenance) instead of iterating single values.
 
 ## Common prelude
@@ -188,7 +188,7 @@ When you cite a paper (`--cite`, `--source`, `cites:`, `literature_anchors[].sou
 ## Rigor pass (Evaluate → Decide): fill the required information so the scorecard goes green
 
 Every study should carry the information a skeptical reviewer asks for. The
-dashboard computes an **evidence & rigor scorecard** (`pbg_superpowers.rigor`)
+dashboard computes an **evidence & rigor scorecard** (`viva_superpowers.rigor`)
 that reports `ok`/`warn`/`gap` per dimension from declared fields, and the report
 surfaces it — a missing field is a `gap`. Before a study is "done", address each
 dimension (or say why not). Full guide + field shapes:
@@ -206,7 +206,7 @@ dimension (or say why not). Full guide + field shapes:
 In short, ensure the study declares:
 - **a model** — `baseline:` with the composite(s) + params it runs (every study runs ≥1 composite, and the composite must be REAL/registered);
 - **replication** — `robustness:` (≥3 seeds for stochastic; a `parameter_sweep: true` for deterministic);
-- **controls & calibration** — `controls:` with a NEGATIVE control (a system that should fail — build it with the **Intervention process**, `pbg_superpowers.intervention`, to clamp/knockout/scale a store) AND a positive/borderline case;
+- **controls & calibration** — `controls:` with a NEGATIVE control (a system that should fail — build it with the **Intervention process**, `viva_superpowers.intervention`, to clamp/knockout/scale a store) AND a positive/borderline case;
 - **alternative_hypotheses** — competing explanations + how the evidence (often the control) excludes them;
 - **tiered findings** — each finding `tier: observation|mechanism|interpretation`, with `mechanism_origin: engineered|emergent` on interpretation claims;
 - **falsifiability** — a `falsifiability:` note (what result would overturn the claim);
@@ -275,7 +275,7 @@ Draft the `question`, `hypothesis`, `objective`, and/or `description` fields of 
 
    - `description:` — Two to four paragraphs providing scientific context, citing source sections by their heading names. Structure: background, mechanism of interest, why this study, expected outcome.
 
-   **v4 narrative-spine fields** (drafted only when `--include-narrative` or named explicitly in `--fields`; written YAML-direct via `pbg_superpowers.study_narrative` since these fields have no dedicated POST endpoints):
+   **v4 narrative-spine fields** (drafted only when `--include-narrative` or named explicitly in `--fields`; written YAML-direct via `viva_superpowers.study_narrative` since these fields have no dedicated POST endpoints):
 
    - `report:` — Object with sub-fields. `verdict` defaults to `not-yet-run` until simulations land; `confidence` defaults to `low`; `evidence_quality` defaults to `aspirational`. Draft `objective`, `main_insight`, and `caveat` from the plan's expected-outcome + caveats sections. Leave `conclusion` blank (it's a Decide-phase field). `key_metrics` is hand-authored; do not invent numbers.
 
@@ -415,7 +415,7 @@ Append one entry to `studies/<slug>/study.yaml.literature_anchors[]` — a liter
 - `--cite <bib-key>` (optional, repeatable) — bib key from the workspace bibliography. Prefer this over `--source`.
 - `--dry-run` (optional) — print the proposed diff; do not write.
 
-YAML-direct subcommand. Shells out to `python -m pbg_superpowers.study_narrative add-literature-anchor ...` which loads the spec, appends the entry, and atomically writes.
+YAML-direct subcommand. Shells out to `python -m viva_superpowers.study_narrative add-literature-anchor ...` which loads the spec, appends the entry, and atomically writes.
 
 #### `add-pivot <slug> --id <id> --question '<text>' [--alternatives 'A;B;C'] [--status <status>] [--requested-response '<text>'] [--notes '<text>'] [--dry-run]`
 
@@ -490,14 +490,14 @@ Spec-verify a study before running it. Catches the cross-reference errors that w
 2. Resolve `studies/<slug>/study.yaml`. Abort if absent.
 3. Shell out to the helper:
    ```bash
-   python3 -m pbg_superpowers.study_verify studies/<slug>/study.yaml
+   python3 -m viva_superpowers.study_verify studies/<slug>/study.yaml
    ```
 4. Surface findings grouped by level (error / warning / info). Each finding includes a `check:` identifier, dotted `field_path`, and a one-line message.
 5. Exit 0 if clean; exit 1 if any error (or any warning with `--strict`); exit 2 if the study.yaml file doesn't exist.
 
 **Notes:**
 
-- This is a thin wrapper around the Python helper — no dashboard API. The check set lives in `pbg_superpowers/study_verify.py`; tests pin each check (`tests/test_study_verify.py`).
+- This is a thin wrapper around the Python helper — no dashboard API. The check set lives in `viva_superpowers/study_verify.py`; tests pin each check (`tests/test_study_verify.py`).
 - Run this after every Design-phase edit. The dashboard's save-time schema validator catches structural errors; `verify` catches semantic cross-reference errors that the schema can't express.
 
 #### `preview-viz <slug> [--name <viz-name>]`
@@ -557,7 +557,7 @@ Run this whenever you add or edit `readouts[]` (Design/Build phase), and always 
 
 **Notes:**
 
-- Deterministic and AI-free on the server side: the endpoints (`/api/study-observable-check` + `/api/observables`) just build the composite and run the pure validator; the re-authoring judgment lives here in the skill. Headless callers can call `pbg_superpowers.readout_validation.validate_readouts(spec, available=available_observables(core, state, schema))` directly.
+- Deterministic and AI-free on the server side: the endpoints (`/api/study-observable-check` + `/api/observables`) just build the composite and run the pure validator; the re-authoring judgment lives here in the skill. Headless callers can call `viva_superpowers.readout_validation.validate_readouts(spec, available=available_observables(core, state, schema))` directly.
 - The composite build is cached (TTL), so repeated `check-observables` / `/api/observables` calls on the same baseline are fast.
 
 #### `migrate-readouts <slug>`
@@ -571,7 +571,7 @@ Run this whenever `verify` / `check-observables` / the report linter flags `read
 1. Walk up from cwd to find `workspace.yaml`. Compute the migration status (pure, no write):
 
    ```python
-   from pbg_superpowers.readout_migration import readout_migration_status, migrate_study_file
+   from viva_superpowers.readout_migration import readout_migration_status, migrate_study_file
    status = readout_migration_status(study_dir)   # {canonical, migratable, needs_human}
    ```
 
@@ -671,7 +671,7 @@ This is a pure shell-out — no dashboard endpoint involved. The script is expec
 After the script exits with code 0, automatically invokes `refresh-viz` for the study so registered charts regenerate against the new run. Pass `--no-refresh-viz` to skip.
 
 - After a successful run (exit 0), also run:
-      python -m pbg_superpowers.study_outcomes --workspace <ws> --study <slug>
+      python -m viva_superpowers.study_outcomes --workspace <ws> --study <slug>
   to record the run into study.yaml's runs[] (mechanical fields; authored
   outcomes are preserved). Skip with --no-sync-runs.
 
@@ -697,13 +697,13 @@ Re-render the study's `visualizations[]` charts against the **latest run** so fi
 
 ```bash
 python -c "from pathlib import Path; import yaml, json; \
-  from pbg_superpowers.run_registry import latest_run; \
-  from pbg_superpowers.refresh_viz import refresh_study_viz; \
+  from viva_superpowers.run_registry import latest_run; \
+  from viva_superpowers.refresh_viz import refresh_study_viz; \
   sd=Path('studies/<slug>'); spec=yaml.safe_load((sd/'study.yaml').read_text()); \
   print(json.dumps(refresh_study_viz(sd, spec, latest_run(sd/'runs.db')), indent=2))"
 ```
 
-Or call the helper directly: resolve the study dir with `python -m pbg_superpowers.paths --study <slug>`; load `study.yaml`; compute `latest = pbg_superpowers.run_registry.latest_run(<study_dir>/runs.db)`; call `pbg_superpowers.refresh_viz.refresh_study_viz(<study_dir>, spec, latest)`.
+Or call the helper directly: resolve the study dir with `python -m viva_superpowers.paths --study <slug>`; load `study.yaml`; compute `latest = viva_superpowers.run_registry.latest_run(<study_dir>/runs.db)`; call `viva_superpowers.refresh_viz.refresh_study_viz(<study_dir>, spec, latest)`.
 
 **Output:** the helper returns a list of per-chart result dicts, each with `{name, chart, status}` where `status` is one of:
 
@@ -875,15 +875,15 @@ sub-objects.
    - FAIL → ask the user: biological (`contradicts`) vs computational (`novel`). If `--auto`, default to biological/contradicts.
 3. **Auto-assign `id`.** Use the next free `F-NN` (skipping any used by existing findings).
 4. **Pre-fill from heuristics.** `evidence.from_run` + `evidence.from_test` + (when present) `evidence.observed`; `expected.summary` from the test's `expected_summary` or `calibration_anchor.literature_summary` when set.
-5. **Surface candidate quotes.** Call `pbg_superpowers.expert_search.search_expert_docs(ws_root, terms, max_hits=3)` on a small set of keywords extracted from the test name + description. Display the top hits (doc, page, snippet) and offer them as candidate `expert_reference.quote` + `expected.cites` entries.
+5. **Surface candidate quotes.** Call `viva_superpowers.expert_search.search_expert_docs(ws_root, terms, max_hits=3)` on a small set of keywords extracted from the test name + description. Display the top hits (doc, page, snippet) and offer them as candidate `expert_reference.quote` + `expected.cites` entries.
 6. **Interactive curation (default, skipped when `--auto`).** For each draft, ask the user to fill / refine: `statement`, `expected.summary`, `expected.cites` (bib_keys), `expert_reference` (doc + quote + note), `next_action`. The user can reject the draft outright.
 7. **Append to `study.yaml.findings[]`.** Atomic write: serialize updated YAML to `study.yaml.tmp`, then `os.replace()` over the original. Preserve all other top-level keys verbatim.
 8. **Bibliography crosscheck (warn).** After the walk, compare every `expected.cites` entry against `references/papers.bib` keys; print a warning for any unknown bib_key so the user can decide whether to add it.
 9. **Report.** Print a one-line summary: appended count, skipped (already-covered) count, unknown bib_keys count.
 
 **Implementation note:** the bulk of the logic lives in
-[`pbg_superpowers/study_findings.py`](../../pbg_superpowers/study_findings.py).
-The skill shells out to it via `python -m pbg_superpowers.study_findings <slug> [--auto] [--dry-run]`,
+[`viva_superpowers/study_findings.py`](../../viva_superpowers/study_findings.py).
+The skill shells out to it via `python -m viva_superpowers.study_findings <slug> [--auto] [--dry-run]`,
 in the same shape as the other YAML-direct subcommands (`propose-followup`, `seed-from-followup`).
 The interactive step (6) is performed by the host Claude instance following the prose flow above; the Python helper handles workspace discovery, draft heuristics, expert-PDF search, atomic-write, and the bib-key crosscheck.
 
@@ -929,7 +929,7 @@ Lift a parent's `followup_proposals[id == <proposal-id>]` entry into a brand-new
 2. **Resolve new slug.** `new_slug = --new-slug or proposal.id`. Abort if `studies/<new_slug>/` exists.
 3. **(Pass 10B) Resolve `--from-finding`, if passed.** Shell out to the helper:
    ```bash
-   python3 -m pbg_superpowers.seed_from_followup \
+   python3 -m viva_superpowers.seed_from_followup \
      studies/<parent-slug>/study.yaml <proposal-id> <finding-id> \
      --new-slug <new_slug>
    ```
@@ -988,7 +988,7 @@ action" step in [`docs/conventions/handling-investigation-feedback.md`](../../do
 **AI-free split.** The *aggregation* (`study_feedback_actions`), the *recording*
 helper (`record_feedback_action`), and the *apply* primitive
 (`apply_feedback_action`) are deterministic Python in
-[`pbg_superpowers/feedback_actions.py`](../../pbg_superpowers/feedback_actions.py).
+[`viva_superpowers/feedback_actions.py`](../../viva_superpowers/feedback_actions.py).
 The **judgment** — which action `kind` best addresses a feedback item and what
 its `proposed_text` should be — is the agent's, performed here in the skill.
 The skill never silently mutates design: it proposes + records, and applies
@@ -1325,18 +1325,18 @@ print(json.dumps({'route': f'/studies/{os.environ[\"NAME\"]}'}))")
         *) echo "unknown flag: $1" >&2; exit 1 ;;
       esac
     done
-    python3 -m pbg_superpowers.study_findings "$SLUG" --ws "$DIR" "${EXTRA_FLAGS[@]}"
+    python3 -m viva_superpowers.study_findings "$SLUG" --ws "$DIR" "${EXTRA_FLAGS[@]}"
     ;;
 
   set-verdicts|add-literature-anchor|add-pivot|add-requirement)
-    # v4 narrative-spine subcommands. YAML-direct via pbg_superpowers.
+    # v4 narrative-spine subcommands. YAML-direct via viva_superpowers.
     # study_narrative — the helper handles workspace discovery, schema-side
     # validation, dedup checks, and atomic write. All flags after the slug
     # are forwarded verbatim, so this dispatcher stays trivial.
     SLUG="${1:-}"
     [ -n "$SLUG" ] || { echo "ERROR: $sub requires a study slug." >&2; exit 1; }
     shift
-    python3 -m pbg_superpowers.study_narrative --ws "$DIR" "$sub" "$SLUG" "$@"
+    python3 -m viva_superpowers.study_narrative --ws "$DIR" "$sub" "$SLUG" "$@"
     ;;
 
   verify)
@@ -1358,7 +1358,7 @@ print(json.dumps({'route': f'/studies/{os.environ[\"NAME\"]}'}))")
       echo "ERROR: $STUDY_YAML not found." >&2
       exit 2
     fi
-    python3 -m pbg_superpowers.study_verify "$STUDY_YAML" "${EXTRA_FLAGS[@]}"
+    python3 -m viva_superpowers.study_verify "$STUDY_YAML" "${EXTRA_FLAGS[@]}"
     ;;
 
   preview-viz)

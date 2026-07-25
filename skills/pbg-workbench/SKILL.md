@@ -98,29 +98,29 @@ Each subcommand prints a single JSON object describing the outcome.
 
 ```bash
 # default: prefers port 8765, leaves the browser alone (the URL is printed)
-python -m pbg_superpowers.workbench start
+python -m viva_superpowers.workbench start
 
 # open the browser too AND auto-pick the investigation matching this branch
-python -m pbg_superpowers.workbench start --browser
+python -m viva_superpowers.workbench start --browser
 
 # force a specific investigation (implies --browser)
-python -m pbg_superpowers.workbench start --investigation dnaa-replication
+python -m viva_superpowers.workbench start --investigation dnaa-replication
 
 # specific port (e.g. when 8765 is taken by another workspace)
-python -m pbg_superpowers.workbench start --port 9001
+python -m viva_superpowers.workbench start --port 9001
 
 # probe state
-python -m pbg_superpowers.workbench status
+python -m viva_superpowers.workbench status
 
 # graceful shutdown
-python -m pbg_superpowers.workbench stop
+python -m viva_superpowers.workbench stop
 
 # reopen the existing one (or auto-start if dead)
-python -m pbg_superpowers.workbench open
+python -m viva_superpowers.workbench open
 ```
 
 The `--workspace <path>` flag is also available (default: cwd) for invoking from
-outside the workspace root. (`python -m pbg_superpowers.dashboard …` remains a
+outside the workspace root. (`python -m viva_superpowers.dashboard …` remains a
 working back-compat alias for the same CLI.)
 
 ## What "alive" means

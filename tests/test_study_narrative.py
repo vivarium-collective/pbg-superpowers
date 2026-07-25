@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers/study_narrative.py — the YAML-direct writers
+"""Tests for viva_superpowers/study_narrative.py — the YAML-direct writers
 for the v4 narrative-spine fields (set-verdicts, add-literature-anchor,
 add-pivot, add-requirement).
 
@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pbg_superpowers.study_narrative import (
+from viva_superpowers.study_narrative import (
     DesignPivot,
     ImplementationRequirement,
     LiteratureAnchor,

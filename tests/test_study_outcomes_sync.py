@@ -13,7 +13,7 @@ import polars as pl
 import pytest
 import yaml
 
-from pbg_superpowers import run_registry, study_io, study_outcomes as so
+from viva_superpowers import run_registry, study_io, study_outcomes as so
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +198,7 @@ def test_sync_degradation_on_compute_error(tmp_path: Path, monkeypatch):
         completed_at="2026-01-01T00:01:00Z",
     )
 
-    import pbg_superpowers.study_evaluator as se
+    import viva_superpowers.study_evaluator as se
     monkeypatch.setattr(se, "compute_outcomes", _raise_runtime)
 
     # Must not raise
@@ -253,7 +253,7 @@ def test_sync_findings_best_effort_on_error(tmp_path: Path, monkeypatch):
         {"name": "err-study", "runs": []},
     )
 
-    import pbg_superpowers.finding_observations as fo
+    import viva_superpowers.finding_observations as fo
     monkeypatch.setattr(fo, "populate_finding_observations", _raise_runtime)
 
     result = so.sync(study_dir)

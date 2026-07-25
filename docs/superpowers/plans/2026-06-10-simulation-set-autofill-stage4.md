@@ -4,7 +4,7 @@
 
 **Goal:** Auto-populate the often-blank `simulation_set` block in a study from what's actually defined + run (baseline, variants, runs[]) — **deterministic Python in pbg-superpowers**, mirroring `study_outcomes.record_runs`. The dashboard calls it via `sync` and merely renders the result (NO AI in the dashboard — see memory `feedback_dashboard_ai_free`).
 
-**Architecture:** New `pbg_superpowers/simulation_set.py`: `derive_entries(spec)` builds simulation_set entries from `conditions.baseline`/`baseline[]` + `conditions.variants`/`variants[]` + `runs[]`; `populate_simulation_set(study_dir)` reconciles them into study.yaml via a **ruamel round-trip** (comment-preserving), **conservatively**: fill-when-absent on existing authored entries (NEVER overwrite an authored value), full-derive + append for new entries, **never delete authored entries**. Wired into `study_outcomes.sync`. The read-time derivation already exists at `vivarium-workbench/lib/investigations.py:388-416` (baseline+variants → in-memory simulation_set) — this PERSISTS that mapping and extends it with run-derived fields.
+**Architecture:** New `viva_superpowers/simulation_set.py`: `derive_entries(spec)` builds simulation_set entries from `conditions.baseline`/`baseline[]` + `conditions.variants`/`variants[]` + `runs[]`; `populate_simulation_set(study_dir)` reconciles them into study.yaml via a **ruamel round-trip** (comment-preserving), **conservatively**: fill-when-absent on existing authored entries (NEVER overwrite an authored value), full-derive + append for new entries, **never delete authored entries**. Wired into `study_outcomes.sync`. The read-time derivation already exists at `vivarium-workbench/lib/investigations.py:388-416` (baseline+variants → in-memory simulation_set) — this PERSISTS that mapping and extends it with run-derived fields.
 
 **Tech:** Python 3.11+, ruamel.yaml, pytest. `.venv/bin/python`. Spec: the spine grounding (this plan is self-contained).
 
@@ -16,8 +16,8 @@
 ---
 
 ## File map
-- Create: `pbg_superpowers/simulation_set.py`.
-- Modify: `pbg_superpowers/study_outcomes.py` (`sync` also calls `populate_simulation_set`, best-effort) + `pyproject.toml` (optional `pbg-populate-simulation-set` CLI / or extend the sync CLI).
+- Create: `viva_superpowers/simulation_set.py`.
+- Modify: `viva_superpowers/study_outcomes.py` (`sync` also calls `populate_simulation_set`, best-effort) + `pyproject.toml` (optional `pbg-populate-simulation-set` CLI / or extend the sync CLI).
 - Test: `tests/test_simulation_set.py`.
 
 ---

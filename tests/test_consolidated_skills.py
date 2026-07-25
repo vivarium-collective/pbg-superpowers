@@ -106,15 +106,15 @@ def test_audit_pbg_repo_script_exists():
 def test_audit_pbg_repo_script_wraps_package_audit():
     script = REPO_ROOT / "scripts" / "audit-pbg-repo.py"
     text = script.read_text()
-    assert "from pbg_superpowers.package_audit import main" in text, (
-        "audit-pbg-repo.py should reuse pbg_superpowers.package_audit — do not duplicate logic"
+    assert "from viva_superpowers.package_audit import main" in text, (
+        "audit-pbg-repo.py should reuse viva_superpowers.package_audit — do not duplicate logic"
     )
 
 
 def test_pbg_package_skill_dir_is_gone():
     assert not (SKILLS / "pbg-package").exists(), (
         "/pbg-package skill was removed in v0.9; the maintainer audit lives at "
-        "scripts/audit-pbg-repo.py and the import surface still works via pbg_superpowers.package_audit"
+        "scripts/audit-pbg-repo.py and the import surface still works via viva_superpowers.package_audit"
     )
 
 

@@ -45,7 +45,7 @@ STUDY_DIR="<workspace-root>/studies/<study-slug>"
 .venv/bin/python -c "
 import json
 from pathlib import Path
-from pbg_superpowers.finding_observations import populate_finding_observations
+from viva_superpowers.finding_observations import populate_finding_observations
 result = populate_finding_observations(Path('$STUDY_DIR'))
 print(json.dumps(result, indent=2))
 "
@@ -96,7 +96,7 @@ WS_ROOT="<workspace-root>"
 .venv/bin/python -c "
 import json
 from pathlib import Path
-from pbg_superpowers.expert_search import search_expert_docs
+from viva_superpowers.expert_search import search_expert_docs
 hits = search_expert_docs(
     Path('$WS_ROOT'),
     terms=['<test-name>', '<numeric-bound>', '<domain-term>'],
@@ -140,7 +140,7 @@ Re-run `populate_finding_observations` to confirm it's idempotent (returns `fill
 .venv/bin/python -c "
 import json
 from pathlib import Path
-from pbg_superpowers.finding_observations import populate_finding_observations
+from viva_superpowers.finding_observations import populate_finding_observations
 print(json.dumps(populate_finding_observations(Path('$STUDY_DIR')), indent=2))
 "
 ```
@@ -183,13 +183,13 @@ With threshold T only:
 
 ```bash
 # 0. Prerequisites: run is complete and synced
-.venv/bin/python -m pbg_superpowers.study_outcomes --study dnaa-2 --workspace .
+.venv/bin/python -m viva_superpowers.study_outcomes --study dnaa-2 --workspace .
 
 # 1. Fill the numbers
 .venv/bin/python -c "
 import json
 from pathlib import Path
-from pbg_superpowers.finding_observations import populate_finding_observations
+from viva_superpowers.finding_observations import populate_finding_observations
 print(json.dumps(populate_finding_observations(Path('studies/dnaa-2')), indent=2))
 "
 
@@ -208,7 +208,7 @@ for f in (spec.get('findings') or []):
 .venv/bin/python -c "
 import json
 from pathlib import Path
-from pbg_superpowers.expert_search import search_expert_docs
+from viva_superpowers.expert_search import search_expert_docs
 hits = search_expert_docs(Path('.'), terms=['DnaA-ATP', '0.2', '0.5', 'fraction'], max_hits=5)
 print(json.dumps(hits, indent=2))
 "
@@ -219,7 +219,7 @@ print(json.dumps(hits, indent=2))
 .venv/bin/python -c "
 import json
 from pathlib import Path
-from pbg_superpowers.finding_observations import populate_finding_observations
+from viva_superpowers.finding_observations import populate_finding_observations
 print(json.dumps(populate_finding_observations(Path('studies/dnaa-2')), indent=2))
 "
 # Expected: {"filled": 0, "skipped": N}

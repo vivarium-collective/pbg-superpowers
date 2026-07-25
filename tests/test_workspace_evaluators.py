@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 import yaml
 
-from pbg_superpowers import study_evaluator as se
+from viva_superpowers import study_evaluator as se
 
 
 @pytest.fixture(autouse=True)

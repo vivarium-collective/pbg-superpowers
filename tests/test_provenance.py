@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from pbg_superpowers.run_registry import register_run
-from pbg_superpowers import provenance
+from viva_superpowers.run_registry import register_run
+from viva_superpowers import provenance
 
 
 # --- figure -> run_id ------------------------------------------------------

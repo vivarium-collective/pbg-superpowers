@@ -91,7 +91,7 @@ live:
 ```bash
 uv pip install -e <path-to-vivarium-workbench> --no-deps
 uv pip install -e <path-to-pbg-superpowers> --no-deps
-python -m pbg_superpowers.dashboard restart
+python -m viva_superpowers.dashboard restart
 ```
 
 If a correct change "doesn't show up," check the install mode before debugging
@@ -174,4 +174,4 @@ reading, record FAIL, and start diagnosing a non-problem.
 
 - [Reviewer-facing status clarity](../concepts/vivarium-workbench-model.md#reviewer-facing-status-clarity) — the `study_clarity_summary` backbone + the report-linter clarity checks.
 - `/pbg-report` skill — the pre-send audit + lint + render.
-- `pbg_superpowers.study_status` — derive-on-read status (the single source of truth for run/test/verdict markers).
+- `viva_superpowers.study_status` — derive-on-read status (the single source of truth for run/test/verdict markers).

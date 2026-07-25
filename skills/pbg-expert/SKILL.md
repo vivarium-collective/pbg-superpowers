@@ -229,7 +229,7 @@ The completed repo must include:
 2. Appropriate bigraph-schema port and config schemas
 3. Custom type registration if needed
 4. Unit and integration tests (including one that asserts the generator
-   is in `pbg_superpowers.composite_generator._REGISTRY`)
+   is in `viva_superpowers.composite_generator._REGISTRY`)
 5. Offline-safe fixtures or examples
 6. **One or more `@composite_generator`-decorated functions** in
    `pbg_<tool>/composites/` — these are the dashboard-visible entry points
@@ -423,7 +423,7 @@ the short version:
 
 ```python
 # pbg_<tool>/composites/<topic>.py
-from pbg_superpowers.composite_generator import composite_generator
+from viva_superpowers.composite_generator import composite_generator
 
 
 @composite_generator(
@@ -653,7 +653,7 @@ Principles:
   tolerance per process:
 
   ```python
-  from pbg_superpowers.config_helpers import normalize_config_list
+  from viva_superpowers.config_helpers import normalize_config_list
 
   low, high = normalize_config_list(self.config["band"], length=2)
   ```
@@ -904,7 +904,7 @@ import in `composites/__init__.py`):
 
 ```python
 def test_generator_is_registered():
-    from pbg_superpowers.composite_generator import _REGISTRY
+    from viva_superpowers.composite_generator import _REGISTRY
     matches = [eid for eid in _REGISTRY if eid.endswith(".<tool>_baseline")]
     assert matches, f"<tool>_baseline missing; have {list(_REGISTRY)[:5]}"
 ```
@@ -922,7 +922,7 @@ PBG_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv/
 
 # Scaffold in place. Default would create a `<repo>-workspace` branch; for a
 # fresh single-developer wrapper, stay on main by passing --branch main.
-"$PBG_PYTHON" -m pbg_superpowers.scaffold workspace \
+"$PBG_PYTHON" -m viva_superpowers.scaffold workspace \
     --in-place \
     --name <tool> \
     --target . \
@@ -930,7 +930,7 @@ PBG_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv/
     --branch main
 
 # Register the new workspace so the dashboard's switcher sees it.
-"$PBG_PYTHON" -m pbg_superpowers.workspace_catalog add \
+"$PBG_PYTHON" -m viva_superpowers.workspace_catalog add \
     --path "$(pwd)" --name <tool> --package pbg_<tool>
 
 # Sanity-check the resulting layout.
@@ -1210,7 +1210,7 @@ python scripts/lint-workspace.py    # must print "workspace lint: OK"
 
 # Confirm the generator(s) are visible to the dashboard's discovery path.
 python -c "
-from pbg_superpowers.composite_generator import discover_generators
+from viva_superpowers.composite_generator import discover_generators
 gens = discover_generators()
 matches = [g for g in gens if 'pbg_<tool>' in g]
 assert matches, 'no <tool> generators discovered'
@@ -1537,7 +1537,7 @@ Same ritual as single-tool mode's Phase 4.5 — `workspace.yaml`,
 tab can run it with parameter sweeps:
 
 ```python
-from pbg_superpowers.composite_generator import composite_generator
+from viva_superpowers.composite_generator import composite_generator
 from ..document import build_document
 
 @composite_generator(
@@ -1557,10 +1557,10 @@ Run the scaffolder + catalog add:
 
 ```bash
 PBG_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv/bin/python)"
-"$PBG_PYTHON" -m pbg_superpowers.scaffold workspace \
+"$PBG_PYTHON" -m viva_superpowers.scaffold workspace \
     --in-place --name <name>-composite --target . \
     --package pbg_<name>_composite --branch main
-"$PBG_PYTHON" -m pbg_superpowers.workspace_catalog add \
+"$PBG_PYTHON" -m viva_superpowers.workspace_catalog add \
     --path "$(pwd)" --name <name>-composite --package pbg_<name>_composite
 python scripts/lint-workspace.py
 ```

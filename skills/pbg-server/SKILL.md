@@ -29,13 +29,13 @@ When no stage skill is mirroring prompts, the report page is the only thing it s
 
 - **`/pbg-server start`** — runs `<plugin>/server/start-server.sh <workspace>`. Writes `.pbg/server/server-info` (port, URL, content/state dirs) and `.pbg/server/server.pid`. Prints the URL. The start script resolves Python from the workspace venv first; falls back to `$PATH` python3 if the venv isn't built yet. On stale state from a previous crashed boot, it cleans up automatically before retrying.
 
-  **Cross-worktree dedup (Pass C).** Before starting, the skill queries `python -m pbg_superpowers.workspace_catalog duplicates-for-path --path <workspace>`. If one or more records point at the SAME worktree path:
+  **Cross-worktree dedup (Pass C).** Before starting, the skill queries `python -m viva_superpowers.workspace_catalog duplicates-for-path --path <workspace>`. If one or more records point at the SAME worktree path:
     - For each duplicate whose PID is dead → silently remove the record and continue.
-    - For each duplicate whose PID is alive → prompt the user: `Server already running for this worktree at <url> (pid <pid>). Kill and restart? [y/N]`. On `y` send SIGTERM to the PID, wait briefly for it to exit, then remove the record via `python -m pbg_superpowers.workspace_catalog cleanup-servers`. On `N` abort start with: `Aborted; existing server kept.`
+    - For each duplicate whose PID is alive → prompt the user: `Server already running for this worktree at <url> (pid <pid>). Kill and restart? [y/N]`. On `y` send SIGTERM to the PID, wait briefly for it to exit, then remove the record via `python -m viva_superpowers.workspace_catalog cleanup-servers`. On `N` abort start with: `Aborted; existing server kept.`
     - Records pointing at DIFFERENT worktree paths are NEVER touched. Parallel worktrees each get their own dashboard server (intentional — that's how cross-worktree agent parallelism works).
 - **`/pbg-server stop`** — reads `.pbg/server/server.pid`, sends SIGTERM, removes both `server-info` and `server.pid` once the process exits.
 - **`/pbg-server status`** — prints `.pbg/server/server-info` if present and the server is alive; otherwise reports "not running" or "stale".
-- **`/pbg-server cleanup`** — scans `~/.pbg/servers/*.json` for orphans (PID dead OR worktree path no longer exists) and removes them. Delegates to `python -m pbg_superpowers.workspace_catalog cleanup-servers`. Reports the count of removed and kept records. Live servers whose worktree path exists are NEVER removed. Safe to run anytime; runs no destructive git/shell operations.
+- **`/pbg-server cleanup`** — scans `~/.pbg/servers/*.json` for orphans (PID dead OR worktree path no longer exists) and removes them. Delegates to `python -m viva_superpowers.workspace_catalog cleanup-servers`. Reports the count of removed and kept records. Live servers whose worktree path exists are NEVER removed. Safe to run anytime; runs no destructive git/shell operations.
 
 ## What "alive" means
 

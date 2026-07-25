@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.composite_generator."""
+"""Tests for viva_superpowers.composite_generator."""
 import shutil
 import subprocess
 import sys
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pbg_superpowers.composite_generator import (
+from viva_superpowers.composite_generator import (
     build_generator, composite_generator, GeneratorEntry, _REGISTRY,
     apply_core_extensions, emitter_defaults,
 )
@@ -404,7 +404,7 @@ def installed_fake_pkg():
 
 def test_discover_generators_finds_decorated_function_in_installed_pkg(
         installed_fake_pkg):
-    from pbg_superpowers.composite_generator import discover_generators
+    from viva_superpowers.composite_generator import discover_generators
     # Discovery must import the package — it can't rely on the test having
     # already done so.
     found = discover_generators()
@@ -421,7 +421,7 @@ def test_discover_all_merges_specs_and_generators(tmp_path, installed_fake_pkg):
     spec_file = tmp_path / "baseline.composite.yaml"
     spec_file.write_text("name: baseline\nstate: {}\n")
 
-    from pbg_superpowers.composite_discovery import discover_all
+    from viva_superpowers.composite_discovery import discover_all
     _REGISTRY.clear()
     merged = discover_all(extra_search_paths=[tmp_path])
 
@@ -460,7 +460,7 @@ def test_discover_generators_walks_subpackages_without_eager_import(tmp_path):
     """
     import sys
     import importlib
-    from pbg_superpowers.composite_generator import (
+    from viva_superpowers.composite_generator import (
         _REGISTRY, discover_generators,
     )
 
@@ -475,7 +475,7 @@ def test_discover_generators_walks_subpackages_without_eager_import(tmp_path):
         'should pick up the subpackage decorators anyway."""\n'
     )
     (sub_dir / "__init__.py").write_text(
-        "from pbg_superpowers.composite_generator import composite_generator\n"
+        "from viva_superpowers.composite_generator import composite_generator\n"
         "\n"
         "@composite_generator(name='walkpkg_demo_baseline')\n"
         "def walkpkg_demo_baseline():\n"
@@ -510,7 +510,7 @@ def test_discover_generators_traps_sys_exit_from_imported_subpackage(tmp_path):
     used to take the whole subprocess down. Now it warns + continues."""
     import sys
     import importlib
-    from pbg_superpowers.composite_generator import (
+    from viva_superpowers.composite_generator import (
         _REGISTRY, discover_generators,
     )
 
@@ -543,7 +543,7 @@ def test_discover_generators_traps_sys_exit_from_imported_subpackage(tmp_path):
 
 def test_composite_generator_registers_into_process_bigraph_registry():
     from process_bigraph import composite_spec as cs
-    from pbg_superpowers.composite_generator import composite_generator, build_generator
+    from viva_superpowers.composite_generator import composite_generator, build_generator
     cs.clear_registry()
 
     @composite_generator(name="shimdemo", parameters={"seed": {"type": "int", "default": 1}})
@@ -559,7 +559,7 @@ def test_composite_generator_registers_into_process_bigraph_registry():
 
 def test_build_generator_descriptive_error_for_unregistered_id():
     from process_bigraph import composite_spec as cs
-    from pbg_superpowers.composite_generator import build_generator, GeneratorEntry
+    from viva_superpowers.composite_generator import build_generator, GeneratorEntry
     cs.clear_registry()
     ge = GeneratorEntry(id="missing.x", name="x", description="", parameters={},
                         func=None, module="missing")
@@ -571,7 +571,7 @@ def test_build_generator_descriptive_error_for_unregistered_id():
 def test_registry_view_supports_clean_alias_assignment():
     import dataclasses
     from process_bigraph import composite_spec as cs
-    from pbg_superpowers.composite_generator import composite_generator, _REGISTRY
+    from viva_superpowers.composite_generator import composite_generator, _REGISTRY
     cs.clear_registry()
 
     @composite_generator(name="aliasme", parameters={"seed": {"type": "int", "default": 0}})
@@ -590,7 +590,7 @@ def test_registry_view_supports_clean_alias_assignment():
 def test_registry_view_dict_conversion_works():
     """M2: _RegistryView.keys() enables dict(_REGISTRY) to work."""
     from process_bigraph import composite_spec as cs
-    from pbg_superpowers.composite_generator import composite_generator, _REGISTRY
+    from viva_superpowers.composite_generator import composite_generator, _REGISTRY
     cs.clear_registry()
     @composite_generator(name="dictme", parameters={})
     def dictme(core=None):
@@ -605,7 +605,7 @@ def test_discover_generators_skips_scripts_subpackage(tmp_path):
     argparse-driven modules that crash under bare import."""
     import sys
     import importlib
-    from pbg_superpowers.composite_generator import (
+    from viva_superpowers.composite_generator import (
         _REGISTRY, discover_generators, composite_generator,
     )
 
@@ -615,7 +615,7 @@ def test_discover_generators_skips_scripts_subpackage(tmp_path):
     (pkg_dir / "__init__.py").write_text("")
     # A generator in the LIBRARY half — must be discovered.
     (pkg_dir / "lib_module.py").write_text(
-        "from pbg_superpowers.composite_generator import composite_generator\n"
+        "from viva_superpowers.composite_generator import composite_generator\n"
         "\n"
         "@composite_generator(name='libscripts_demo_baseline')\n"
         "def libscripts_demo_baseline():\n"
@@ -625,7 +625,7 @@ def test_discover_generators_skips_scripts_subpackage(tmp_path):
     # otherwise valid.
     (scripts_dir / "__init__.py").write_text("")
     (scripts_dir / "would_register.py").write_text(
-        "from pbg_superpowers.composite_generator import composite_generator\n"
+        "from viva_superpowers.composite_generator import composite_generator\n"
         "\n"
         "@composite_generator(name='libscripts_demo_should_be_skipped')\n"
         "def libscripts_demo_should_be_skipped():\n"

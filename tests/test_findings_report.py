@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pbg_superpowers.report import (
+from viva_superpowers.report import (
     render_workspace_findings_index,
     render_workspace_report,
     _harvest_findings,

@@ -37,7 +37,7 @@ These are reviewer-readiness issues: lint says "the YAML is well-formed"; the au
 Set `WORKSPACE_ROOT` to the workspace root (the directory holding `workspace.yaml`; `.` for the common case where the skill runs from the workspace root). Then resolve the workspace dirs (honors `workspace.yaml` `layout:` — works for flat or nested workspaces):
 
 ```bash
-eval "$(python -m pbg_superpowers.paths --env --workspace "$WORKSPACE_ROOT")"
+eval "$(python -m viva_superpowers.paths --env --workspace "$WORKSPACE_ROOT")"
 ```
 
 This exports `$INVESTIGATIONS_DIR`, `$STUDIES_DIR`, `$REPORTS_DIR`, etc. (each = absolute path). Use these variables for the studies/investigations/references/reports paths below — do NOT hardcode `investigations/`, `studies/`, `reports/`. (The hidden `.pbg/` machine-state dir stays at the workspace root by default — use it literally.)
@@ -83,7 +83,7 @@ Check: `ls "$STUDIES_DIR"/<study>/charts/*.png` and count distinct chart basenam
 
 - **warning** — a study's `charts/` dir holds figures from **more than one run/seed** (e.g. a `seed0` reproduction + `step2/step3` sixpanels alongside the `seed1` canonical). Reviewers read this as "which run is real?" and routinely ask to "keep only the latest." Recommend deleting the superseded **files** (not just the `visualizations:` entries), and rewriting any prose/`provenance` references that point at the deleted files so the report has no dead paths. When a new canonical run lands, prune the old run's files in the same edit.
 
-Prefer the programmatic check when charts carry run tags (written by `figure_refresh`/`refresh_viz`): `pbg_superpowers.chart_store.classify_charts(study_dir)` buckets charts into `canonical` / `referenced` / `superseded` / `untagged`, and `prune(study_dir, dry_run=True)` lists exactly the superseded files (a chart tagged to a non-canonical, non-pinned run). Report those as the warning here; only delete on an explicit refresh/regen with `prune(study_dir, dry_run=False)` (it spares `untagged` files and is a no-op when no canonical run resolves).
+Prefer the programmatic check when charts carry run tags (written by `figure_refresh`/`refresh_viz`): `viva_superpowers.chart_store.classify_charts(study_dir)` buckets charts into `canonical` / `referenced` / `superseded` / `untagged`, and `prune(study_dir, dry_run=True)` lists exactly the superseded files (a chart tagged to a non-canonical, non-pinned run). Report those as the warning here; only delete on an explicit refresh/regen with `prune(study_dir, dry_run=False)` (it spares `untagged` files and is a no-op when no canonical run resolves).
 
 ### A4. Numerical-claim consistency
 
@@ -182,7 +182,7 @@ If `blocking > 0` and `--force` is NOT set, exit before Pass B with a non-zero s
 
 ## Pass B — Structural lint (UNCHANGED)
 
-The existing pre-publication linter from `pbg_superpowers.report_linter.lint_workspace_report()`. Checks every study under the workspace's studies and investigations dirs (`$STUDIES_DIR` / `$INVESTIGATIONS_DIR`, layout-resolved; the linter resolves these itself from `--ws`):
+The existing pre-publication linter from `viva_superpowers.report_linter.lint_workspace_report()`. Checks every study under the workspace's studies and investigations dirs (`$STUDIES_DIR` / `$INVESTIGATIONS_DIR`, layout-resolved; the linter resolves these itself from `--ws`):
 
 - **incomplete_summaries** (error) — `evaluation_status: evaluated` but `conclusion_logic` is empty.
 - **status_contradictions** (error) — gate/evaluation/sim/impl/review combinations that cannot logically co-exist.
@@ -200,7 +200,7 @@ Internally:
 
 ```bash
 # Pass B only:
-python -m pbg_superpowers.report_linter --ws .
+python -m viva_superpowers.report_linter --ws .
 ```
 
 ## Pass B½ — Canonicalize readouts (auto-migrate, before render)
@@ -212,7 +212,7 @@ For each member study under `$STUDIES_DIR` / `$INVESTIGATIONS_DIR`, rewrite only
 ```bash
 python - <<'PY'
 from pathlib import Path
-from pbg_superpowers.readout_migration import migrate_study_file
+from viva_superpowers.readout_migration import migrate_study_file
 needs_human_total = 0
 for sy in Path('.').glob('studies/*/study.yaml'):
     report = migrate_study_file(sy.parent, write=True)  # ruamel round-trip; rewrites ONLY the readouts: block, leaves needs_human untouched
@@ -245,7 +245,7 @@ python -c "from pathlib import Path; \
 
 # Fall back to pbg-superpowers' slim renderer if the above is not installed:
 python -c "from pathlib import Path; \
-           from pbg_superpowers.report import render_workspace_report; \
+           from viva_superpowers.report import render_workspace_report; \
            render_workspace_report(Path('.'))"
 ```
 
@@ -253,7 +253,7 @@ Forced render with auto-logged overrides:
 
 ```bash
 python -c "from pathlib import Path; \
-           from pbg_superpowers.report import render_workspace_report; \
+           from viva_superpowers.report import render_workspace_report; \
            render_workspace_report(Path('.'), force=True)"
 ```
 
@@ -278,7 +278,7 @@ The per-investigation report a reviewer downloads is built **client-side**
    ```bash
    uv pip install -e <path-to-vivarium-workbench> --no-deps
    uv pip install -e <path-to-pbg-superpowers> --no-deps
-   python -m pbg_superpowers.dashboard restart
+   python -m viva_superpowers.dashboard restart
    ```
 
 The full reviewer-feedback workflow (parse → map → classify → verify-rendered →

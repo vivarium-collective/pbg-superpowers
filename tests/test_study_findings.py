@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.study_findings (Pass 10A findings walk)."""
+"""Tests for viva_superpowers.study_findings (Pass 10A findings walk)."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pbg_superpowers import expert_search, study_findings as sf
+from viva_superpowers import expert_search, study_findings as sf
 
 
 @pytest.fixture(autouse=True)

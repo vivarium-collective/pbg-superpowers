@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from pbg_superpowers.workspace_paths import WorkspacePaths
+from viva_superpowers.workspace_paths import WorkspacePaths
 
 
 PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser().resolve()
@@ -30,7 +30,7 @@ def test_server_serves_workspace_report(tmp_path, plugin_root):
     ws = tmp_path / "ws"
     # Scaffold workspace
     subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.scaffold", "workspace",
+        [sys.executable, "-m", "viva_superpowers.scaffold", "workspace",
          "--name", "demo", "--target", str(ws),
          "--template-source", str(PBG_TEMPLATE)],
         check=True, cwd=plugin_root,
@@ -43,8 +43,8 @@ def test_server_serves_workspace_report(tmp_path, plugin_root):
         [sys.executable, "-c",
          "import shutil; "
          "from pathlib import Path; "
-         "from pbg_superpowers.report import render_workspace_report; "
-         "from pbg_superpowers.workspace_paths import WorkspacePaths; "
+         "from viva_superpowers.report import render_workspace_report; "
+         "from viva_superpowers.workspace_paths import WorkspacePaths; "
          f"ws = Path(r'{ws}'); "
          "render_workspace_report(ws, today='2026-05-09'); "
          "reports = WorkspacePaths.load(ws).reports; "

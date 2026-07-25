@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pbg_superpowers.workspace_paths import WorkspacePaths
+from viva_superpowers.workspace_paths import WorkspacePaths
 
 
 PBG_TEMPLATE = Path(os.environ.get("PBG_TEMPLATE", "~/code/pbg-template")).expanduser().resolve()
@@ -42,7 +42,7 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
     ws = tmp_path / "ws"
 
     # 1. Scaffold workspace + git init
-    _run([sys.executable, "-m", "pbg_superpowers.scaffold", "workspace",
+    _run([sys.executable, "-m", "viva_superpowers.scaffold", "workspace",
           "--name", "demo", "--target", str(ws),
           "--template-source", str(PBG_TEMPLATE)], cwd=plugin_root)
     _git("init", "-q", cwd=ws)
@@ -51,7 +51,7 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
 
     # 2. Scaffold model + git init
     model = ws / "models" / "m"
-    _run([sys.executable, "-m", "pbg_superpowers.scaffold", "model",
+    _run([sys.executable, "-m", "viva_superpowers.scaffold", "model",
           "--model-name", "m", "--model-slug", "m",
           "--target", str(model)], cwd=plugin_root)
 
@@ -111,7 +111,7 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
     venv_python = str(ws / ".venv" / "bin" / "python")
     _run([venv_python, "-c",
           "import json; from pbg_m.core import build_core; "
-          "from pbg_superpowers.core_introspection import registry_snapshot; "
+          "from viva_superpowers.core_introspection import registry_snapshot; "
           "open('tests/registry-snapshot.json','w').write(json.dumps(registry_snapshot(build_core())))"],
          cwd=model)
     snap = json.loads((model / "tests" / "registry-snapshot.json").read_text())
@@ -120,8 +120,8 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
     # 7. Render reports (simulates /pbg-report step)
     _run([venv_python, "-c",
           "from pathlib import Path; "
-          "from pbg_superpowers.report import render_workspace_report, render_model_report; "
-          "from pbg_superpowers.core_introspection import registry_snapshot; "
+          "from viva_superpowers.report import render_workspace_report, render_model_report; "
+          "from viva_superpowers.core_introspection import registry_snapshot; "
           "from pbg_m.core import build_core; "
           "render_workspace_report(Path('.'), today='2026-05-09'); "
           "render_model_report(Path('.'), 'm', registry_snapshot(build_core()), today='2026-05-09')"],

@@ -21,7 +21,7 @@ Studies live **nested under their investigation**:
 back-ref. The investigation's publication/report lives at `investigations/<inv>/reports/`
 (per-investigation — there is **no global repo-wide report**).
 
-- **Resolve a study dir** (nested- and flat-aware): `python -m pbg_superpowers.paths --study <slug>`.
+- **Resolve a study dir** (nested- and flat-aware): `python -m viva_superpowers.paths --study <slug>`.
 - **Create a new study** under `$INVESTIGATIONS_DIR/<inv>/studies/<slug>/` (write the `investigation:` back-ref).
 - Legacy flat `studies/<slug>/` still resolves (back-compat) until a repo is migrated with `pbg-migrate-nested`.
 
@@ -37,7 +37,7 @@ inputs:
   expert_docs: []
 ```
 
-Repo-wide source packages and shared/unused inputs stay global (repo-level `datasets/`, `references/papers.bib`). To migrate existing repo-level datasets, run `pbg-migrate-inputs` (`python -m pbg_superpowers.migrate_inputs --workspace <ws> [--apply]`): it assigns a dataset to an investigation only when exactly ONE investigation's studies reference it (by filename in `study.yaml`); multi-investigation and unused datasets are reported and left global. Default prints the plan; `--apply` performs the `git mv` and updates `investigation.yaml`.
+Repo-wide source packages and shared/unused inputs stay global (repo-level `datasets/`, `references/papers.bib`). To migrate existing repo-level datasets, run `pbg-migrate-inputs` (`python -m viva_superpowers.migrate_inputs --workspace <ws> [--apply]`): it assigns a dataset to an investigation only when exactly ONE investigation's studies reference it (by filename in `study.yaml`); multi-investigation and unused datasets are reported and left global. Default prints the plan; `--apply` performs the `git mv` and updates `investigation.yaml`.
 
 **NEVER silently add an input the expert did not provide.** `inputs.references`, `inputs.datasets`, and `expert_docs` are the *provided* inputs — things the expert supplied or explicitly approved. If, while working, you find yourself wanting to cite a paper, invoke a mechanism, or lean on a parameter the expert did **not** give you, do **not** add it to `inputs.` and do **not** weave it into the prose as fact. Instead record it under `proposed_inputs:` with `status: pending`, plus the `provenance` (which commit / why it came up) and the `rationale` (what you used it for). The expert then Accepts or Declines each item in the report; on Accept the dashboard promotes a `kind: reference` item into `inputs.references` (a `kind: mechanism` is marked accepted for a human to integrate), on Decline it is marked declined and left out. This keeps the agent from quietly importing outside claims as if they were expert-sanctioned.
 
@@ -117,7 +117,7 @@ All sub-commands:
 3. Resolve workspace directories (honors `workspace.yaml` `layout:` — works for flat or nested workspaces):
 
    ```bash
-   eval "$(python -m pbg_superpowers.paths --env --workspace "$WORKSPACE_ROOT")"
+   eval "$(python -m viva_superpowers.paths --env --workspace "$WORKSPACE_ROOT")"
    ```
 
    This exports `$INVESTIGATIONS_DIR`, `$STUDIES_DIR`, `$REPORTS_DIR`, etc. (each = absolute path). Use these variables for the studies/investigations/references/reports paths below — do NOT hardcode `investigations/`, `studies/`, `reports/`. (The hidden `.pbg/` machine-state dir stays at the workspace root by default — use it literally.)
@@ -206,7 +206,7 @@ All v2 narrative-spine fields are optional per `investigation.schema.json`, so t
 
 ```python
 import os, yaml, tempfile
-from pbg_superpowers.paths import workspace_dir
+from viva_superpowers.paths import workspace_dir
 
 path = str(workspace_dir("investigations", root=workspace_root) / slug / "investigation.yaml")
 os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -573,11 +573,11 @@ Close an investigation: render the workspace report, copy it into `$INVESTIGATIO
 
 **User edits are preserved.** If you've previously curated `roles` or `notes` on a contributor entry, re-running close keeps those — only `commits` and `sessions` are refreshed.
 
-**Steps (mechanic-driven, executed by `python -m pbg_superpowers.investigation_close`):**
+**Steps (mechanic-driven, executed by `python -m viva_superpowers.investigation_close`):**
 
 1. Resolve workspace + investigation YAML; verify branch exists.
 2. Derive contributors (above).
-3. Render workspace report via `pbg_superpowers.report.render_workspace_report` (unless `--skip-report`).
+3. Render workspace report via `viva_superpowers.report.render_workspace_report` (unless `--skip-report`).
 4. Copy `$REPORTS_DIR/index.html` → `$INVESTIGATIONS_DIR/<slug>/report.html` (currently the reports dir is git-ignored; the copied path lives under the investigations dir which is tracked).
 5. Update `investigation.yaml`: `status: closed`, `closed_at: <ISO-8601>`, `report_url: report.html`, `contributors: <merged>`.
 6. `git add "$INVESTIGATIONS_DIR/<slug>/investigation.yaml" "$INVESTIGATIONS_DIR/<slug>/report.html"` + `git commit -m "close(investigation): <slug>"` on the investigation branch.
@@ -601,7 +601,7 @@ Returns a `CloseResult` (printed plain or JSON) listing every action taken, the 
 /pbg-investigation close dnaa-replication --no-pr
 ```
 
-The close mechanic is YAML-direct (it does NOT call a dashboard endpoint); the dashboard "Close investigation" button is a follow-up that will call the same `pbg_superpowers.investigation_close.close_investigation` function via a new POST `/api/iset-close` handler.
+The close mechanic is YAML-direct (it does NOT call a dashboard endpoint); the dashboard "Close investigation" button is a follow-up that will call the same `viva_superpowers.investigation_close.close_investigation` function via a new POST `/api/iset-close` handler.
 
 ---
 

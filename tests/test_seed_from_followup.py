@@ -11,7 +11,7 @@ the heuristic:
   - The convenience ``apply_from_finding`` loads a real parent yaml,
     rejects a missing finding id, and produces a ChildSeed mergeable
     into a fresh child template.
-  - The CLI smoke (``python -m pbg_superpowers.seed_from_followup``)
+  - The CLI smoke (``python -m viva_superpowers.seed_from_followup``)
     prints a non-empty preview and exits 0 on the happy path; exits 2
     when the finding doesn't exist.
 """
@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pbg_superpowers import seed_from_followup as sff
+from viva_superpowers import seed_from_followup as sff
 
 
 # ---------------------------------------------------------------------------
@@ -438,7 +438,7 @@ def test_apply_from_finding_rejects_missing_parent(tmp_path):
 def test_cli_happy_path_exits_zero_and_prints_diffs(tmp_path):
     parent_yaml = _make_parent_study(tmp_path)
     cp = subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.seed_from_followup",
+        [sys.executable, "-m", "viva_superpowers.seed_from_followup",
          str(parent_yaml), "calibrate-dars", "F-03",
          "--new-slug", "dnaa-02-dars-calibration"],
         capture_output=True, text=True,
@@ -458,7 +458,7 @@ def test_cli_happy_path_exits_zero_and_prints_diffs(tmp_path):
 def test_cli_unknown_finding_exits_2(tmp_path):
     parent_yaml = _make_parent_study(tmp_path)
     cp = subprocess.run(
-        [sys.executable, "-m", "pbg_superpowers.seed_from_followup",
+        [sys.executable, "-m", "viva_superpowers.seed_from_followup",
          str(parent_yaml), "calibrate-dars", "F-99"],
         capture_output=True, text=True,
     )

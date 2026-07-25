@@ -1,9 +1,9 @@
-"""Tests for pbg_superpowers.figure_refresh (auto-refresh figures from a run)."""
+"""Tests for viva_superpowers.figure_refresh (auto-refresh figures from a run)."""
 from __future__ import annotations
 
 from pathlib import Path
 
-from pbg_superpowers.figure_refresh import (
+from viva_superpowers.figure_refresh import (
     latest_run_dir,
     refresh_study_figures,
     study_figure_refresh_commands,

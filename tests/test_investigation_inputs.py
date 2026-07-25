@@ -1,6 +1,6 @@
 from pathlib import Path
 import yaml
-from pbg_superpowers.investigation_inputs import investigation_inputs
+from viva_superpowers.investigation_inputs import investigation_inputs
 
 def _ws(tmp):
     (tmp / "workspace.yaml").write_text("name: demo\n", encoding="utf-8")

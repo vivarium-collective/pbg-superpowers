@@ -1,4 +1,4 @@
-"""Tests for pbg_superpowers.package_audit."""
+"""Tests for viva_superpowers.package_audit."""
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import textwrap
@@ -6,7 +6,7 @@ import urllib.error
 
 import pytest
 
-from pbg_superpowers.package_audit import audit_repo, _has_dep, _check_pypi, render_report
+from viva_superpowers.package_audit import audit_repo, _has_dep, _check_pypi, render_report
 
 
 def test_has_dep_matches_with_versions():

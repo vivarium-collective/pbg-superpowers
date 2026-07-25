@@ -1,5 +1,5 @@
-"""Tests for pbg_superpowers.study_status (derive-on-read status, friction #2)."""
-from pbg_superpowers.study_status import (
+"""Tests for viva_superpowers.study_status (derive-on-read status, friction #2)."""
+from viva_superpowers.study_status import (
     derive_simulation_status, derive_evaluation_status,
     derive_status, status_disagreements,
     count_test_outcomes, study_clarity_summary,

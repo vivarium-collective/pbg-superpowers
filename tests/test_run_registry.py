@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-from pbg_superpowers.run_registry import (
+from viva_superpowers.run_registry import (
     latest_run, register_run, get_run_params, RUNS_META_DDL,
 )
 

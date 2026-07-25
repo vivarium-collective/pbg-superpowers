@@ -6,14 +6,14 @@
 
 **Architecture:** (a) pbg-template schema: add `cites` (bib-key array) to `readouts[]` and `tests[]` items (`behavior_tests[]` already has `cites` + `calibration_anchor.cites`). (b) pbg-superpowers `report_linter.py`: new checks mirroring `_check_finding_cites_unknown_bib_key` (report_linter.py:772) — a WARN when a numeric-band test has no `cites`, and an ERROR when any `cites` on tests/behavior_tests/readouts references a bib_key absent from `references/papers.bib`. (c) a small helper `bands_missing_provenance(spec)` so 3b's skill + the report can target uncited bands.
 
-**Tech:** Python 3.11+, pytest. `.venv/bin/python`. Known sets via `pbg_superpowers.bibtex.bib_keys(ws_root)`.
+**Tech:** Python 3.11+, pytest. `.venv/bin/python`. Known sets via `viva_superpowers.bibtex.bib_keys(ws_root)`.
 
 ---
 
 ## File map
 - Modify: `pbg-template/template/.pbg/schemas/study.schema.json` (add `cites` to `readouts[]` items ~672, `tests[]` items ~192 — additive).
-- Modify: `pbg_superpowers/report_linter.py` (new `_check_*` functions; they auto-run via the existing check-collection mechanism — confirm how `_check_finding_cites_unknown_bib_key` gets invoked and follow it).
-- Create: `pbg_superpowers/band_provenance.py` (the `bands_missing_provenance` helper) — or put it in report_linter if simpler.
+- Modify: `viva_superpowers/report_linter.py` (new `_check_*` functions; they auto-run via the existing check-collection mechanism — confirm how `_check_finding_cites_unknown_bib_key` gets invoked and follow it).
+- Create: `viva_superpowers/band_provenance.py` (the `bands_missing_provenance` helper) — or put it in report_linter if simpler.
 - Test: `tests/test_band_provenance.py` (+ extend any report_linter test).
 
 ---
@@ -50,6 +50,6 @@
 
 ## Notes for executor
 - `.venv/bin/python -m pytest`. Read `report_linter.py:772-834` (the two finding checks) + how checks are collected/run (find where `_check_finding_cites_unknown_bib_key` is invoked — likely a registry of `_check_*` functions) and follow it exactly so the new checks run.
-- `pbg_superpowers.bibtex.bib_keys(ws_root)` / `_bib_keys_for_workspace` is the known-key source.
+- `viva_superpowers.bibtex.bib_keys(ws_root)` / `_bib_keys_for_workspace` is the known-key source.
 - pbg-template schema = SEPARATE branch/commit (`feat/band-cites-schema`); run pbg-template `pytest`.
 - Real dnaa studies READ-ONLY; golden uses tmp copies.

@@ -1,7 +1,7 @@
 """Nested-aware study resolution (investigation-centric structure, Phase 1)."""
 from pathlib import Path
 
-from pbg_superpowers.workspace_paths import WorkspacePaths
+from viva_superpowers.workspace_paths import WorkspacePaths
 
 
 def _ws(tmp, nested: bool):
@@ -43,7 +43,7 @@ def test_study_owner_flat_is_none(tmp_path):
 
 def test_paths_cli_study_dir(tmp_path, capsys):
     _ws(tmp_path, nested=True)
-    from pbg_superpowers.paths import _main
+    from viva_superpowers.paths import _main
     rc = _main(["--study", "s1", "--workspace", str(tmp_path)])
     out = capsys.readouterr().out.strip()
     assert rc == 0

@@ -16,13 +16,13 @@
 
 ## Task 1: Standalone finding-seed in `seed_from_followup` (pbg-superpowers)
 
-**Files:** Modify `pbg_superpowers/seed_from_followup.py`; Test `tests/test_seed_from_followup.py`.
+**Files:** Modify `viva_superpowers/seed_from_followup.py`; Test `tests/test_seed_from_followup.py`.
 
 - [ ] **Step 1: Failing test.** A finding with a `next_action` can seed a child study WITHOUT a pre-existing `followup_proposals[]` entry:
 ```python
 def test_seed_standalone_from_finding(tmp_study_with_finding_next_action):
     # study has findings[0] = {id: F-01, statement, next_action: "test X under Y", evidence:{...}}, NO followup_proposals
-    from pbg_superpowers.seed_from_followup import resolve_seed_source, build_child_seed_from_finding
+    from viva_superpowers.seed_from_followup import resolve_seed_source, build_child_seed_from_finding
     src = resolve_seed_source(study_spec, finding_id="F-01")   # synthesizes an inline proposal stub
     seed = build_child_seed_from_finding(study_spec, "F-01", src.proposal)
     assert seed.seeded_from.get("finding") == "F-01"
@@ -37,12 +37,12 @@ def test_resolve_seed_source_covers_all_families(...):
 
 ## Task 2: `write_child_study` — a callable atomic writer (pbg-superpowers)
 
-**Files:** `pbg_superpowers/seed_from_followup.py`; Test `tests/test_seed_from_followup.py`.
+**Files:** `viva_superpowers/seed_from_followup.py`; Test `tests/test_seed_from_followup.py`.
 
 - [ ] **Step 1: Failing test** — `write_child_study` creates the child study.yaml + the parent stamp atomically (lifting the SKILL prose-flow writes into Python):
 ```python
 def test_write_child_study_creates_child_and_stamps_parent(tmp_workspace):
-    from pbg_superpowers.seed_from_followup import resolve_seed_source, write_child_study
+    from viva_superpowers.seed_from_followup import resolve_seed_source, write_child_study
     src = resolve_seed_source(parent_spec, finding_id="F-01")
     res = write_child_study(ws, parent_slug, src, new_slug="child-01")
     assert (ws_studies / "child-01" / "study.yaml").is_file()       # child created

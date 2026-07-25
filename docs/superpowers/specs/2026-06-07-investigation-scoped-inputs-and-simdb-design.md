@@ -121,10 +121,10 @@ For every study dir (`iter_study_dirs`):
 ## Components & files
 
 **pbg-superpowers**
-- `pbg_superpowers/workspace_paths.py`: `inputs_dir(slug)`.
-- `pbg_superpowers/run_registry.py` (or a new `runs_index.py`): `list_all_runs(ws_root)`
+- `viva_superpowers/workspace_paths.py`: `inputs_dir(slug)`.
+- `viva_superpowers/run_registry.py` (or a new `runs_index.py`): `list_all_runs(ws_root)`
   + `emitter_type_of(path)` (pure, unit-tested).
-- `pbg_superpowers/migrate_inputs.py` (new): `pbg-migrate-inputs`.
+- `viva_superpowers/migrate_inputs.py` (new): `pbg-migrate-inputs`.
 - `skills/pbg-investigation/SKILL.md`: document the `inputs:` block + inputs-add verbs.
 - `docs/concepts/vivarium-workbench-model.md`: inputs ownership + SimDB tagging.
 

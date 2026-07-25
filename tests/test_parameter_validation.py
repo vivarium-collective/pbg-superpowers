@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from pbg_superpowers.parameter_validation import (
+from viva_superpowers.parameter_validation import (
     available_parameters,
     validate_parameter_overrides,
 )

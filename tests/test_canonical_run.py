@@ -1,4 +1,4 @@
-from pbg_superpowers import study_status
+from viva_superpowers import study_status
 
 
 def test_count_uses_canonical_flag_not_last_run():

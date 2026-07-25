@@ -138,7 +138,7 @@ state:
 
 ```python
 from pathlib import Path
-from pbg_superpowers.composite_spec import load_spec, build_composite_from_spec
+from viva_superpowers.composite_spec import load_spec, build_composite_from_spec
 
 spec = load_spec(Path("my_package/composites/baseline.composite.yaml"))
 
@@ -170,7 +170,7 @@ the Composite tries to wire up any ports.
 importable package directory:
 
 ```python
-from pbg_superpowers.composite_discovery import discover_composites
+from viva_superpowers.composite_discovery import discover_composites
 
 # Discover from all installed packages
 specs = discover_composites()
@@ -210,7 +210,7 @@ discovery layer alongside the existing class-based registration.
 ## JSON Schema
 
 A machine-readable schema for the format lives at:
-`pbg_superpowers/schemas/composite-spec.schema.json`
+`viva_superpowers/schemas/composite-spec.schema.json`
 
 This can be used for editor autocompletion (add it as a YAML/JSON schema
 association in VS Code or PyCharm).

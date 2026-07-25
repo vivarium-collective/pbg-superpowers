@@ -4,7 +4,7 @@
 
 **Goal:** Make the study evaluator compute the authored dnaa **vector/bulk** verdicts by resolving measure tokens that aren't scalar observables — bulk ids (`MONOMER0-160[c]`), vector indices (`monomer_counts[3861]`), and readout aggregates — through `RunReader.select`/`aggregate_series` instead of routing them to the agent bucket. This is the payoff of the whole readout-coordination program.
 
-**Architecture:** Extend `pbg_superpowers/study_evaluator.py`. Today `_resolve_series(path, reader)` tokenizes the measure expression and resolves EACH token via `reader.series(token)` — bulk ids / vector elements raise → `ObservableNotFound` → agent. Add a fallback: when `reader.series(token)` fails, resolve the token as a structured selector via `RunReader.select` (bracket-id → `bulk_id`; `path[N]` → `literal_index`). Reuse `readout_resolver`'s parsing so the grammar matches. Returns the same `[generation,time,abs_time,value]` shape, so `_eval_expression` + windows + ops work unchanged. Plus the `per_minute` rate window (spec #6).
+**Architecture:** Extend `viva_superpowers/study_evaluator.py`. Today `_resolve_series(path, reader)` tokenizes the measure expression and resolves EACH token via `reader.series(token)` — bulk ids / vector elements raise → `ObservableNotFound` → agent. Add a fallback: when `reader.series(token)` fails, resolve the token as a structured selector via `RunReader.select` (bracket-id → `bulk_id`; `path[N]` → `literal_index`). Reuse `readout_resolver`'s parsing so the grammar matches. Returns the same `[generation,time,abs_time,value]` shape, so `_eval_expression` + windows + ops work unchanged. Plus the `per_minute` rate window (spec #6).
 
 **Tech:** Python 3.11+; `.venv/bin/python` (has `pbg-emitters[parquet]` = polars/duckdb). Spec: `docs/specs/2026-06-09-readout-coordination-design.md` (#6). Depends on: `study_evaluator` (B2, on main), `readout_resolver` (#3, on main), `RunReader.select`/`aggregate_series` (#2, on main).
 
@@ -13,7 +13,7 @@
 ---
 
 ## File map
-- Modify: `pbg_superpowers/study_evaluator.py` (`_resolve_series` token fallback; new `per_minute` window in `_validate_window`/`_apply_window`/`_KNOWN_WINDOWS`).
+- Modify: `viva_superpowers/study_evaluator.py` (`_resolve_series` token fallback; new `per_minute` window in `_validate_window`/`_apply_window`/`_KNOWN_WINDOWS`).
 - Test: `tests/test_study_evaluator_via_readouts.py` + a golden in `tests/test_study_evaluator_golden.py` (or a new golden file).
 
 ---

@@ -17,7 +17,7 @@ import polars as pl
 import pytest
 import yaml
 
-from pbg_superpowers import study_evaluator as se
+from viva_superpowers import study_evaluator as se
 
 
 # ---------------------------------------------------------------------------
@@ -491,14 +491,14 @@ def test_compute_outcomes_no_runs_noop(tmp_path: Path):
 
 def test_compute_outcomes_cli_exists():
     """compute_outcomes_cli is importable from study_evaluator."""
-    from pbg_superpowers.study_evaluator import compute_outcomes_cli
+    from viva_superpowers.study_evaluator import compute_outcomes_cli
     assert callable(compute_outcomes_cli)
 
 
 def test_compute_outcomes_cli_study_dir(study_with_real_store):
     """CLI with --study-dir produces non-zero exit 0 on a real study."""
     from click.testing import CliRunner
-    from pbg_superpowers.study_evaluator import compute_outcomes_cli
+    from viva_superpowers.study_evaluator import compute_outcomes_cli
 
     study_dir, _store = study_with_real_store
 

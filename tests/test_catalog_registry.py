@@ -1,9 +1,9 @@
-"""Tests for the canonical module registry (pbg_superpowers.catalog)."""
+"""Tests for the canonical module registry (viva_superpowers.catalog)."""
 from __future__ import annotations
 
 import json
 
-from pbg_superpowers.catalog import (
+from viva_superpowers.catalog import (
     canonical_registry,
     load_registry,
 )
