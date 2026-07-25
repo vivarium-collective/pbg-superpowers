@@ -1,4 +1,6 @@
-# pbg-superpowers
+# viva-superpowers
+
+> _Renamed from **pbg-superpowers** (pbg→viva rebrand). Old repo/marketplace paths redirect; `/pbg-*` skills stay as deprecated aliases; the PyPI dist is still `pbg-superpowers` for now._
 
 A Claude Code plugin for building **multiscale models in the Process Bigraph framework**. Ships 15 `/viva-*` skills that scaffold the mechanical parts of compositional modeling — wrapping a simulator as a typed Process, composing Processes into a Composite, organizing the work as a reproducible workspace, and managing studies + runs + visualizations through a local dashboard.
 
@@ -9,14 +11,14 @@ For **computational biologists** who want their models to be reusable, recombina
 Two parts — the Claude Code plugin (the skills) and the Python package the skills call into. Both are required.
 
     # 1. Plugin
-    /plugin marketplace add vivarium-collective/pbg-superpowers
-    /plugin install pbg-superpowers
+    /plugin marketplace add vivarium-collective/viva-superpowers
+    /plugin install viva-superpowers
     /reload-plugins
 
     # 2. Python package
     pip install pbg-superpowers
 
-Verify with `/help` — the `/pbg-*` skills should be listed. For local development, point Claude at a working tree with `claude --plugin-dir /path/to/pbg-superpowers` and `pip install -e .`.
+Verify with `/help` — the `/viva-*` skills should be listed. For local development, point Claude at a working tree with `claude --plugin-dir /path/to/viva-superpowers` and `pip install -e .`.
 
 **investigation-contracts** is not yet on PyPI; install it editable from its repo until published: `pip install -e /path/to/investigation-contracts`.
 
@@ -35,7 +37,7 @@ For testers evaluating the UI against an existing or scaffold-only workspace. No
 
 Open the printed URL and browse the side-rail tabs — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB (the canonical set is owned by the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench); see `/viva-workbench`). Create studies and investigations directly through the UI. Scaffolding details in the [pbg-template](https://github.com/vivarium-collective/pbg-template) README; serving details (ports, multi-workspace) in the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench) README.
 
-### Path B — Dashboard + AI agent (pbg-superpowers integration)
+### Path B — Dashboard + AI agent (viva-superpowers integration)
 
 The primary path for this repo. You drive the workspace by talking to Claude; Claude writes the typed Python, YAML, and visualization code; the dashboard reflects state in real time.
 
@@ -44,15 +46,15 @@ The primary path for this repo. You drive the workspace by talking to Claude; Cl
 1. Install [Claude Code](https://claude.com/claude-code) if you haven't already.
 2. From inside Claude Code:
 
-        /plugin marketplace add vivarium-collective/pbg-superpowers
-        /plugin install pbg-superpowers
+        /plugin marketplace add vivarium-collective/viva-superpowers
+        /plugin install viva-superpowers
         /reload-plugins
 
 3. Install the Python package the skills call:
 
         pip install pbg-superpowers
 
-Verify with `/help` — the `/pbg-*` skills should be listed.
+Verify with `/help` — the `/viva-*` skills should be listed.
 
 **How to get started**
 
@@ -82,11 +84,11 @@ Full skill catalog: [`docs/skills.md`](docs/skills.md).
 
 ### Workspace vs composite-only repo
 
-Two surfaces commonly get confused when a new user says "make this a pbg-superpowers repo":
+Two surfaces commonly get confused when a new user says "make this a viva-superpowers repo":
 
 | Shape | Has `workspace.yaml`? | What lives in it | Driven by |
 |---|---|---|---|
-| **Workspace** | yes | `studies/`, `investigations/`, `notes/`, `references/`, `scripts/serve.sh`, plus the model's Python package | the vivarium-workbench + the `/pbg-*` skills |
+| **Workspace** | yes | `studies/`, `investigations/`, `notes/`, `references/`, `scripts/serve.sh`, plus the model's Python package | the vivarium-workbench + the `/viva-*` skills |
 | **Composite-only repo** | no | a single Process or Composite package (e.g. `pbg-mem3dg`, `pbg-readdy`) — `pyproject.toml`, `pbg_<slug>/`, `tests/`, `demo/` | imported by one or more workspaces via `workspace.yaml.imports` |
 
 A workspace can wrap or live beside one or more composite-only repos. Use `/viva-workspace --in-place` to promote an existing composite-only repo into a workspace branch (adds the workspace artifacts on top without clobbering the composite's existing files).
