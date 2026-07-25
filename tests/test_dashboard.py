@@ -121,11 +121,11 @@ def test_is_placeholder_true_when_bootstrap_stub(tmp_path):
 
 
 def test_is_placeholder_true_when_pbg_report_stub(tmp_path):
-    """`/pbg-report` writes a workspace-level stub via
+    """`/viva-report` writes a workspace-level stub via
     viva_superpowers.report.render_workspace_report() to the SAME path
     the SPA uses. Body says 'No models yet' (note: shorter than the
     pbg-template bootstrap stub's 'No models registered yet').
-    Without this marker, /pbg-report silently overwrites the SPA.
+    Without this marker, /viva-report silently overwrites the SPA.
     """
     p = tmp_path / "reports" / "index.html"
     p.parent.mkdir(parents=True)

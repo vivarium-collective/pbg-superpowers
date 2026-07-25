@@ -424,7 +424,7 @@ def scaffold_workspace_in_place(
         else:
             raise click.ClickException(f"git commit failed: {stderr}")
 
-    # Register in the workspace catalog so /pbg-status etc. find this workspace.
+    # Register in the workspace catalog so /viva-status etc. find this workspace.
     try:
         from . import workspace_catalog
         workspace_catalog.add(workspace_root, name=workspace_name)
@@ -485,7 +485,7 @@ def _normalize_workspace_name(raw: str) -> str:
 @click.option("--target", required=True, type=click.Path(path_type=Path), help="Target directory (must not exist or be empty)")
 @click.option("--template-source", default=None, help="Path or git URL of pbg-template (default: $PBG_TEMPLATE or upstream)")
 @click.option("--in-place", "in_place", is_flag=True, default=False,
-              help="Promote an existing git checkout into a workspace branch (see /pbg-workspace --in-place docs).")
+              help="Promote an existing git checkout into a workspace branch (see /viva-workspace --in-place docs).")
 @click.option("--branch", default=None, help="Branch name for --in-place mode (default: <repo-name>-workspace).")
 @click.option("--package", "package_path", default=None,
               help="Python package path for --in-place mode (default: pbg_<repo-name-normalized>).")

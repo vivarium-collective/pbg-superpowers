@@ -117,7 +117,7 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
     snap = json.loads((model / "tests" / "registry-snapshot.json").read_text())
     assert snap["processes"] == ["FakeProcess"]
 
-    # 7. Render reports (simulates /pbg-report step)
+    # 7. Render reports (simulates /viva-report step)
     _run([venv_python, "-c",
           "from pathlib import Path; "
           "from viva_superpowers.report import render_workspace_report, render_model_report; "

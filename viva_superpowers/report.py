@@ -36,7 +36,7 @@ class ReportLintBlocked(RuntimeError):
     """Raised by render_workspace_report when blocking lint findings exist.
 
     Carries the list of findings so the caller can surface them. The
-    ``/pbg-report`` skill catches this and asks for ``--force`` (which
+    ``/viva-report`` skill catches this and asks for ``--force`` (which
     writes each blocking finding's override key to
     ``.pbg/report-lint-overrides.json`` and retries).
     """
@@ -243,7 +243,7 @@ def render_workspace_findings_index(
     kind values on or off; the in-page JS is a few lines, no framework.
 
     Empty workspaces (no findings at all) render a friendly empty-state
-    panel pointing at ``/pbg-study findings <slug>``.
+    panel pointing at ``/viva-study findings <slug>``.
 
     Linked from ``reports/index.html`` via the "Findings index" panel.
     """

@@ -1,4 +1,4 @@
-"""Guard: the /pbg-study `check-observables` subcommand wires in the
+"""Guard: the /viva-study `check-observables` subcommand wires in the
 never-fabricate observable guard.
 
 SP2b-i wires the (otherwise orphaned) `readout_validation` into a live path.
@@ -8,7 +8,7 @@ phantom observables again. Keep the wiring named in SKILL.md.
 """
 from pathlib import Path
 
-SKILL = Path(__file__).resolve().parent.parent / "skills" / "pbg-study" / "SKILL.md"
+SKILL = Path(__file__).resolve().parent.parent / "skills" / "viva-study" / "SKILL.md"
 
 
 def test_skill_documents_check_observables_subcommand():

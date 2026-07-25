@@ -189,7 +189,7 @@ def test_decide_phase_missing_findings_fires_on_decide_with_no_findings(tmp_path
     f = decide[0]
     assert f.level == "error"
     assert f.study_slug == "study-decide"
-    assert "/pbg-study findings" in f.message
+    assert "/viva-study findings" in f.message
     assert "study-decide" in f.message
 
 

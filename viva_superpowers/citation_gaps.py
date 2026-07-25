@@ -8,7 +8,7 @@ the two pools, so today the agent hand-matches.
 
 ``investigation_citation_gaps(ws_root, inv_slug)`` is the deterministic surface:
 for each member study it reports the uncited bands and the investigation's
-available references, so the ``/pbg-cite-bands`` skill can propose+apply the
+available references, so the ``/viva-cite-bands`` skill can propose+apply the
 pairings (the topical judgment stays in the skill — this module is AI-free).
 
 This is a PURE READ — it never writes. It is best-effort per study: a member

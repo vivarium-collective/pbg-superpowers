@@ -1,93 +1,15 @@
 ---
 name: pbg-init
-description: Install pbg-* skills into ~/.claude/skills/ so Claude can invoke /pbg-catalog, /pbg-run, /pbg-study, and the other dashboard-driving skills. One-shot setup per machine.
+description: DEPRECATED ALIAS for /viva-init (pbg→viva rebrand). Use /viva-init.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
 argument-hint: (no args)
 ---
 
-# pbg-init
+# pbg-init  →  renamed to `/viva-init`
 
-One-shot installer that makes every `pbg-*` skill in this plugin available
-to Claude in any conversation, regardless of cwd.
+`/pbg-init` was renamed **`/viva-init`** in the pbg→viva rebrand. This alias
+stays functional during the deprecation window (removed in a future major).
 
-## When to run
-
-Once per machine — after cloning the `pbg-superpowers` plugin (or after
-adding a brand-new skill that hasn't propagated yet).
-
-## What it does
-
-For every `skills/pbg-*/SKILL.md` in this plugin:
-
-1. If `~/.claude/skills/<name>/` already exists, compare mtimes.
-   - If the plugin copy is newer **and** the existing target is a regular
-     directory (not a symlink), back it up to `~/.claude/skills/<name>.bak`
-     and overwrite.
-   - Otherwise, leave it alone (the user might be editing it locally).
-2. If the target does not exist, create a **symlink** from
-   `~/.claude/skills/<name>` → the plugin's `skills/<name>` directory.
-   Symlinks beat copies because future plugin updates take effect
-   immediately, no re-install needed.
-3. Print a summary table: `name | status (linked|kept|backed-up)` and the
-   description from each SKILL.md frontmatter.
-
-## Usage
-
-```bash
-/pbg-init
-```
-
-No arguments. Idempotent — running twice is a no-op (everything stays
-"kept").
-
-## Implementation outline
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SKILLS_SRC="$PLUGIN_DIR/skills"
-SKILLS_DEST="$HOME/.claude/skills"
-mkdir -p "$SKILLS_DEST"
-
-printf "%-22s  %s\n" "NAME" "STATUS"
-for src in "$SKILLS_SRC"/pbg-*/; do
-  name="$(basename "$src")"
-  dest="$SKILLS_DEST/$name"
-  if [ -L "$dest" ]; then
-    printf "%-22s  kept (symlink)\n" "$name"
-  elif [ -d "$dest" ]; then
-    mv "$dest" "$dest.bak.$(date +%s)"
-    ln -s "$src" "$dest"
-    printf "%-22s  backed-up + linked\n" "$name"
-  else
-    ln -s "$src" "$dest"
-    printf "%-22s  linked\n" "$name"
-  fi
-done
-echo
-echo "Installed pbg-* skills:"
-ls -1 "$SKILLS_DEST" | grep '^pbg-'
-```
-
-## Verification
-
-After running, in any Claude conversation:
-
-```text
-/pbg-catalog
-```
-
-If the slash command is recognized (not "no such skill"), installation
-worked. If it fails with "skill not found", the agent's skills cache may
-need a refresh — restart the conversation.
-
-## Reference
-
-- Plugin root: the directory containing `.claude-plugin/` and `skills/`.
-- Claude's per-user skill directory: `~/.claude/skills/`.
-- All other `pbg-*` skills read `.pbg/server/server-info` for the running
-  dashboard URL and POST/GET against its API — they have no other runtime
-  dependency on pbg-superpowers.
+**Use [`/viva-init`](../viva-init/SKILL.md)** — read that skill and follow it.
+All guidance lives there; nothing is maintained in two places.

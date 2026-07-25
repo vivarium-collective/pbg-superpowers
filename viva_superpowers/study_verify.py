@@ -1,4 +1,4 @@
-"""Spec verification for ``/pbg-study verify <slug>``.
+"""Spec verification for ``/viva-study verify <slug>``.
 
 Closes the design→build gate: validates that a study.yaml is internally
 consistent and that its cross-references resolve against the workspace,
@@ -46,7 +46,7 @@ runtime knowledge):
   - Whether ``literature_target`` values are plausible (biology
     judgement).
 
-The CLI is the single source of truth for the skill — ``/pbg-study
+The CLI is the single source of truth for the skill — ``/viva-study
 verify`` shells out to ``python -m viva_superpowers.study_verify
 <study.yaml>`` and surfaces the findings.
 """

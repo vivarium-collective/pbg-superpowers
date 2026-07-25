@@ -1,4 +1,4 @@
-"""Pass 10B tests for ``/pbg-study seed-from-followup --from-finding`` helper.
+"""Pass 10B tests for ``/viva-study seed-from-followup --from-finding`` helper.
 
 The skill is prose-driven (Claude follows the steps in SKILL.md and shells
 out to this Python module for the deterministic bits). These tests pin

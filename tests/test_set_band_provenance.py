@@ -293,21 +293,21 @@ def test_frac_test_keys_preserved(tmp_path):
 
 
 def test_skill_file_exists():
-    """skills/pbg-cite-bands/SKILL.md exists."""
-    skill = Path(__file__).resolve().parents[1] / "skills" / "pbg-cite-bands" / "SKILL.md"
+    """skills/viva-cite-bands/SKILL.md exists."""
+    skill = Path(__file__).resolve().parents[1] / "skills" / "viva-cite-bands" / "SKILL.md"
     assert skill.is_file(), f"SKILL.md not found at {skill}"
 
 
 def test_skill_frontmatter_valid():
     """SKILL.md has required front-matter fields and expected values."""
     import yaml as _yaml
-    skill = Path(__file__).resolve().parents[1] / "skills" / "pbg-cite-bands" / "SKILL.md"
+    skill = Path(__file__).resolve().parents[1] / "skills" / "viva-cite-bands" / "SKILL.md"
     text = skill.read_text()
     assert text.startswith("---\n"), "SKILL.md must start with YAML front-matter"
     end = text.find("\n---\n", 4)
     assert end != -1, "SKILL.md front-matter not closed"
     fm = _yaml.safe_load(text[4:end]) or {}
-    assert fm.get("name") == "pbg-cite-bands"
+    assert fm.get("name") == "viva-cite-bands"
     assert fm.get("user-invocable") is True
     assert "description" in fm
     assert "allowed-tools" in fm
@@ -315,7 +315,7 @@ def test_skill_frontmatter_valid():
 
 def test_skill_references_helpers():
     """SKILL.md body references the three key helpers by exact Python name."""
-    skill = Path(__file__).resolve().parents[1] / "skills" / "pbg-cite-bands" / "SKILL.md"
+    skill = Path(__file__).resolve().parents[1] / "skills" / "viva-cite-bands" / "SKILL.md"
     body = skill.read_text()
     assert "bands_missing_provenance" in body, "skill must reference bands_missing_provenance"
     assert "search_expert_docs" in body, "skill must reference search_expert_docs"
@@ -324,7 +324,7 @@ def test_skill_references_helpers():
 
 def test_skill_references_proposed_inputs_guardrail():
     """SKILL.md documents the proposed_inputs / never-fabricate guardrail."""
-    skill = Path(__file__).resolve().parents[1] / "skills" / "pbg-cite-bands" / "SKILL.md"
+    skill = Path(__file__).resolve().parents[1] / "skills" / "viva-cite-bands" / "SKILL.md"
     body = skill.read_text()
     assert "proposed_inputs" in body, "skill must mention proposed_inputs fallback"
 

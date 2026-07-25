@@ -284,7 +284,7 @@ def test_render_findings_index_empty_state(tmp_path):
     out = render_workspace_findings_index(ws, today="2026-05-17")
     html = out.read_text()
     assert "No findings recorded" in html
-    assert "/pbg-study findings" in html
+    assert "/viva-study findings" in html
 
 
 # ---------------------------------------------------------------------------

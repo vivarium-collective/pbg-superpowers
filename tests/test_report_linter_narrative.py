@@ -210,7 +210,7 @@ def test_message_aggregates_count_and_lists_both_tiers(tmp_path):
     assert msg.startswith("narrative incomplete: ")
     assert "★ " in msg
     assert "· other:" in msg
-    assert "/pbg-study fill-overview" in msg
+    assert "/viva-study fill-overview" in msg
 
 
 # ---------------------------------------------------------------------------

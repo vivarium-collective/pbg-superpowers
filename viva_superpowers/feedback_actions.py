@@ -29,7 +29,7 @@ the missing half:
 
 All writes go through ruamel round-trips (comment-preserving) + the atomic
 :mod:`study_io` writer. Nothing here makes a judgment call — that is the
-``/pbg-study feedback-respond`` skill's job (AI-free split).
+``/viva-study feedback-respond`` skill's job (AI-free split).
 """
 from __future__ import annotations
 

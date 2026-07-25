@@ -1,7 +1,7 @@
-"""Pass 10B helper for ``/pbg-study seed-from-followup --from-finding <id>``.
+"""Pass 10B helper for ``/viva-study seed-from-followup --from-finding <id>``.
 
 The bulk of ``seed-from-followup`` is prose-driven (the Claude host
-follows the steps in ``skills/pbg-study/SKILL.md``) — there is no
+follows the steps in ``skills/viva-study/SKILL.md``) — there is no
 dashboard API and no full Python implementation. What *can* be made
 deterministic and testable is the **finding-to-child pre-population**:
 given a parent study and a finding id, derive the child's ``purpose``
@@ -988,7 +988,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m viva_superpowers.seed_from_followup",
         description=(
             "Pass 10B helper. Pre-compute the child-seed + parent-proposal "
-            "patch for `/pbg-study seed-from-followup --from-finding`. "
+            "patch for `/viva-study seed-from-followup --from-finding`. "
             "Read-only: prints the proposed diffs; does not write."
         ),
     )

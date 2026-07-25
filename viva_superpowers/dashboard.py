@@ -434,12 +434,12 @@ def prepare_investigation(workspace: Path | str, *,
 #
 #   1. "No models registered yet" — pbg-template's bootstrap stub (the
 #      Jinja-rendered reports/index.html.j2 ships this body before
-#      /pbg-report or render_dashboard() populates the SPA).
+#      /viva-report or render_dashboard() populates the SPA).
 #   2. "No models yet" — viva_superpowers.report.render_workspace_report()
-#      stub. /pbg-report invokes that helper, which writes a
+#      stub. /viva-report invokes that helper, which writes a
 #      workspace-level dashboard (Models / Findings index / Recent
 #      decisions panels) to the SAME path the SPA uses. Without this
-#      marker, /pbg-report silently overwrites the SPA and the next
+#      marker, /viva-report silently overwrites the SPA and the next
 #      `pbg-dashboard start` doesn't notice (mock 2026-05-28: the user
 #      sees a 4-line stub page until manually re-rendered).
 _REPORTS_PLACEHOLDER_MARKERS = (

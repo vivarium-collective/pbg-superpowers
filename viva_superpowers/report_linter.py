@@ -19,7 +19,7 @@ Public surface:
   ``investigations/<slug>/spec.yaml``).
 - ``load_overrides(ws_root)`` — read ``.pbg/report-lint-overrides.json``.
 - ``write_override(ws_root, finding)`` — append a finding's override_key
-  to the override file (used by ``/pbg-report --force``).
+  to the override file (used by ``/viva-report --force``).
 - ``has_blocking_errors(findings, overrides)`` — convenience predicate.
 
 The override file shape (``<ws_root>/.pbg/report-lint-overrides.json``):
@@ -170,7 +170,7 @@ def write_override(
     ws_root: Path,
     finding: LintFinding,
     *,
-    reason: str = "force-published via /pbg-report --force",
+    reason: str = "force-published via /viva-report --force",
     now: _dt.datetime | None = None,
 ) -> Path:
     """Append a single override entry; idempotent (won't double-add).
@@ -897,7 +897,7 @@ def _check_decide_phase_missing_findings(ctx: _LintContext) -> None:
         field_path="findings",
         message=(
             "Study reached Decide/Evaluated but has no findings[]. "
-            f"Run `/pbg-study findings {ctx.slug}` to draft them."
+            f"Run `/viva-study findings {ctx.slug}` to draft them."
         ),
         check="decide_phase_missing_findings",
     )
@@ -1459,7 +1459,7 @@ def _check_visualization_addresses(ctx: _LintContext) -> None:
     Dotted-path addresses (``pkg.module.ClassName``) are intentionally NOT
     checked here — that would require importing arbitrary workspace code
     inside the linter. Authors of dotted addresses should test them with
-    ``/pbg-study preview-viz``.
+    ``/viva-study preview-viz``.
     """
     viz = ctx.spec.get("visualizations") or []
     if not isinstance(viz, list):
@@ -1870,7 +1870,7 @@ def _check_viz_stale_vs_latest_run(ctx: _LintContext) -> None:
         names = ", ".join(f"{n!r} ({s})" for n, s in stale)
         parts.append(
             f"{len(stale)} registered visualization(s) stale/unrendered vs the "
-            f"study's latest run — {names} (run /pbg-study refresh-viz)"
+            f"study's latest run — {names} (run /viva-study refresh-viz)"
         )
     ctx.add(level=level, field_path="visualizations",
             message="; ".join(parts) + ".",
@@ -2087,7 +2087,7 @@ def _check_narrative_spine_completeness(ctx: _LintContext) -> None:
             f"narrative incomplete: {n_missing} of {len(_NARRATIVE_SECTIONS)} "
             f"v4 sections missing.{star_str}{other_str}. "
             "See docs/concepts/vivarium-workbench-model.md#v4-narrative-spine "
-            "for the full pattern, or /pbg-study fill-overview <slug> "
+            "for the full pattern, or /viva-study fill-overview <slug> "
             "--include-narrative to draft them from plan + expert PDFs."
         ),
         check="narrative_spine_completeness",
@@ -2136,7 +2136,7 @@ def _check_missing_baseline(ctx: _LintContext) -> None:
             "(`baseline: [{name, composite, params}]` for v3, or "
             "`conditions.baseline: {composite, params}` for v4) so the "
             "expert reviewer knows what's being simulated. Scaffold one even "
-            "if the composite path is a placeholder — see /pbg-study baseline-add."
+            "if the composite path is a placeholder — see /viva-study baseline-add."
         ),
         check="missing_baseline",
     )
@@ -2166,7 +2166,7 @@ def _check_missing_variants(ctx: _LintContext) -> None:
             "perturbations / configurations to be tested (parameter sweeps, "
             "alternative conditions, perturbation experiments). A study "
             "with no variants reads to a reviewer as 'design incomplete'. "
-            "Scaffold ≥1 variant via /pbg-study variant-add — even a "
+            "Scaffold ≥1 variant via /viva-study variant-add — even a "
             "single 'reference' variant with the published parameters is "
             "better than an empty list."
         ),
@@ -2423,10 +2423,10 @@ def _check_readout_migration_status(ctx: _LintContext) -> None:
     emits findings when readouts are not yet canonical:
 
     - ``migratable`` (resolvable, canonical form differs) → INFO suggestion to
-      run ``/pbg-study migrate-readouts <slug>`` (the safe auto-canonicalize).
+      run ``/viva-study migrate-readouts <slug>`` (the safe auto-canonicalize).
     - ``needs_human`` (unresolvable prose/derived) → WARNING: these can't be
       parsed and must be re-authored against the composite's real observables
-      (``/pbg-study check-observables`` + ``GET /api/observables``). This is
+      (``/viva-study check-observables`` + ``GET /api/observables``). This is
       the surface for the 37 ``unresolved`` readouts SP2b-i flagged.
 
     Silent when both buckets are empty (every readout already canonical).
@@ -2456,9 +2456,9 @@ def _check_readout_migration_status(ctx: _LintContext) -> None:
             field_path="readouts",
             message=(
                 f"{len(migratable)} readout(s) can be safely canonicalized "
-                f"({names}). Run `/pbg-study migrate-readouts {ctx.slug}` to "
+                f"({names}). Run `/viva-study migrate-readouts {ctx.slug}` to "
                 "rewrite them to the canonical index_by form (meaning-"
-                "preserving, comment-safe). /pbg-report also canonicalizes "
+                "preserving, comment-safe). /viva-report also canonicalizes "
                 "migratable readouts before rendering."
             ),
             check="readout_migration_status",
@@ -2473,8 +2473,8 @@ def _check_readout_migration_status(ctx: _LintContext) -> None:
                 f"{len(needs_human)} readout(s) can't be parsed into a canonical "
                 f"selector (needs_human: {names}). These are never auto-guessed — "
                 "re-author each against the composite's real observables via "
-                "`/pbg-study check-observables` + `GET /api/observables` "
-                "(`/pbg-study migrate-readouts` drives this). Until then they "
+                "`/viva-study check-observables` + `GET /api/observables` "
+                "(`/viva-study migrate-readouts` drives this). Until then they "
                 "stay unresolved and can't be evaluated."
             ),
             check="readout_migration_status",

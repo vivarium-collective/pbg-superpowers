@@ -38,6 +38,21 @@ pbg-basic-processes = { git = "https://github.com/vivarium-collective/pbg-basic-
 investigation-contracts = { git = "https://github.com/vivarium-collective/investigation-contracts.git", branch = "main" }
 
 [project.scripts]
+# viva-* are the current CLI names; pbg-* are kept as back-compat aliases
+# (identical targets) during the deprecation window (pbg→viva rebrand).
+viva-scaffold = "viva_superpowers.scaffold:cli"
+viva-feedback-import = "viva_superpowers.feedback_import:cli"
+viva-migrate-nested = "viva_superpowers.migrate_nested:main"
+viva-migrate-inputs = "viva_superpowers.migrate_inputs:main"
+viva-backfill-runs = "viva_superpowers.backfill_runs:main"
+viva-compute-outcomes = "viva_superpowers.study_evaluator:compute_outcomes_cli"
+viva-sync-runs = "viva_superpowers.study_outcomes:main"
+viva-migrate-readouts = "viva_superpowers.readout_migration:main"
+viva-populate-simulation-set = "viva_superpowers.simulation_set:main"
+viva-populate-findings = "viva_superpowers.finding_observations:main"
+viva-roll-up = "viva_superpowers.roll_up:main"
+viva-citation-gaps = "viva_superpowers.citation_gaps:main"
+# --- deprecated pbg-* aliases (same targets) ---
 pbg-scaffold = "viva_superpowers.scaffold:cli"
 pbg-feedback-import = "viva_superpowers.feedback_import:cli"
 pbg-migrate-nested = "viva_superpowers.migrate_nested:main"

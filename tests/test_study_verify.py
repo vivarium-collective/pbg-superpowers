@@ -1,4 +1,4 @@
-"""Tests for ``/pbg-study verify`` spec verification.
+"""Tests for ``/viva-study verify`` spec verification.
 
 Pins the workspace-agnostic checks in :mod:`viva_superpowers.study_verify`:
 

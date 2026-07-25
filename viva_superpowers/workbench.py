@@ -1,6 +1,6 @@
 """viva_superpowers.workbench — manage the interactive vivarium-workbench server.
 
-Canonical module for the ``/pbg-workbench`` skill (formerly ``/pbg-dashboard``).
+Canonical module for the ``/viva-workbench`` skill (formerly ``/pbg-dashboard``).
 The implementation lives in :mod:`viva_superpowers.dashboard`, which keeps its own
 ``python -m viva_superpowers.dashboard`` entry point as a back-compat alias; this
 module re-exports it so ``python -m viva_superpowers.workbench`` works and reads

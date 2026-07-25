@@ -1,18 +1,18 @@
-"""Guard: the /pbg-study `migrate-readouts` subcommand + the /pbg-report
+"""Guard: the /viva-study `migrate-readouts` subcommand + the /viva-report
 canonicalize step stay wired to the readout-migration plumbing (SP2b-ii).
 
 SP2b-ii wires the (manual-only) `readout_migration` into the workflow: the
-explicit `/pbg-study migrate-readouts` subcommand auto-canonicalizes the safe
+explicit `/viva-study migrate-readouts` subcommand auto-canonicalizes the safe
 `migratable` readouts via `migrate_study_file(write=True)`, drives the
 `needs_human` queue to re-authoring against SP2b-i's `/api/observables`
-(`/pbg-study check-observables`), and `/pbg-report` canonicalizes migratable
+(`/viva-study check-observables`), and `/viva-report` canonicalizes migratable
 readouts before rendering. If the skills stop naming these, the wiring is
 silently broken and the migration goes back to being orphaned plumbing.
 """
 from pathlib import Path
 
-STUDY_SKILL = Path(__file__).resolve().parent.parent / "skills" / "pbg-study" / "SKILL.md"
-REPORT_SKILL = Path(__file__).resolve().parent.parent / "skills" / "pbg-report" / "SKILL.md"
+STUDY_SKILL = Path(__file__).resolve().parent.parent / "skills" / "viva-study" / "SKILL.md"
+REPORT_SKILL = Path(__file__).resolve().parent.parent / "skills" / "viva-report" / "SKILL.md"
 
 
 def test_pbg_study_documents_migrate_readouts_subcommand():

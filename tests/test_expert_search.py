@@ -1,6 +1,6 @@
 """Tests for viva_superpowers.expert_search (Pass 10A findings helper).
 
-The expert-PDF search powers the ``/pbg-study findings`` walk's
+The expert-PDF search powers the ``/viva-study findings`` walk's
 "candidate quotes" step. These tests exercise:
 
   - workspace.yaml discovery of expert_docs[]

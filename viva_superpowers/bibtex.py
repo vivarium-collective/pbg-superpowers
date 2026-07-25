@@ -9,7 +9,7 @@ Theme 3 / the one correctness finding):
   (``references/references.bib`` or ``references.bib``) with a *different*
   regex.
 
-So a cite key could pass ``/pbg-study verify`` and fail ``/pbg-report`` lint
+So a cite key could pass ``/viva-study verify`` and fail ``/viva-report`` lint
 (or vice versa). This module gives all three one filename precedence and one
 parser, so the verify gate and the publish gate agree.
 """

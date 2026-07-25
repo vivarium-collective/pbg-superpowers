@@ -20,7 +20,7 @@ This keeps figure RENDERING workspace-specific (the commands are the study's own
 bespoke renderers — many read parquet directly and have no ``inputs_map`` for
 the generic ``render_study_visualizations`` path) while the WHEN — re-render
 from the run that just finished — is owned by the framework. Run-completion
-paths (workflow drivers, ``/pbg-study run-*``) should call
+paths (workflow drivers, ``/viva-study run-*``) should call
 ``refresh_study_figures`` so figures track runs by construction; the
 ``figure_stale_vs_run`` linter then has nothing to flag.
 

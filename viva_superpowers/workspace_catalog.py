@@ -290,7 +290,7 @@ def list_servers() -> list[dict]:
 def find_duplicates_for_path(path) -> list[dict]:
     """Return every server record whose ``path`` matches ``path``.
 
-    Used by ``/pbg-server start`` to decide whether to dedup a stale entry
+    Used by ``/viva-server start`` to decide whether to dedup a stale entry
     before booting a new server in the same worktree. Multiple records for
     the SAME path are always considered duplicates regardless of liveness;
     records at OTHER paths are intentional (parallel worktrees) and are
@@ -343,7 +343,7 @@ def cleanup_orphans() -> dict:
 def remove_server_file(file_path: str | Path) -> bool:
     """Delete one server JSON record by absolute file path.
 
-    Used by ``/pbg-server start`` to dedup a stale entry before registering
+    Used by ``/viva-server start`` to dedup a stale entry before registering
     a new one. Returns True if the file existed and was removed, False
     otherwise. No-op (returns False) if the file is outside the servers
     directory — defensive against path traversal via stale data.

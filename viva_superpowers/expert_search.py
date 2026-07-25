@@ -1,6 +1,6 @@
 """Expert-PDF search helper (Pass 10A of the findings protocol).
 
-The findings walk (``/pbg-study findings``) needs to surface candidate
+The findings walk (``/viva-study findings``) needs to surface candidate
 quotes from a workspace's expert PDFs so the curator can attach
 ``expert_reference.quote`` entries without re-reading each PDF by hand.
 

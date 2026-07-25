@@ -1,4 +1,4 @@
-"""Guard test for the /pbg-navigate skill (SP4a).
+"""Guard test for the /viva-navigate skill (SP4a).
 
 Asserts the SKILL.md documents the four read-only subcommands and references the
 deterministic linkage backend (linkage_index / /api/linkage-index).
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-_SKILL = Path(__file__).resolve().parents[1] / "skills" / "pbg-navigate" / "SKILL.md"
+_SKILL = Path(__file__).resolve().parents[1] / "skills" / "viva-navigate" / "SKILL.md"
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def skill_text() -> str:
 
 
 def test_skill_file_exists():
-    assert _SKILL.is_file(), "skills/pbg-navigate/SKILL.md must exist"
+    assert _SKILL.is_file(), "skills/viva-navigate/SKILL.md must exist"
 
 
 def test_subcommands_documented(skill_text):

@@ -1,4 +1,4 @@
-"""Findings walk for ``/pbg-study findings`` (Pass 10A).
+"""Findings walk for ``/viva-study findings`` (Pass 10A).
 
 Given a study slug, walk every ``behavior_tests[]`` outcome under
 ``runs[]`` and propose one finding per outcome not already covered by an
@@ -16,7 +16,7 @@ Public surface:
       • ``auto=True`` — skip prompts and write drafts directly.
       • ``dry_run=True`` — print the proposed YAML diff; don't write.
   - :func:`load_study` / :func:`save_study_atomic` — helpers shared with
-    the rest of /pbg-study's YAML-direct subcommands.
+    the rest of /viva-study's YAML-direct subcommands.
 
 The function returns a structured summary suitable for the host
 Claude / dashboard to render. The CLI surface is intentionally thin

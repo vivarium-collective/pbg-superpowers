@@ -1,6 +1,6 @@
 """Direct-to-YAML writers for the v4 narrative-spine fields on a study.
 
-Backs four new /pbg-study subcommands:
+Backs four new /viva-study subcommands:
 
 - set-verdicts          — write conclusion_verdicts (3-track verdict block)
 - add-literature-anchor — append to literature_anchors[]
@@ -53,7 +53,7 @@ def _study_yaml(ws_root: Path, slug: str) -> Path:
     p = WorkspacePaths.load(ws_root).studies / slug / "study.yaml"
     if not p.is_file():
         raise FileNotFoundError(
-            f"Study '{slug}' not found at {p}. Run '/pbg-study new <name> "
+            f"Study '{slug}' not found at {p}. Run '/viva-study new <name> "
             f"<composite>' to create it."
         )
     return p
@@ -375,7 +375,7 @@ def add_requirement(
 
 
 # ---------------------------------------------------------------------------
-# CLI entry point — invoked by the /pbg-study bash dispatcher
+# CLI entry point — invoked by the /viva-study bash dispatcher
 # ---------------------------------------------------------------------------
 
 
