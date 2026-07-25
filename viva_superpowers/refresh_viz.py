@@ -29,10 +29,15 @@ def refresh_study_viz(study_dir, spec: dict, latest: dict | None) -> list[dict]:
         # we stamp THAT run id (not the study's latest). Falls back to latest.
         run_id = entry.get("source_run") or (latest or {}).get("run_id")
         env = dict(os.environ)
+        # Set BOTH env names (pbg→viva): new VIVA_* + deprecated PBG_* so any
+        # reader (viz runner, workbench, scaffolded scripts) works either way.
         if latest and latest.get("emitter_path"):
             ep = latest["emitter_path"]
-            env["PBG_RUN_DIR"] = ep if os.path.isabs(ep) else str(study_dir / ep)
+            run_dir = ep if os.path.isabs(ep) else str(study_dir / ep)
+            env["VIVA_RUN_DIR"] = run_dir
+            env["PBG_RUN_DIR"] = run_dir
         if run_id:
+            env["VIVA_RUN_ID"] = run_id
             env["PBG_RUN_ID"] = run_id
         try:
             proc = subprocess.run(filled, shell=True, cwd=study_dir, env=env,

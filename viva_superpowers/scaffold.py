@@ -39,7 +39,7 @@ def _looks_like_path(s: str) -> bool:
 def _resolve_source(source: str | None) -> str:
     if source:
         return source
-    env = os.environ.get("PBG_TEMPLATE")
+    env = os.environ.get("VIVA_TEMPLATE") or os.environ.get("PBG_TEMPLATE")
     if env:
         return env
     return DEFAULT_REMOTE
@@ -483,7 +483,7 @@ def _normalize_workspace_name(raw: str) -> str:
 @cli.command()
 @click.option("--name", required=True, help="Workspace name (without pbg- prefix; the python package will be pbg_<name>)")
 @click.option("--target", required=True, type=click.Path(path_type=Path), help="Target directory (must not exist or be empty)")
-@click.option("--template-source", default=None, help="Path or git URL of pbg-template (default: $PBG_TEMPLATE or upstream)")
+@click.option("--template-source", default=None, help="Path or git URL of pbg-template (default: $VIVA_TEMPLATE (or $PBG_TEMPLATE) or upstream)")
 @click.option("--in-place", "in_place", is_flag=True, default=False,
               help="Promote an existing git checkout into a workspace branch (see /viva-workspace --in-place docs).")
 @click.option("--branch", default=None, help="Branch name for --in-place mode (default: <repo-name>-workspace).")

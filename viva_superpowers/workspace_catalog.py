@@ -1,6 +1,6 @@
 """Global registry of pbg workspaces and their running dashboards.
 
-Two files under ``$PBG_HOME`` (default ``~/.pbg``):
+Two files under ``$VIVA_HOME`` / ``$PBG_HOME`` (default ``~/.pbg``):
 
 * ``workspaces.json``        — catalog of all known workspaces.
 * ``servers/<name>.json``    — one per running dashboard (added by the
@@ -25,7 +25,12 @@ SCHEMA_VERSION = 1
 
 
 def _home() -> Path:
-    return Path(os.environ.get("PBG_HOME", Path.home() / ".pbg")).expanduser()
+    # Env alias (pbg→viva): VIVA_HOME preferred, PBG_HOME as deprecated fallback.
+    # The default dir stays ``~/.pbg`` — that directory is shared with the
+    # vivarium-workbench server, so renaming it to ``~/.viva`` is a coordinated
+    # cross-repo change (read-both in both repos), NOT done here.
+    home = os.environ.get("VIVA_HOME") or os.environ.get("PBG_HOME")
+    return (Path(home) if home else Path.home() / ".pbg").expanduser()
 
 
 def _catalog_path() -> Path:
