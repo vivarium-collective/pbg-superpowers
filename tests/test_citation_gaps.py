@@ -15,7 +15,10 @@ from viva_superpowers.citation_gaps import investigation_citation_gaps, main
 def _make_ws(tmp_path: Path, *, studies: dict, references: list[str], study_slugs=None):
     """Create a workspace with one investigation `the-inv` and member studies.
 
-    `studies` maps study_slug -> study.yaml spec dict.
+    `studies` maps study_slug -> study.yaml spec dict. Studies are written to
+    the top-level `studies/<slug>/` layout (the only layout `study_dir`
+    resolves post-canonicalization); `investigations/<inv>/investigation.yaml`
+    holds the membership list only.
     `study_slugs` overrides the investigation.yaml `studies:` membership list
     (defaults to the keys of `studies`).
     """
@@ -29,7 +32,7 @@ def _make_ws(tmp_path: Path, *, studies: dict, references: list[str], study_slug
         "inputs": {"references": list(references)},
     }
     (inv / "investigation.yaml").write_text(yaml.safe_dump(inv_spec), encoding="utf-8")
-    sroot = inv / "studies"
+    sroot = tmp_path / "studies"
     for slug, spec in studies.items():
         sd = sroot / slug
         sd.mkdir(parents=True)
@@ -152,7 +155,7 @@ def test_pure_read_writes_nothing(tmp_path):
         studies={"the-study": {"behavior_tests": [_band_test("the-uncited-band")]}},
         references=["ref-a"],
     )
-    sy = ws / "investigations" / "the-inv" / "studies" / "the-study" / "study.yaml"
+    sy = ws / "studies" / "the-study" / "study.yaml"
     before = sy.read_bytes()
     investigation_citation_gaps(ws, "the-inv")
     assert sy.read_bytes() == before

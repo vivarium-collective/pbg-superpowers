@@ -174,27 +174,25 @@ def _write_nested_study(ws: Path, inv: str, slug: str, *, findings: list[dict]) 
     (sd / "study.yaml").write_text(yaml.safe_dump(spec, sort_keys=False))
 
 
-def test_harvest_findings_discovers_nested_investigation_layout(tmp_path):
-    """P0 regression: studies under investigations/<inv>/studies/<slug>/ must
-    be harvested, not just flat studies/<slug>/."""
+def test_harvest_findings_ignores_nested_layout(tmp_path):
+    """Post-canonicalization: studies under investigations/<inv>/studies/<slug>/
+    are not resolved by iter_study_dirs, so the harvester must not pick them up."""
     ws = _make_workspace(tmp_path, with_findings=False)
     _write_nested_study(ws, "dnaa-replication", "dnaa-01", findings=[
         {
             "id": "F-01",
             "kind": "biological",
             "status": "confirms",
-            "statement": "Nested-layout finding is discovered by the harvester.",
+            "statement": "Nested-layout finding is not discovered by the harvester.",
             "expected": {"cites": ["Schmidt2016NatBiotechnol"]},
         },
     ])
     rows = _harvest_findings(ws)
-    assert [r["id"] for r in rows] == ["F-01"]
-    assert rows[0]["study_slug"] == "dnaa-01"
-    assert rows[0]["cites"] == ["Schmidt2016NatBiotechnol"]
+    assert "F-01" not in {r["id"] for r in rows}
 
 
-def test_harvest_findings_mixes_nested_and_flat_layouts(tmp_path):
-    """Both nested and flat studies should be harvested in the same workspace."""
+def test_harvest_findings_flat_only_nested_ignored(tmp_path):
+    """Flat studies are harvested; nested studies in the same workspace are ignored."""
     ws = _make_workspace(tmp_path, with_findings=False)
     _write_study(ws, "flat-study", findings=[
         {"id": "F-FLAT", "kind": "computational", "status": "partial",
@@ -202,13 +200,11 @@ def test_harvest_findings_mixes_nested_and_flat_layouts(tmp_path):
     ])
     _write_nested_study(ws, "inv-a", "nested-study", findings=[
         {"id": "F-NEST", "kind": "biological", "status": "novel",
-         "statement": "Nested-layout finding works too."},
+         "statement": "Nested-layout finding is ignored."},
     ])
     rows = _harvest_findings(ws)
     ids = {r["id"] for r in rows}
-    assert ids == {"F-FLAT", "F-NEST"}
-    slugs = {r["study_slug"] for r in rows}
-    assert slugs == {"flat-study", "nested-study"}
+    assert ids == {"F-FLAT"}
 
 
 # ---------------------------------------------------------------------------
