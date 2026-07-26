@@ -78,3 +78,18 @@ def test_parca_dependency_preserved():
     canonicalize_ordering(spec, known_slugs={"parca", "s"})
     # parca edge already present as sim_data; adding {parca,parca} is allowed but dedup keeps sim_data
     assert {"artifact": "sim_data", "from": "parca"} in spec["inputs"]
+
+def test_parent_studies_becomes_inputs_and_is_deleted():
+    spec = {"name": "b", "parent_studies": ["a"]}
+    report = canonicalize_ordering(spec, known_slugs={"a", "b"})
+    assert {"artifact": "a", "from": "a"} in spec["inputs"]
+    assert "parent_studies" not in spec
+    assert report["changed"] is True
+
+def test_mixed_valid_and_dangling_prereq():
+    spec = {"name": "b", "pipeline_gate": {"prerequisites": ["a", "ghost"]}}
+    report = canonicalize_ordering(spec, known_slugs={"a", "b"})
+    assert {"artifact": "a", "from": "a"} in spec["inputs"]     # valid edge added
+    assert "dangling_prereq:ghost" in report["flags"]
+    assert "pipeline_gate" in spec                              # retained (has a dangling)
+    assert "pipeline_gate_retained" in report["flags"]
