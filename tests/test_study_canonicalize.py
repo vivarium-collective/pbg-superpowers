@@ -73,6 +73,16 @@ def test_both_keeps_conditions_drops_toplevel():
     assert spec["conditions"]["baseline"]["composite"] == "c.real"  # conditions wins
     assert "both_dropped_toplevel" in report["flags"]
 
+def test_both_flags_dropped_toplevel_variants():
+    spec = {"baseline": [{"composite": "c"}],
+            "variants": [{"name": "v"}],
+            "conditions": {"baseline": {"composite": "c"},
+                           "variants": [{"name": "w", "composite": "c"}]}}
+    report = canonicalize_models(spec)
+    assert "both_dropped_toplevel_variants" in report["flags"]
+    assert spec["conditions"]["variants"] == [{"name": "w", "composite": "c"}]  # conditions wins
+    assert "variants" not in spec
+
 def test_multi_baseline_is_flagged_not_migrated():
     spec = {"baseline": [{"name": "a", "composite": "c.a"}, {"name": "b", "composite": "c.b"}]}
     report = canonicalize_models(spec)

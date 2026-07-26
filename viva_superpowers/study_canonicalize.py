@@ -11,11 +11,6 @@ from viva_superpowers import study_io
 from viva_superpowers.workspace_paths import WorkspacePaths
 
 
-def _as_single_baseline(entry):
-    """Return a {name?, composite, params} mapping from a top-level baseline list entry."""
-    return entry
-
-
 def canonicalize_models(spec) -> dict:
     report = {"changed": False, "style": "canonical", "flags": [], "inherited_composites": []}
     top_baseline = spec.get("baseline")
@@ -30,14 +25,18 @@ def canonicalize_models(spec) -> dict:
         if conditions is None or not isinstance(conditions, dict):
             spec["conditions"] = {}
             conditions = spec["conditions"]
-        if conditions.get("baseline") and conditions["baseline"].get("composite"):
+        cond_baseline = conditions.get("baseline")
+        if isinstance(cond_baseline, dict) and cond_baseline.get("composite"):
             report["flags"].append("both_dropped_toplevel")   # conditions wins
         elif top_baseline:
             conditions["baseline"] = top_baseline[0]           # move node (keeps its comments)
         # move a top-level variants list in, if present and conditions lacks one
         top_variants = spec.get("variants")
-        if isinstance(top_variants, list) and not conditions.get("variants"):
-            conditions["variants"] = top_variants
+        if isinstance(top_variants, list):
+            if not conditions.get("variants"):
+                conditions["variants"] = top_variants
+            else:
+                report["flags"].append("both_dropped_toplevel_variants")  # conditions wins
         for k in ("baseline", "variants"):
             if k in spec:
                 del spec[k]
@@ -47,7 +46,8 @@ def canonicalize_models(spec) -> dict:
     if not isinstance(conditions, dict) or not conditions.get("baseline"):
         return report  # nothing canonical to normalize (e.g. parca / non-model study)
 
-    base_composite = conditions["baseline"].get("composite")
+    cond_baseline = conditions["baseline"]
+    base_composite = cond_baseline.get("composite") if isinstance(cond_baseline, dict) else None
 
     # --- normalize variants: inherit composite, rename parameter_overrides -> params ---
     for v in (conditions.get("variants") or []):
@@ -136,7 +136,7 @@ def normalize_tests_shape(spec) -> dict:
 
 
 def canonicalize_ordering(spec, known_slugs) -> dict:
-    report = {"changed": False, "added_inputs": [], "outputs_declared": False, "flags": []}
+    report = {"changed": False, "added_inputs": [], "flags": []}
     pg = spec.get("pipeline_gate")
     parents = spec.get("parent_studies") or []
     prereqs = (_prereq_slugs(pg) if isinstance(pg, dict) else []) + [str(p) for p in parents]

@@ -169,25 +169,23 @@ class WorkspacePaths:
         return self.dir("investigations") / inv_slug / "reports"
 
     def study_dir(self, slug: str) -> Path:
-        """Resolve a study by slug, nested-first then flat. Raises if absent."""
+        """Resolve a study by slug from the top-level ``studies/`` directory only.
+        Raises FileNotFoundError if absent — including if the study exists only
+        under a nested ``investigations/*/studies/`` path, which is not scanned."""
         for s in self.iter_study_dirs():
             if s.name == slug:
                 return s
         raise FileNotFoundError(f"study {slug!r} not found under {self.root}")
 
     def study_owner(self, slug: str):
-        """Owning investigation slug for a study (nested layout), else the
-        study.yaml investigation: back-ref, else None."""
+        """Owning investigation slug for a study, via the study.yaml
+        `investigation:` back-ref, else None. Also None if the study can't be
+        resolved (e.g. it exists only under a nested
+        investigations/*/studies/ path, which isn't scanned by study_dir)."""
         try:
             d = self.study_dir(slug)
         except FileNotFoundError:
             return None
-        try:
-            parts = d.relative_to(self.dir("investigations")).parts
-            if len(parts) >= 3 and parts[1] == "studies":
-                return parts[0]
-        except ValueError:
-            pass
         sy = d / "study.yaml"
         if sy.is_file():
             data = yaml.safe_load(sy.read_text(encoding="utf-8")) or {}

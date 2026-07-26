@@ -54,9 +54,18 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     wp = WorkspacePaths.load(args.workspace)
     inv_root = wp.dir("investigations")
-    targets = ([inv_root / args.investigation] if args.investigation
-               else [p for p in sorted(inv_root.iterdir())
-                     if (p / "investigation.yaml").is_file()])
+    if not inv_root.is_dir():
+        print(f"no investigations/ directory at {inv_root}")
+        return 0
+    if args.investigation:
+        d = inv_root / args.investigation
+        if not d.is_dir():
+            print(f"investigation {args.investigation!r} not found under {inv_root}")
+            return 0
+        targets = [d]
+    else:
+        targets = [p for p in sorted(inv_root.iterdir())
+                   if (p / "investigation.yaml").is_file()]
     for d in targets:
         rep = migrate_investigation_file(d, write=args.write)
         mark = "WROTE" if rep["written"] else ("would-change" if rep["changed"] else "ok")
