@@ -171,3 +171,12 @@ def test_no_source_flags_not_fabricates():
     spec = {"conditions": {"baseline": {"composite": "c"}}}
     r = backfill_question(spec)
     assert "question" not in spec and "no_question_source" in r["flags"]
+
+def test_migrate_study_file_backfills_question_only(tmp_path):
+    d = tmp_path / "s"; d.mkdir()
+    (d / "study.yaml").write_text(
+        "schema_version: 4\nname: s\nconditions:\n  baseline:\n    composite: c.b\n"
+        "    params: {}\n  model_settings: []\npurpose:\n  question: Does it work?\n")
+    rep = migrate_study_file(d, known_slugs={"s"}, write=True)
+    assert rep["written"] is True                      # question backfill alone triggers the write
+    assert "question: Does it work?" in (d / "study.yaml").read_text()

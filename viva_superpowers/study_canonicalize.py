@@ -184,7 +184,7 @@ def main(argv=None) -> int:
         rep = migrate_study_file(d, known_slugs=known, write=args.write)
         flags = (rep["models"].get("flags", []) + rep["ordering"].get("flags", [])
                  + rep.get("question", {}).get("flags", []))
-        mark = "WROTE" if rep["written"] else ("would-change" if (rep["models"].get("changed") or rep["ordering"].get("changed")) else "ok")
+        mark = "WROTE" if rep["written"] else ("would-change" if (rep["models"].get("changed") or rep["ordering"].get("changed") or rep.get("question", {}).get("changed")) else "ok")
         print(f"[{mark}] {d.name}" + (f"  flags={flags}" if flags else ""))
         any_flag = any_flag or bool(flags)
     if any_flag:
