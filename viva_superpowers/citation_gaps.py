@@ -34,7 +34,11 @@ from .workspace_paths import WorkspacePaths
 
 
 def _member_slugs(wp: WorkspacePaths, inv_slug: str) -> list[str]:
-    """Member study slugs from the investigation.yaml ``studies:`` list."""
+    """Member study slugs from the investigation.yaml ``members:`` list.
+
+    Falls back to the legacy ``studies:`` key when ``members:`` is absent,
+    for investigation.yaml files written before the Phase 1 rename.
+    """
     inv_yaml = wp.dir("investigations") / inv_slug / "investigation.yaml"
     if not inv_yaml.is_file():
         return []
@@ -42,10 +46,12 @@ def _member_slugs(wp: WorkspacePaths, inv_slug: str) -> list[str]:
         spec = yaml.safe_load(inv_yaml.read_text(encoding="utf-8")) or {}
     except Exception:
         return []
-    studies = spec.get("studies") or []
-    if not isinstance(studies, list):
+    entries = spec.get("members")
+    if not isinstance(entries, list):
+        entries = spec.get("studies") or []
+    if not isinstance(entries, list):
         return []
-    return [s for s in studies if isinstance(s, str)]
+    return [s for s in entries if isinstance(s, str)]
 
 
 def _uncited_bands(study_spec: dict) -> list[dict]:

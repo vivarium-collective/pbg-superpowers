@@ -52,6 +52,8 @@ viva-populate-simulation-set = "viva_superpowers.simulation_set:main"
 viva-populate-findings = "viva_superpowers.finding_observations:main"
 viva-roll-up = "viva_superpowers.roll_up:main"
 viva-citation-gaps = "viva_superpowers.citation_gaps:main"
+viva-canonicalize-studies = "viva_superpowers.study_canonicalize:main"
+viva-canonicalize-investigations = "viva_superpowers.investigation_canonicalize:main"
 # --- deprecated pbg-* aliases (same targets) ---
 pbg-scaffold = "viva_superpowers.scaffold:cli"
 pbg-feedback-import = "viva_superpowers.feedback_import:cli"
@@ -65,6 +67,8 @@ pbg-populate-simulation-set = "viva_superpowers.simulation_set:main"
 pbg-populate-findings = "viva_superpowers.finding_observations:main"
 pbg-roll-up = "viva_superpowers.roll_up:main"
 pbg-citation-gaps = "viva_superpowers.citation_gaps:main"
+pbg-canonicalize-studies = "viva_superpowers.study_canonicalize:main"
+pbg-canonicalize-investigations = "viva_superpowers.investigation_canonicalize:main"
 
 # Register viva_superpowers' composite-generator discovery into the
 # process_bigraph.spec_generators entry-point group. This lets
