@@ -109,6 +109,32 @@ def backfill_question(spec) -> dict:
     return report
 
 
+def normalize_tests_shape(spec) -> dict:
+    """Make a conditions-form study's `tests` a LIST (the v4-redesign validator
+    requires it). Legacy studies carry `tests` as a pytest-config dict; preserve a
+    non-trivial config under `pytest_tests` and set `tests: []`. Trivial
+    auto-discover stubs are dropped outright. No-op unless in conditions form with a
+    dict `tests`."""
+    report = {"changed": False, "preserved": False, "flags": []}
+    if not isinstance(spec.get("conditions"), dict):
+        return report
+    t = spec.get("tests")
+    if not isinstance(t, dict):
+        return report
+    trivial = (
+        t.get("auto_discover", True) is True
+        and not (t.get("pytest_args") or [])
+        and t.get("last_results") in (None, [], {})
+        and t.get("data_source", "latest_run") == "latest_run"
+    )
+    if not trivial:
+        spec["pytest_tests"] = t
+        report["preserved"] = True
+    spec["tests"] = []
+    report["changed"] = True
+    return report
+
+
 def canonicalize_ordering(spec, known_slugs) -> dict:
     report = {"changed": False, "added_inputs": [], "outputs_declared": False, "flags": []}
     pg = spec.get("pipeline_gate")
@@ -157,16 +183,17 @@ def migrate_study_file(study_dir, known_slugs, write: bool = False) -> dict:
     y = _ruamel()
     spec = y.load(path.read_text(encoding="utf-8"))
     if spec is None:
-        return {"models": {}, "ordering": {}, "question": {}, "written": False}
+        return {"models": {}, "ordering": {}, "question": {}, "tests": {}, "written": False}
     m = canonicalize_models(spec)
     o = canonicalize_ordering(spec, known_slugs)
     qb = backfill_question(spec)
-    changed = bool(m.get("changed") or o.get("changed") or qb.get("changed"))
+    tn = normalize_tests_shape(spec)
+    changed = bool(m.get("changed") or o.get("changed") or qb.get("changed") or tn.get("changed"))
     written = False
     if write and changed:
         buf = StringIO(); y.dump(spec, buf)
         study_io.atomic_write(path, buf.getvalue()); written = True
-    return {"models": m, "ordering": o, "question": qb, "written": written}
+    return {"models": m, "ordering": o, "question": qb, "tests": tn, "written": written}
 
 
 def main(argv=None) -> int:
@@ -183,8 +210,8 @@ def main(argv=None) -> int:
     for d in targets:
         rep = migrate_study_file(d, known_slugs=known, write=args.write)
         flags = (rep["models"].get("flags", []) + rep["ordering"].get("flags", [])
-                 + rep.get("question", {}).get("flags", []))
-        mark = "WROTE" if rep["written"] else ("would-change" if (rep["models"].get("changed") or rep["ordering"].get("changed") or rep.get("question", {}).get("changed")) else "ok")
+                 + rep.get("question", {}).get("flags", []) + rep.get("tests", {}).get("flags", []))
+        mark = "WROTE" if rep["written"] else ("would-change" if (rep["models"].get("changed") or rep["ordering"].get("changed") or rep.get("question", {}).get("changed") or rep.get("tests", {}).get("changed")) else "ok")
         print(f"[{mark}] {d.name}" + (f"  flags={flags}" if flags else ""))
         any_flag = any_flag or bool(flags)
     if any_flag:

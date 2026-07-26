@@ -1,4 +1,4 @@
-from viva_superpowers.study_canonicalize import canonicalize_models, canonicalize_ordering, migrate_study_file, backfill_question
+from viva_superpowers.study_canonicalize import canonicalize_models, canonicalize_ordering, migrate_study_file, backfill_question, normalize_tests_shape
 
 STYLE_B_WITH_COMMENTS = """\
 # Hand-authored research log — MUST survive migration.
@@ -180,3 +180,38 @@ def test_migrate_study_file_backfills_question_only(tmp_path):
     rep = migrate_study_file(d, known_slugs={"s"}, write=True)
     assert rep["written"] is True                      # question backfill alone triggers the write
     assert "question: Does it work?" in (d / "study.yaml").read_text()
+
+
+def test_normalize_trivial_dict_tests_to_empty_list():
+    spec = {"conditions": {"baseline": {"composite": "c"}},
+            "tests": {"auto_discover": True, "data_source": "latest_run", "pytest_args": [], "last_results": None}}
+    r = normalize_tests_shape(spec)
+    assert spec["tests"] == [] and "pytest_tests" not in spec and r["changed"] is True and r["preserved"] is False
+
+def test_preserve_nontrivial_pytest_config():
+    spec = {"conditions": {"baseline": {"composite": "c"}},
+            "tests": {"auto_discover": True, "pytest_args": ["-k", "fast"]}}
+    r = normalize_tests_shape(spec)
+    assert spec["tests"] == [] and spec["pytest_tests"] == {"auto_discover": True, "pytest_args": ["-k", "fast"]}
+    assert r["preserved"] is True
+
+def test_list_tests_untouched():
+    spec = {"conditions": {"baseline": {"composite": "c"}}, "tests": [{"name": "t"}]}
+    r = normalize_tests_shape(spec)
+    assert spec["tests"] == [{"name": "t"}] and r["changed"] is False
+
+def test_no_conditions_dict_tests_untouched():
+    spec = {"baseline": [{"name": "b", "composite": "c"}], "tests": {"auto_discover": True}}
+    r = normalize_tests_shape(spec)
+    assert spec["tests"] == {"auto_discover": True} and r["changed"] is False
+
+def test_migrate_study_file_normalizes_dict_tests(tmp_path):
+    d = tmp_path / "s"; d.mkdir()
+    (d / "study.yaml").write_text(
+        "schema_version: 4\nname: s\nquestion: Q?\nconditions:\n  baseline:\n    composite: c.b\n"
+        "    params: {}\n  model_settings: []\ntests:\n  auto_discover: true\n  pytest_args: []\n")
+    rep = migrate_study_file(d, known_slugs={"s"}, write=True)
+    assert rep["written"] is True
+    text = (d / "study.yaml").read_text()
+    assert "auto_discover" not in text  # dict stub dropped
+    assert "tests: []" in text
