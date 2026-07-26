@@ -215,3 +215,21 @@ def test_migrate_study_file_normalizes_dict_tests(tmp_path):
     text = (d / "study.yaml").read_text()
     assert "auto_discover" not in text  # dict stub dropped
     assert "tests: []" in text
+
+
+def test_pipeline_gate_prose_preserved_when_converting():
+    spec = {"name": "s", "pipeline_gate": {
+        "prerequisites": ["a"], "enables": ["b"],
+        "proceed_condition": "tests pass", "gate_status": "passed"}}
+    canonicalize_ordering(spec, known_slugs={"a", "s"})
+    assert {"artifact": "a", "from": "a"} in spec["inputs"]
+    pg = spec["pipeline_gate"]                                   # retained (has prose)
+    assert pg.get("proceed_condition") == "tests pass"
+    assert pg.get("gate_status") == "passed"
+    assert "prerequisites" not in pg and "enables" not in pg     # ordering keys removed
+
+
+def test_pipeline_gate_removed_when_only_ordering_keys():
+    spec = {"name": "s", "pipeline_gate": {"prerequisites": ["a"], "enables": ["b"]}}
+    canonicalize_ordering(spec, known_slugs={"a", "s"})
+    assert "pipeline_gate" not in spec                            # empty after ordering keys removed

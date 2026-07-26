@@ -163,11 +163,17 @@ def canonicalize_ordering(spec, known_slugs) -> dict:
     if dangling:
         report["flags"].append("pipeline_gate_retained")
     else:
-        for k in ("pipeline_gate",):
-            if k in spec:
-                del spec[k]; report["changed"] = True
+        if isinstance(pg, dict):
+            for sub in ("prerequisites", "enables"):
+                if sub in pg:
+                    del pg[sub]
+                    report["changed"] = True
+            if not pg:                       # only ordering keys were present -> drop empty block
+                del spec["pipeline_gate"]
+                report["changed"] = True
         if "parent_studies" in spec:
-            del spec["parent_studies"]; report["changed"] = True
+            del spec["parent_studies"]
+            report["changed"] = True
     return report
 
 
