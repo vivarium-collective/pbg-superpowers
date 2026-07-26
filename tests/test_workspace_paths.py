@@ -75,3 +75,23 @@ def test_workspace_dir_cli(tmp_path, capsys):
     out = capsys.readouterr().out
     assert f"export INVESTIGATIONS_DIR={tmp_path / 'workspace' / 'investigations'}" in out
     assert f"export STUDIES_DIR={tmp_path / 'studies'}" in out
+
+
+def test_iter_study_dirs_ignores_nested(tmp_path):
+    from viva_superpowers.workspace_paths import WorkspacePaths
+    (tmp_path / "workspace.yaml").write_text("name: t\n")
+    # top-level canonical study
+    top = tmp_path / "studies" / "alpha"; top.mkdir(parents=True)
+    (top / "study.yaml").write_text("name: alpha\n")
+    # a study that exists ONLY nested (must NOT be yielded)
+    nested_only = tmp_path / "investigations" / "inv" / "studies" / "ghost"
+    nested_only.mkdir(parents=True); (nested_only / "study.yaml").write_text("name: ghost\n")
+    # a nested duplicate of a top-level slug (must NOT shadow)
+    nested_dup = tmp_path / "investigations" / "inv" / "studies" / "alpha"
+    nested_dup.mkdir(parents=True); (nested_dup / "study.yaml").write_text("name: alpha-STALE\n")
+
+    wp = WorkspacePaths.load(tmp_path)
+    slugs = sorted(p.name for p in wp.iter_study_dirs())
+    yielded = [str(p) for p in wp.iter_study_dirs()]
+    assert slugs == ["alpha"]                         # ghost not yielded, alpha once
+    assert all("investigations" not in p for p in yielded)   # never a nested path

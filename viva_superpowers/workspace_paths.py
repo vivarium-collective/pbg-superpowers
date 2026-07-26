@@ -147,25 +147,18 @@ class WorkspacePaths:
 
     # Study resolution (investigation-centric structure) --------------------
     def iter_study_dirs(self):
-        """Yield every study dir - nested investigations/<inv>/studies/<s>/ first,
-        then legacy flat studies/<s>/. A dir is a study iff it holds study.yaml.
-        Nested wins on slug collision."""
-        seen: set[str] = set()
-        inv_root = self.dir("investigations")
-        if inv_root.is_dir():
-            for inv in sorted(p for p in inv_root.iterdir() if p.is_dir()):
-                sroot = inv / "studies"
-                if sroot.is_dir():
-                    for s in sorted(p for p in sroot.iterdir() if p.is_dir()):
-                        if (s / "study.yaml").is_file() and s.name not in seen:
-                            seen.add(s.name)
-                            yield s
+        """Yield every study dir from the canonical top-level ``studies/`` layout.
+
+        Studies live ONLY at ``studies/<slug>/study.yaml``. Nested
+        ``investigations/<inv>/studies/`` are intentionally NOT scanned: a single
+        canonical location prevents an older nested copy from shadowing the
+        registry copy (study-reproducibility contract, L0)."""
         flat = self.dir("studies")
-        if flat.is_dir():
-            for s in sorted(p for p in flat.iterdir() if p.is_dir()):
-                if (s / "study.yaml").is_file() and s.name not in seen:
-                    seen.add(s.name)
-                    yield s
+        if not flat.is_dir():
+            return
+        for s in sorted(p for p in flat.iterdir() if p.is_dir()):
+            if (s / "study.yaml").is_file():
+                yield s
 
     def inputs_dir(self, inv_slug: str) -> Path:
         """investigations/<inv_slug>/inputs (per-investigation owned inputs)."""
