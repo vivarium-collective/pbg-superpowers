@@ -140,25 +140,26 @@ def canonicalize_ordering(spec, known_slugs) -> dict:
     pg = spec.get("pipeline_gate")
     parents = spec.get("parent_studies") or []
     prereqs = (_prereq_slugs(pg) if isinstance(pg, dict) else []) + [str(p) for p in parents]
-    if not prereqs:
-        return report
-
-    inputs = spec.get("inputs")
-    if not isinstance(inputs, list):
-        inputs = []; spec["inputs"] = inputs
-    existing = {(e.get("artifact"), e.get("from")) for e in inputs if isinstance(e, dict)}
 
     dangling = False
-    for producer in prereqs:
-        if producer not in known_slugs:
-            report["flags"].append(f"dangling_prereq:{producer}"); dangling = True
-            continue
-        # skip if any edge already consumes this producer (e.g. parca -> sim_data)
-        if any(frm == producer for (_art, frm) in existing):
-            continue
-        edge = {"artifact": producer, "from": producer}
-        inputs.append(edge); existing.add((producer, producer))
-        report["added_inputs"].append(producer); report["changed"] = True
+    if prereqs:
+        inputs = spec.get("inputs")
+        if not isinstance(inputs, list):
+            inputs = []
+            spec["inputs"] = inputs
+        existing = {(e.get("artifact"), e.get("from")) for e in inputs if isinstance(e, dict)}
+        for producer in prereqs:
+            if producer not in known_slugs:
+                report["flags"].append(f"dangling_prereq:{producer}")
+                dangling = True
+                continue
+            if any(frm == producer for (_art, frm) in existing):
+                continue
+            edge = {"artifact": producer, "from": producer}
+            inputs.append(edge)
+            existing.add((producer, producer))
+            report["added_inputs"].append(producer)
+            report["changed"] = True
 
     if dangling:
         report["flags"].append("pipeline_gate_retained")
@@ -168,7 +169,7 @@ def canonicalize_ordering(spec, known_slugs) -> dict:
                 if sub in pg:
                     del pg[sub]
                     report["changed"] = True
-            if not pg:                       # only ordering keys were present -> drop empty block
+            if not pg:
                 del spec["pipeline_gate"]
                 report["changed"] = True
         if "parent_studies" in spec:

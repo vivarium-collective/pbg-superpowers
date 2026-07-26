@@ -233,3 +233,24 @@ def test_pipeline_gate_removed_when_only_ordering_keys():
     spec = {"name": "s", "pipeline_gate": {"prerequisites": ["a"], "enables": ["b"]}}
     canonicalize_ordering(spec, known_slugs={"a", "s"})
     assert "pipeline_gate" not in spec                            # empty after ordering keys removed
+
+
+def test_empty_prerequisites_stripped_prose_kept():
+    spec = {"name": "s", "pipeline_gate": {"prerequisites": [], "enables": [], "proceed_condition": "x"}}
+    r = canonicalize_ordering(spec, known_slugs={"s"})
+    pg = spec["pipeline_gate"]
+    assert "prerequisites" not in pg and "enables" not in pg
+    assert pg.get("proceed_condition") == "x"   # prose kept
+    assert r["changed"] is True
+
+
+def test_empty_prereq_gate_removed_when_only_ordering():
+    spec = {"name": "s", "pipeline_gate": {"prerequisites": []}}
+    canonicalize_ordering(spec, known_slugs={"s"})
+    assert "pipeline_gate" not in spec
+
+
+def test_no_pipeline_gate_no_change():
+    spec = {"name": "s"}
+    r = canonicalize_ordering(spec, known_slugs={"s"})
+    assert r["changed"] is False and "inputs" not in spec
