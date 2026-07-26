@@ -118,82 +118,20 @@ def _ruamel():
     return y
 
 
-def _extract_trailing_comments(yaml_text: str) -> dict:
-    """Extract comments that precede each top-level key for later restoration."""
-    comments_by_key = {}
-    lines = yaml_text.split('\n')
-    current_key = None
-    pending_comments = []
-
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            pending_comments.append('')
-            continue
-        if stripped.startswith('#'):
-            pending_comments.append(line)
-        else:
-            # This is a key line (ends with ':' and not indented excessively)
-            if line and line[0] not in ' \t':
-                # Top-level key
-                key = stripped.split(':')[0]
-                if pending_comments:
-                    comments_by_key[key] = pending_comments
-                pending_comments = []
-            elif not stripped.startswith('-'):
-                # Might be a nested structure, reset pending
-                pending_comments = []
-
-    return comments_by_key
-
-
-def _restore_trailing_comments(yaml_text: str, comments_by_key: dict) -> str:
-    """Restore comments before keys that may have been removed and re-added."""
-    lines = yaml_text.split('\n')
-    result = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
-
-        # Check if this is a top-level key
-        if line and line[0] not in ' \t' and ':' in stripped:
-            key = stripped.split(':')[0].strip()
-            if key in comments_by_key and comments_by_key[key]:
-                # Insert the comments before this key
-                for comment in comments_by_key[key]:
-                    if comment:  # Don't add empty lines
-                        result.append(comment)
-        result.append(line)
-        i += 1
-
-    return '\n'.join(result)
-
-
 def migrate_study_file(study_dir, known_slugs, write: bool = False) -> dict:
     study_dir = Path(study_dir)
     path = study_dir / "study.yaml"
-    original_text = path.read_text(encoding="utf-8")
-
     y = _ruamel()
-    spec = y.load(original_text)
+    spec = y.load(path.read_text(encoding="utf-8"))
     if spec is None:
         return {"models": {}, "ordering": {}, "written": False}
-
-    # Extract comments that precede keys that might be deleted
-    saved_comments = _extract_trailing_comments(original_text)
-
     m = canonicalize_models(spec)
     o = canonicalize_ordering(spec, known_slugs)
-
     changed = bool(m.get("changed") or o.get("changed"))
     written = False
     if write and changed:
         buf = StringIO(); y.dump(spec, buf)
-        dumped_text = buf.getvalue()
-        # Restore any comments that were lost during deletion
-        restored_text = _restore_trailing_comments(dumped_text, saved_comments)
-        study_io.atomic_write(path, restored_text); written = True
+        study_io.atomic_write(path, buf.getvalue()); written = True
     return {"models": m, "ordering": o, "written": written}
 
 

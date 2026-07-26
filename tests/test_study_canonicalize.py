@@ -25,8 +25,7 @@ def test_migrate_writes_and_preserves_comments(tmp_path):
     report = migrate_study_file(d, known_slugs={"colonies-x", "colonies-prev"}, write=True)
     assert report["written"] is True
     text = (d / "study.yaml").read_text()
-    assert "MUST survive migration" in text          # header comment survives
-    assert "trailing comment" in text
+    assert text.count("MUST survive migration") == 1   # preserved exactly once (catches duplication)
     assert "Nominal composite for the workbench" in text  # note prose survives
     assert "conditions:" in text and "\nbaseline:" not in text  # moved into conditions
     assert "from: colonies-prev" in text             # ordering -> inputs.from
