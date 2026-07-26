@@ -77,21 +77,17 @@ def test_workspace_dir_cli(tmp_path, capsys):
     assert f"export STUDIES_DIR={tmp_path / 'studies'}" in out
 
 
-def test_iter_study_dirs_ignores_nested(tmp_path):
+def test_iter_study_dirs_toplevel_wins_collision(tmp_path):
     from viva_superpowers.workspace_paths import WorkspacePaths
     (tmp_path / "workspace.yaml").write_text("name: t\n")
-    # top-level canonical study
-    top = tmp_path / "studies" / "alpha"; top.mkdir(parents=True)
-    (top / "study.yaml").write_text("name: alpha\n")
-    # a study that exists ONLY nested (must NOT be yielded)
-    nested_only = tmp_path / "investigations" / "inv" / "studies" / "ghost"
-    nested_only.mkdir(parents=True); (nested_only / "study.yaml").write_text("name: ghost\n")
-    # a nested duplicate of a top-level slug (must NOT shadow)
-    nested_dup = tmp_path / "investigations" / "inv" / "studies" / "alpha"
-    nested_dup.mkdir(parents=True); (nested_dup / "study.yaml").write_text("name: alpha-STALE\n")
-
+    top = tmp_path / "studies" / "dup"; top.mkdir(parents=True)
+    (top / "study.yaml").write_text("name: dup-TOP\n")
+    nested_dup = tmp_path / "investigations" / "inv" / "studies" / "dup"
+    nested_dup.mkdir(parents=True); (nested_dup / "study.yaml").write_text("name: dup-NESTED\n")
+    nested_only = tmp_path / "investigations" / "inv" / "studies" / "solo"
+    nested_only.mkdir(parents=True); (nested_only / "study.yaml").write_text("name: solo\n")
     wp = WorkspacePaths.load(tmp_path)
-    slugs = sorted(p.name for p in wp.iter_study_dirs())
-    yielded = [str(p) for p in wp.iter_study_dirs()]
-    assert slugs == ["alpha"]                         # ghost not yielded, alpha once
-    assert all("investigations" not in p for p in yielded)   # never a nested path
+    dirs = {p.name: str(p) for p in wp.iter_study_dirs()}
+    assert "investigations" not in dirs["dup"]      # top-level wins the collision
+    assert "investigations" in dirs["solo"]         # nested-only still discovered
+    assert set(dirs) == {"dup", "solo"}

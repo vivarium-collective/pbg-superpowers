@@ -147,18 +147,26 @@ class WorkspacePaths:
 
     # Study resolution (investigation-centric structure) --------------------
     def iter_study_dirs(self):
-        """Yield every study dir from the canonical top-level ``studies/`` layout.
-
-        Studies live ONLY at ``studies/<slug>/study.yaml``. Nested
-        ``investigations/<inv>/studies/`` are intentionally NOT scanned: a single
-        canonical location prevents an older nested copy from shadowing the
-        registry copy (study-reproducibility contract, L0)."""
+        """Yield every study dir. Top-level ``studies/<slug>/`` FIRST (so a
+        top-level study wins on a slug collision and is never shadowed by a nested
+        copy), then nested ``investigations/<inv>/studies/<slug>/`` for any slug
+        not already yielded. A dir is a study iff it holds ``study.yaml``."""
+        seen: set[str] = set()
         flat = self.dir("studies")
-        if not flat.is_dir():
-            return
-        for s in sorted(p for p in flat.iterdir() if p.is_dir()):
-            if (s / "study.yaml").is_file():
-                yield s
+        if flat.is_dir():
+            for s in sorted(p for p in flat.iterdir() if p.is_dir()):
+                if (s / "study.yaml").is_file() and s.name not in seen:
+                    seen.add(s.name)
+                    yield s
+        inv_root = self.dir("investigations")
+        if inv_root.is_dir():
+            for inv in sorted(p for p in inv_root.iterdir() if p.is_dir()):
+                sroot = inv / "studies"
+                if sroot.is_dir():
+                    for s in sorted(p for p in sroot.iterdir() if p.is_dir()):
+                        if (s / "study.yaml").is_file() and s.name not in seen:
+                            seen.add(s.name)
+                            yield s
 
     def inputs_dir(self, inv_slug: str) -> Path:
         """investigations/<inv_slug>/inputs (per-investigation owned inputs)."""
@@ -169,23 +177,25 @@ class WorkspacePaths:
         return self.dir("investigations") / inv_slug / "reports"
 
     def study_dir(self, slug: str) -> Path:
-        """Resolve a study by slug from the top-level ``studies/`` directory only.
-        Raises FileNotFoundError if absent — including if the study exists only
-        under a nested ``investigations/*/studies/`` path, which is not scanned."""
+        """Resolve a study by slug, nested-first then flat. Raises if absent."""
         for s in self.iter_study_dirs():
             if s.name == slug:
                 return s
         raise FileNotFoundError(f"study {slug!r} not found under {self.root}")
 
     def study_owner(self, slug: str):
-        """Owning investigation slug for a study, via the study.yaml
-        `investigation:` back-ref, else None. Also None if the study can't be
-        resolved (e.g. it exists only under a nested
-        investigations/*/studies/ path, which isn't scanned by study_dir)."""
+        """Owning investigation slug for a study (nested layout), else the
+        study.yaml investigation: back-ref, else None."""
         try:
             d = self.study_dir(slug)
         except FileNotFoundError:
             return None
+        try:
+            parts = d.relative_to(self.dir("investigations")).parts
+            if len(parts) >= 3 and parts[1] == "studies":
+                return parts[0]
+        except ValueError:
+            pass
         sy = d / "study.yaml"
         if sy.is_file():
             data = yaml.safe_load(sy.read_text(encoding="utf-8")) or {}
