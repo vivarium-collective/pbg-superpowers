@@ -53,6 +53,22 @@ def _package_name(repo_name: str) -> str:
     return repo_name.replace("-", "_")
 
 
+def _display_name(repo_name: str) -> str:
+    """Viva-branded label shown in the workbench UI, decoupled from the
+    still-``pbg-``-named GitHub repos / PyPI packages so installs keep
+    resolving against ``name``/``package``/``source`` unchanged.
+
+    ``pbg-cellpack`` → ``viva-cellpack``; already-viva or non-``pbg-`` names
+    (``Viva-munk`` → ``viva-munk``, ``spatio-flux``, ``v2ecoli``) pass through
+    with only a lower-case normalization of a leading ``Viva``.
+    """
+    if repo_name.startswith("pbg-"):
+        return "viva-" + repo_name[len("pbg-"):]
+    if repo_name.lower().startswith("viva"):
+        return repo_name[:1].lower() + repo_name[1:]
+    return repo_name
+
+
 _TAG_HINTS = (
     ("whole-cell", "whole-cell"),
     ("ecoli",      "ecoli"),
@@ -118,6 +134,7 @@ def _entry(repo: dict) -> dict:
     ref = (repo.get("defaultBranchRef") or {}).get("name") or "main"
     return {
         "name": name,
+        "display_name": _display_name(name),
         "description": (repo.get("description") or "").strip(),
         "source": f"https://github.com/{ORG}/{name}.git",
         "ref": ref,
@@ -133,7 +150,7 @@ def _entry(repo: dict) -> dict:
 # like the OpenMPI + lammps-importable probes on pbg-lammps) and must be
 # preserved across a re-sync — otherwise running this script eats curation.
 _AUTO_KEYS = frozenset({
-    "name", "description", "source", "ref", "package", "homepage", "tags",
+    "name", "display_name", "description", "source", "ref", "package", "homepage", "tags",
 })
 
 
