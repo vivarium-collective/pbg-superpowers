@@ -1,4 +1,53 @@
-from viva_superpowers.study_canonicalize import canonicalize_models, canonicalize_ordering
+from viva_superpowers.study_canonicalize import canonicalize_models, canonicalize_ordering, migrate_study_file
+
+STYLE_B_WITH_COMMENTS = """\
+# Hand-authored research log — MUST survive migration.
+schema_version: 4
+name: colonies-x
+title: Device run
+baseline:
+- name: mother-machine-simple
+  composite: v2ecoli.composites.ecoli_colony.ecoli_colony
+  params:
+    seed: 0            # canonical seed
+  note: |
+    Nominal composite for the workbench catalog.
+pipeline_gate:
+  prerequisites:
+  - colonies-prev
+# trailing comment
+status: ran
+"""
+
+def test_migrate_writes_and_preserves_comments(tmp_path):
+    d = tmp_path / "colonies-x"; d.mkdir()
+    (d / "study.yaml").write_text(STYLE_B_WITH_COMMENTS)
+    report = migrate_study_file(d, known_slugs={"colonies-x", "colonies-prev"}, write=True)
+    assert report["written"] is True
+    text = (d / "study.yaml").read_text()
+    assert "MUST survive migration" in text          # header comment survives
+    assert "trailing comment" in text
+    assert "Nominal composite for the workbench" in text  # note prose survives
+    assert "conditions:" in text and "\nbaseline:" not in text  # moved into conditions
+    assert "from: colonies-prev" in text             # ordering -> inputs.from
+    assert "pipeline_gate:" not in text              # removed (no dangling)
+
+def test_dry_run_does_not_write(tmp_path):
+    d = tmp_path / "colonies-x"; d.mkdir()
+    (d / "study.yaml").write_text(STYLE_B_WITH_COMMENTS)
+    before = (d / "study.yaml").read_text()
+    migrate_study_file(d, known_slugs={"colonies-x", "colonies-prev"}, write=False)
+    assert (d / "study.yaml").read_text() == before   # byte-identical
+
+def test_already_canonical_is_noop(tmp_path):
+    d = tmp_path / "s"; d.mkdir()
+    (d / "study.yaml").write_text(
+        "schema_version: 4\nname: s\nconditions:\n  baseline:\n    composite: c.b\n"
+        "    params: {}\n  model_settings: []\n")
+    before = (d / "study.yaml").read_text()
+    migrate_study_file(d, known_slugs={"s"}, write=True)
+    assert (d / "study.yaml").read_text() == before   # byte-identical no-op
+
 
 def test_style_A_already_canonical_inherits_variant_composite():
     spec = {"conditions": {
