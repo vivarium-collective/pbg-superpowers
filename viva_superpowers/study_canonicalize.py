@@ -56,3 +56,49 @@ def canonicalize_models(spec) -> dict:
         conditions["model_settings"] = []; report["changed"] = True
 
     return report
+
+
+def _prereq_slugs(pg) -> list[str]:
+    out = []
+    for p in (pg.get("prerequisites") or []):
+        if isinstance(p, str):
+            out.append(p)
+        elif isinstance(p, dict) and p.get("study"):
+            out.append(str(p["study"]))
+    return out
+
+
+def canonicalize_ordering(spec, known_slugs) -> dict:
+    report = {"changed": False, "added_inputs": [], "outputs_declared": False, "flags": []}
+    pg = spec.get("pipeline_gate")
+    parents = spec.get("parent_studies") or []
+    prereqs = (_prereq_slugs(pg) if isinstance(pg, dict) else []) + [str(p) for p in parents]
+    if not prereqs:
+        return report
+
+    inputs = spec.get("inputs")
+    if not isinstance(inputs, list):
+        inputs = []; spec["inputs"] = inputs
+    existing = {(e.get("artifact"), e.get("from")) for e in inputs if isinstance(e, dict)}
+
+    dangling = False
+    for producer in prereqs:
+        if producer not in known_slugs:
+            report["flags"].append(f"dangling_prereq:{producer}"); dangling = True
+            continue
+        # skip if any edge already consumes this producer (e.g. parca -> sim_data)
+        if any(frm == producer for (_art, frm) in existing):
+            continue
+        edge = {"artifact": producer, "from": producer}
+        inputs.append(edge); existing.add((producer, producer))
+        report["added_inputs"].append(producer); report["changed"] = True
+
+    if dangling:
+        report["flags"].append("pipeline_gate_retained")
+    else:
+        for k in ("pipeline_gate",):
+            if k in spec:
+                del spec[k]; report["changed"] = True
+        if "parent_studies" in spec:
+            del spec["parent_studies"]; report["changed"] = True
+    return report

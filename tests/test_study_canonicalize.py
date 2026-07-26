@@ -1,4 +1,4 @@
-from viva_superpowers.study_canonicalize import canonicalize_models
+from viva_superpowers.study_canonicalize import canonicalize_models, canonicalize_ordering
 
 def test_style_A_already_canonical_inherits_variant_composite():
     spec = {"conditions": {
@@ -44,3 +44,37 @@ def test_idempotent():
             "model_settings": []}}
     r1 = canonicalize_models(spec); r2 = canonicalize_models(spec)
     assert r2["changed"] is False
+
+
+def test_valid_prereq_becomes_inputs_from():
+    spec = {"name": "b", "pipeline_gate": {"prerequisites": ["a"], "enables": ["c"]}}
+    report = canonicalize_ordering(spec, known_slugs={"a", "b", "c"})
+    assert {"artifact": "a", "from": "a"} in spec["inputs"]
+    assert "pipeline_gate" not in spec           # deleted (no dangling)
+    assert report["changed"] is True and "a" in report["added_inputs"]
+
+def test_mapping_prereq_shape():
+    spec = {"name": "b", "pipeline_gate": {"prerequisites": [{"study": "a"}]}}
+    canonicalize_ordering(spec, known_slugs={"a", "b"})
+    assert {"artifact": "a", "from": "a"} in spec["inputs"]
+
+def test_dangling_prereq_is_flagged_and_retained():
+    # a prereq referencing an unknown slug is flagged, no edge added, pipeline_gate retained
+    spec = {"name": "x", "pipeline_gate": {"prerequisites": ["ghost"]}}
+    report = canonicalize_ordering(spec, known_slugs={"x"})
+    assert "dangling_prereq:ghost" in report["flags"]
+    assert "pipeline_gate" in spec  # retained for human fix
+    assert "pipeline_gate_retained" in report["flags"]
+
+def test_existing_inputs_not_duplicated():
+    spec = {"name": "b", "inputs": [{"artifact": "a", "from": "a"}],
+            "pipeline_gate": {"prerequisites": ["a"]}}
+    canonicalize_ordering(spec, known_slugs={"a", "b"})
+    assert spec["inputs"].count({"artifact": "a", "from": "a"}) == 1
+
+def test_parca_dependency_preserved():
+    spec = {"name": "s", "inputs": [{"artifact": "sim_data", "from": "parca"}],
+            "pipeline_gate": {"prerequisites": ["parca"]}}
+    canonicalize_ordering(spec, known_slugs={"parca", "s"})
+    # parca edge already present as sim_data; adding {parca,parca} is allowed but dedup keeps sim_data
+    assert {"artifact": "sim_data", "from": "parca"} in spec["inputs"]
