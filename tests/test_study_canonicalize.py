@@ -1,4 +1,4 @@
-from viva_superpowers.study_canonicalize import canonicalize_models, canonicalize_ordering, migrate_study_file
+from viva_superpowers.study_canonicalize import canonicalize_models, canonicalize_ordering, migrate_study_file, backfill_question
 
 STYLE_B_WITH_COMMENTS = """\
 # Hand-authored research log — MUST survive migration.
@@ -141,3 +141,33 @@ def test_mixed_valid_and_dangling_prereq():
     assert "dangling_prereq:ghost" in report["flags"]
     assert "pipeline_gate" in spec                              # retained (has a dangling)
     assert "pipeline_gate_retained" in report["flags"]
+
+
+def test_backfill_from_purpose_question():
+    spec = {"conditions": {"baseline": {"composite": "c"}}, "purpose": {"question": "Does X?"}}
+    r = backfill_question(spec)
+    assert spec["question"] == "Does X?" and r["source"] == "purpose.question" and r["changed"] is True
+
+def test_backfill_prefers_existing_question():
+    spec = {"conditions": {"baseline": {"composite": "c"}}, "question": "Already here",
+            "purpose": {"question": "other"}}
+    r = backfill_question(spec)
+    assert spec["question"] == "Already here" and r["changed"] is False
+
+def test_backfill_falls_back_to_description_then_title():
+    spec = {"conditions": {"baseline": {"composite": "c"}}, "description": "Desc prose"}
+    r = backfill_question(spec)
+    assert spec["question"] == "Desc prose" and r["source"] == "description"
+    spec2 = {"conditions": {"baseline": {"composite": "c"}}, "title": "T"}
+    r2 = backfill_question(spec2)
+    assert spec2["question"] == "T" and r2["source"] == "title"
+
+def test_no_backfill_without_conditions():
+    spec = {"baseline": [{"name": "b", "composite": "c"}], "purpose": {"question": "Q"}}
+    r = backfill_question(spec)
+    assert "question" not in spec and r["changed"] is False
+
+def test_no_source_flags_not_fabricates():
+    spec = {"conditions": {"baseline": {"composite": "c"}}}
+    r = backfill_question(spec)
+    assert "question" not in spec and "no_question_source" in r["flags"]

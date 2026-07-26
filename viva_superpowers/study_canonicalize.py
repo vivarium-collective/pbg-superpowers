@@ -76,6 +76,39 @@ def _prereq_slugs(pg) -> list[str]:
     return out
 
 
+def backfill_question(spec) -> dict:
+    """Ensure a conditions-form study has a top-level `question` string.
+
+    The workbench routes a schema_version:4 study WITH a `conditions:` block into
+    the strict v4-redesign validator, which requires a non-empty top-level
+    `question`. When model canonicalization produces conditions form, lift an
+    existing authored question into place (purpose.question -> description ->
+    title). Never fabricates: if no source exists, flag `no_question_source` and
+    leave the study without a question."""
+    report = {"changed": False, "source": None, "flags": []}
+    if not isinstance(spec.get("conditions"), dict):
+        return report
+    q = spec.get("question")
+    if isinstance(q, str) and q.strip():
+        return report
+    purpose = spec.get("purpose")
+    val = None
+    src = None
+    if isinstance(purpose, dict) and isinstance(purpose.get("question"), str) and purpose["question"].strip():
+        val, src = purpose["question"], "purpose.question"
+    elif isinstance(spec.get("description"), str) and spec["description"].strip():
+        val, src = spec["description"], "description"
+    elif isinstance(spec.get("title"), str) and spec["title"].strip():
+        val, src = spec["title"], "title"
+    if val is None:
+        report["flags"].append("no_question_source")
+        return report
+    spec["question"] = val
+    report["changed"] = True
+    report["source"] = src
+    return report
+
+
 def canonicalize_ordering(spec, known_slugs) -> dict:
     report = {"changed": False, "added_inputs": [], "outputs_declared": False, "flags": []}
     pg = spec.get("pipeline_gate")
@@ -124,15 +157,16 @@ def migrate_study_file(study_dir, known_slugs, write: bool = False) -> dict:
     y = _ruamel()
     spec = y.load(path.read_text(encoding="utf-8"))
     if spec is None:
-        return {"models": {}, "ordering": {}, "written": False}
+        return {"models": {}, "ordering": {}, "question": {}, "written": False}
     m = canonicalize_models(spec)
     o = canonicalize_ordering(spec, known_slugs)
-    changed = bool(m.get("changed") or o.get("changed"))
+    qb = backfill_question(spec)
+    changed = bool(m.get("changed") or o.get("changed") or qb.get("changed"))
     written = False
     if write and changed:
         buf = StringIO(); y.dump(spec, buf)
         study_io.atomic_write(path, buf.getvalue()); written = True
-    return {"models": m, "ordering": o, "written": written}
+    return {"models": m, "ordering": o, "question": qb, "written": written}
 
 
 def main(argv=None) -> int:
@@ -148,7 +182,8 @@ def main(argv=None) -> int:
     any_flag = False
     for d in targets:
         rep = migrate_study_file(d, known_slugs=known, write=args.write)
-        flags = rep["models"].get("flags", []) + rep["ordering"].get("flags", [])
+        flags = (rep["models"].get("flags", []) + rep["ordering"].get("flags", [])
+                 + rep.get("question", {}).get("flags", []))
         mark = "WROTE" if rep["written"] else ("would-change" if (rep["models"].get("changed") or rep["ordering"].get("changed")) else "ok")
         print(f"[{mark}] {d.name}" + (f"  flags={flags}" if flags else ""))
         any_flag = any_flag or bool(flags)
