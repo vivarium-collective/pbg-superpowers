@@ -66,6 +66,15 @@ config, lockfile, audit allowlists) is a base-gap artifact to drop.
 `decisions_needed`, seed follow-ups, then re-run `/viva-report --audit` until the drift it flagged
 is gone. A hardening is done when the report card and the verdict tell the same story as the data.
 
+**Landing & publishing.** These repos use strict protection (`enforce_admins`, required review,
+up-to-date-required). A PR you authored can't be self-approved, and with `enforce_admins` ON,
+`gh pr merge --admin` is *refused* — don't thrash it. Landing needs a reviewer, or (only on the
+owner's explicit say-so) a **minimal** `enforce_admins` toggle OFF → merge → **restore ON**,
+verified, touching nothing else in the protection config. Strict mode serializes a batch: each
+merge puts the siblings BEHIND, so `update-branch` + re-run CI between merges. After merge, the
+read-only dashboard auto-publishes from `main` on `workspace/**` changes — confirm the Publish
+workflow goes **green** (a triggered run ≠ a successful one).
+
 ## Red flags — STOP
 
 - "The survey/memory says study X is a scaffold" → confirm on current `origin/main` first (step 0).
@@ -76,6 +85,8 @@ is gone. A hardening is done when the report card and the verdict tell the same 
 - Merging an agent's whole branch, or trusting `diff origin/main..branch` — cherry-pick per commit and check the landed diff is deliverables-only (step 4).
 - Landing an agent's `SUMMARY.md` / env-shadow helpers into the canonical branch (step 4).
 - Forcing a code patch when the root cause is real, understood biology → document + resolve the decide instead (step 2).
+- Re-trying `gh pr merge --admin` against `enforce_admins` — it won't bypass; get a review or an owner-authorized minimal toggle (step 5).
+- Any branch-protection change beyond a minimal, restored-immediately `enforce_admins` toggle, or without explicit owner authorization (step 5).
 
 ## Real-world impact
 
