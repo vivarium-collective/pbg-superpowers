@@ -637,16 +637,56 @@ def _study_inputs_from(wp: WorkspacePaths, slug: str) -> list[str]:
     return out
 
 
-def _audit_investigation_dag(audit, spec, wp, known_slugs):
+def _build_dag_graph(spec: dict, wp: WorkspacePaths) -> dict[str, set]:
+    """Consumer -> {producer slugs} edges over an investigation's `members`
+    (via each member's `inputs[].from`). Shared graph-construction for both
+    the L5 audit (:func:`_audit_investigation_dag`) and the public rerun-order
+    helper (:func:`investigation_execution_order`) so the DAG is built
+    exactly once, the same way, in both places."""
     members = _member_slugs(spec)
-    # Build producer -> consumer edges over members + implicit upstream producers.
     graph: dict[str, set] = {}
-    dangling = set()
     for m in members:
         graph.setdefault(m, set())
         for producer in _study_inputs_from(wp, m):
             graph.setdefault(producer, set())
             graph[m].add(producer)
+    return graph
+
+
+def investigation_execution_order(wp: WorkspacePaths, inv_spec: dict) -> list[str]:
+    """Topological execution order of an investigation's member studies over
+    the `inputs.from` DAG (producers before consumers).
+
+    Reuses the same graph-building `_audit_investigation_dag` does
+    (`_member_slugs` + `_study_inputs_from`) plus `graphlib`'s toposort.
+    Best-effort: a cycle (`graphlib.CycleError`) degrades to the declared
+    member order rather than raising — a caller like an investigation rerun
+    must never fail a batch just because the DAG is malformed.
+
+    The returned list is restricted to `inv_spec`'s own members: a member's
+    `inputs[].from` may name a producer that is itself not a member (an
+    external/upstream study, or a dangling reference) — that producer still
+    shapes the ordering among members but is never itself returned, so a
+    caller iterating this list only ever launches actual members.
+    """
+    members = _member_slugs(inv_spec)
+    graph = _build_dag_graph(inv_spec, wp)
+    try:
+        full_order = list(graphlib.TopologicalSorter(graph).static_order())
+    except graphlib.CycleError:
+        return list(members)
+    member_set = set(members)
+    return [slug for slug in full_order if slug in member_set]
+
+
+def _audit_investigation_dag(audit, spec, wp, known_slugs):
+    members = _member_slugs(spec)
+    graph = _build_dag_graph(spec, wp)
+    # Dangling: any producer named by a member's inputs[].from that isn't a
+    # known study slug in this workspace.
+    dangling = set()
+    for m in members:
+        for producer in graph.get(m, ()):
             if producer not in known_slugs:
                 dangling.add(producer)
 

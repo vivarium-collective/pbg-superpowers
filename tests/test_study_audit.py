@@ -321,6 +321,52 @@ def test_l5_dangling_member_edge_fails_hard(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# reproducible-rerun-spine Task 7 — public investigation_execution_order()
+# ---------------------------------------------------------------------------
+
+def test_investigation_execution_order_a_b_c(tmp_path):
+    from viva_superpowers.study_audit import investigation_execution_order
+
+    _ws(tmp_path)
+    _study_with_input(tmp_path, "A")
+    _study_with_input(tmp_path, "B", producer="A")
+    _study_with_input(tmp_path, "C", producer="B")
+    _inv(tmp_path, "inv", "name: inv\nmembers:\n  - A\n  - B\n  - C\n")
+    wp = WorkspacePaths.load(tmp_path)
+    inv_spec = {"name": "inv", "members": ["A", "B", "C"]}
+    assert investigation_execution_order(wp, inv_spec) == ["A", "B", "C"]
+
+
+def test_investigation_execution_order_ignores_non_member_producer(tmp_path):
+    from viva_superpowers.study_audit import investigation_execution_order
+
+    _ws(tmp_path)
+    _study_with_input(tmp_path, "upstream")
+    _study_with_input(tmp_path, "A", producer="upstream")
+    _study_with_input(tmp_path, "B", producer="A")
+    _inv(tmp_path, "inv", "name: inv\nmembers:\n  - A\n  - B\n")
+    wp = WorkspacePaths.load(tmp_path)
+    inv_spec = {"name": "inv", "members": ["A", "B"]}
+    order = investigation_execution_order(wp, inv_spec)
+    # "upstream" is not a declared member -> never appears, but still shaped
+    # the ordering of the members that do come back.
+    assert order == ["A", "B"]
+
+
+def test_investigation_execution_order_cycle_falls_back_to_declared_order(tmp_path):
+    from viva_superpowers.study_audit import investigation_execution_order
+
+    _ws(tmp_path)
+    _study_with_input(tmp_path, "A", producer="B")
+    _study_with_input(tmp_path, "B", producer="A")
+    _inv(tmp_path, "inv", "name: inv\nmembers:\n  - A\n  - B\n")
+    wp = WorkspacePaths.load(tmp_path)
+    inv_spec = {"name": "inv", "members": ["A", "B"]}
+    # graphlib.CycleError -> best-effort degrade to declared member order.
+    assert investigation_execution_order(wp, inv_spec) == ["A", "B"]
+
+
+# ---------------------------------------------------------------------------
 # Task 4 — CLI + --gate + --json
 # ---------------------------------------------------------------------------
 
