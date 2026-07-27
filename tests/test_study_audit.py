@@ -530,3 +530,64 @@ def test_gate_zero_on_populated_clean_workspace(tmp_path, monkeypatch):
                         lambda extra_packages=None: {"pkg.good": entry})
     # main() does not inject fakes; with pkg.good registered the study is clean
     assert main(["--workspace", str(tmp_path), "--gate"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# B1 — allowlist / ratchet mechanism
+
+def test_load_allowlist_parses_and_skips_comments(tmp_path):
+    from viva_superpowers.study_audit import load_allowlist
+    f = tmp_path / "known.txt"
+    f.write_text(
+        "# accepted debt\n"
+        "s1:composite-resolves\n"
+        "\n"
+        "s2:params-are-generator-accepted  # inline comment\n",
+        encoding="utf-8")
+    assert load_allowlist(f) == {"s1:composite-resolves",
+                                 "s2:params-are-generator-accepted"}
+    assert load_allowlist(tmp_path / "nope.txt") == set()   # missing -> empty
+
+
+def test_hard_failures_excludes_allowlisted(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1",
+           "name: s1\nconditions:\n  baseline:\n    composite: pkg.missing\n  model_settings: []\n")
+    report = _audit(tmp_path)
+    assert report.hard_failures()                              # fails without allowlist
+    allow = {"s1:composite-resolves"}
+    assert report.hard_failures(allowlist=allow) == []         # suppressed
+    assert report.stale_allowlist_entries(allow) == set()      # it DOES occur -> not stale
+
+
+def test_stale_allowlist_entry_detected(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1", _GOOD_STUDY)                        # clean study, no hard fails
+    report = _audit(tmp_path)
+    allow = {"s1:composite-resolves"}                          # parked but no longer fails
+    assert report.stale_allowlist_entries(allow) == {"s1:composite-resolves"}
+
+
+def test_gate_with_allowlist(tmp_path, capsys):
+    from viva_superpowers.study_audit import main
+    _ws(tmp_path)
+    _study(tmp_path, "s1",
+           "name: s1\nconditions:\n  baseline:\n    composite: pkg.missing\n  model_settings: []\n")
+    al = tmp_path / "known.txt"
+    # not allowlisted -> gate fails
+    al.write_text("# empty\n", encoding="utf-8")
+    assert main(["--workspace", str(tmp_path), "--gate", "--allowlist", str(al)]) == 1
+    # allowlisted -> gate passes
+    al.write_text("s1:composite-resolves\n", encoding="utf-8")
+    assert main(["--workspace", str(tmp_path), "--gate", "--allowlist", str(al)]) == 0
+
+
+def test_gate_fails_on_stale_allowlist_entry(tmp_path):
+    from viva_superpowers.study_audit import main
+    _ws(tmp_path)   # empty workspace: no studies, so NO hard failures at all
+    al = tmp_path / "known.txt"
+    al.write_text("ghost:composite-resolves\n", encoding="utf-8")  # matches nothing -> stale
+    # ratchet: a stale allowlist entry must FAIL the gate so it gets removed
+    # (registry-independent — main() uses the real registry, but an empty
+    # workspace has zero hard failures regardless).
+    assert main(["--workspace", str(tmp_path), "--gate", "--allowlist", str(al)]) == 1
