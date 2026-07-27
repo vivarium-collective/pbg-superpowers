@@ -150,21 +150,234 @@ def audit_workspace(
 
     report = AuditReport(studies=[], investigations=[])
 
+    # Every study slug known anywhere in the workspace (flat + nested), used to
+    # resolve inputs[].from producer edges.
+    known_slugs = {d.name for d in wp.iter_study_dirs()}
+
+    # Workspace-level L0: no study.yaml may live under investigations/. Emitted
+    # once (only when a nested study exists, i.e. the fail case).
+    nested = _nested_study_files(wp)
+    if nested:
+        wa = StudyAudit(slug=ws_root.name or "<workspace>", checks=[])
+        rels = ", ".join(sorted(str(p.relative_to(ws_root)) for p in nested))
+        wa.checks.append(CheckResult(
+            "L0", "no-nested-study", FAIL, HARD,
+            f"study.yaml found under investigations/: {rels}"))
+        report.studies.append(wa)
+
     # Enumerate top-level studies/<slug>/study.yaml only. Nested studies under
     # investigations/ are a structural violation caught by `no-nested-study`.
     studies_dir = wp.studies
     if studies_dir.is_dir():
         for sdir in sorted(p for p in studies_dir.iterdir() if p.is_dir()):
             if (sdir / "study.yaml").is_file():
-                report.studies.append(StudyAudit(slug=sdir.name, checks=[]))
+                audit = StudyAudit(slug=sdir.name, checks=[])
+                _audit_study(audit, sdir, wp, known_slugs,
+                             known_composites, generator_params)
+                report.studies.append(audit)
 
     inv_dir = wp.investigations
     if inv_dir.is_dir():
         for idir in sorted(p for p in inv_dir.iterdir() if p.is_dir()):
             if (idir / "investigation.yaml").is_file():
-                report.investigations.append(StudyAudit(slug=idir.name, checks=[]))
+                audit = StudyAudit(slug=idir.name, checks=[])
+                _audit_investigation(audit, idir, wp, known_slugs)
+                report.investigations.append(audit)
 
     return report
+
+
+# ---------------------------------------------------------------------------
+# Per-study checks
+# ---------------------------------------------------------------------------
+
+def _nested_study_files(wp: WorkspacePaths) -> list:
+    inv_dir = wp.investigations
+    if not inv_dir.is_dir():
+        return []
+    return sorted(inv_dir.glob("**/study.yaml"))
+
+
+def _iter_models(spec: dict):
+    """Yield (label, model_dict) for the baseline + each variant, canonical form."""
+    conditions = spec.get("conditions")
+    if not isinstance(conditions, dict):
+        return
+    baseline = conditions.get("baseline")
+    if isinstance(baseline, dict):
+        yield ("baseline", baseline)
+    for v in (conditions.get("variants") or []):
+        if isinstance(v, dict):
+            yield (v.get("name", "variant"), v)
+
+
+def _composite_resolvable(name: str, known_composites: set, wp: WorkspacePaths) -> bool:
+    if not name:
+        return False
+    if name in known_composites:
+        return True
+    if any(name == s or name.endswith("." + s) or name.endswith(s)
+           for s in _RESOLVABLE_SUFFIXES):
+        return True
+    # file-discovered *.composite.yaml whose stem matches the composite name
+    comp_dir = wp.composites
+    if comp_dir.is_dir():
+        tail = name.rsplit(".", 1)[-1]
+        for pat in ("*.composite.yaml", "*.composite.yml", "*.composite.json"):
+            for f in comp_dir.glob(pat):
+                stem = f.name
+                for suffix in (".composite.yaml", ".composite.yml", ".composite.json"):
+                    if stem.endswith(suffix):
+                        stem = stem[: -len(suffix)]
+                        break
+                if stem in (name, tail):
+                    return True
+    return False
+
+
+def _audit_study(audit, sdir, wp, known_slugs, known_composites, generator_params):
+    """Append L0/L1 (and later L2/L3/L4) checks for one study. Total: any error
+    becomes a single L0 fail rather than a traceback."""
+    try:
+        spec = study_io.load_yaml(sdir / "study.yaml")
+        if not isinstance(spec, dict):
+            raise ValueError("top-level YAML is not a mapping")
+    except Exception as exc:  # noqa: BLE001
+        audit.checks.append(CheckResult(
+            "L0", "readable", FAIL, HARD, f"unreadable study.yaml: {exc}"))
+        return
+
+    # --- L0 slug-matches-dir ------------------------------------------------
+    declared = spec.get("name") or spec.get("slug")
+    if declared is not None and str(declared) != sdir.name:
+        audit.checks.append(CheckResult(
+            "L0", "slug-matches-dir", FAIL, HARD,
+            f"study.yaml name/slug {declared!r} != dir {sdir.name!r}"))
+    else:
+        audit.checks.append(CheckResult("L0", "slug-matches-dir", PASS, HARD))
+
+    # --- L0 canonical-model-schema -----------------------------------------
+    _check_model_schema(audit, spec)
+
+    # --- L1 composite-resolves ---------------------------------------------
+    unresolved = []
+    for label, model in _iter_models(spec):
+        comp = model.get("composite") if isinstance(model, dict) else None
+        if not _composite_resolvable(comp, known_composites, wp):
+            unresolved.append(f"{label}:{comp!r}")
+    if unresolved:
+        audit.checks.append(CheckResult(
+            "L1", "composite-resolves", FAIL, HARD,
+            "unresolved composite(s): " + ", ".join(unresolved)))
+    else:
+        audit.checks.append(CheckResult("L1", "composite-resolves", PASS, HARD))
+
+    # --- L1 params-are-generator-accepted ----------------------------------
+    bad_params = []
+    for label, model in _iter_models(spec):
+        comp = model.get("composite") if isinstance(model, dict) else None
+        # skip when the composite is unresolved (already caught) or we have no
+        # declared parameter set for it.
+        if comp not in generator_params:
+            continue
+        allowed = set(generator_params.get(comp) or set()) | {"n_steps"}
+        params = model.get("params") if isinstance(model, dict) else None
+        if isinstance(params, dict):
+            extra = set(params.keys()) - allowed
+            if extra:
+                bad_params.append(f"{label}: {sorted(extra)} not in {sorted(allowed)}")
+    if bad_params:
+        audit.checks.append(CheckResult(
+            "L1", "params-are-generator-accepted", FAIL, HARD,
+            "; ".join(bad_params)))
+    else:
+        audit.checks.append(CheckResult(
+            "L1", "params-are-generator-accepted", PASS, HARD))
+
+    # --- L1 inputs-from-resolves -------------------------------------------
+    dangling = _dangling_inputs(spec, known_slugs)
+    if dangling:
+        audit.checks.append(CheckResult(
+            "L1", "inputs-from-resolves", FAIL, HARD,
+            "dangling inputs[].from: " + ", ".join(sorted(dangling))))
+    else:
+        audit.checks.append(CheckResult("L1", "inputs-from-resolves", PASS, HARD))
+
+
+def _dangling_inputs(spec: dict, known_slugs: set) -> set:
+    out = set()
+    for e in (spec.get("inputs") or []):
+        if isinstance(e, dict):
+            frm = e.get("from")
+            if frm and str(frm) not in known_slugs:
+                out.add(str(frm))
+    return out
+
+
+def _check_model_schema(audit, spec: dict) -> None:
+    """L0 canonical-model-schema: conditions.baseline has a composite and every
+    variant is a mapping with a composite; canonicalization is a no-op."""
+    try:
+        probe = copy.deepcopy(spec)
+        report = canonicalize_models(probe)
+    except Exception as exc:  # noqa: BLE001
+        audit.checks.append(CheckResult(
+            "L0", "canonical-model-schema", FAIL, HARD,
+            f"canonicalization error: {exc}"))
+        return
+
+    # A non-no-op structural change (top-level baseline/variants that needed
+    # moving, or a case requiring a human) means the on-disk form isn't canonical.
+    bad_flags = {"multi_baseline_needs_human", "both_dropped_toplevel",
+                 "both_dropped_toplevel_variants"}
+    flags = set(report.get("flags") or [])
+    if report.get("inherited_composites") or (flags & bad_flags) \
+            or ("baseline" in spec) or ("variants" in spec):
+        audit.checks.append(CheckResult(
+            "L0", "canonical-model-schema", FAIL, HARD,
+            f"non-canonical model schema (flags={sorted(flags)})"))
+        return
+
+    conditions = probe.get("conditions")
+    baseline = conditions.get("baseline") if isinstance(conditions, dict) else None
+    if not isinstance(baseline, dict) or not baseline.get("composite"):
+        audit.checks.append(CheckResult(
+            "L0", "canonical-model-schema", FAIL, HARD,
+            "conditions.baseline with a composite is required"))
+        return
+    for v in (conditions.get("variants") or []):
+        if not isinstance(v, dict) or not v.get("composite"):
+            audit.checks.append(CheckResult(
+                "L0", "canonical-model-schema", FAIL, HARD,
+                "every variant must be a mapping with a composite"))
+            return
+    audit.checks.append(CheckResult("L0", "canonical-model-schema", PASS, HARD))
+
+
+# ---------------------------------------------------------------------------
+# Per-investigation checks
+# ---------------------------------------------------------------------------
+
+def _audit_investigation(audit, idir, wp, known_slugs):
+    try:
+        spec = study_io.load_yaml(idir / "investigation.yaml")
+    except Exception as exc:  # noqa: BLE001
+        audit.checks.append(CheckResult(
+            "L0", "investigation-members-only", FAIL, HARD,
+            f"unreadable investigation.yaml: {exc}"))
+        return
+
+    # --- L0 investigation-members-only -------------------------------------
+    if not isinstance(spec, dict):
+        audit.checks.append(CheckResult(
+            "L0", "investigation-members-only", FAIL, HARD,
+            "top-level YAML is not a mapping"))
+    elif "studies" in spec and "members" not in spec:
+        audit.checks.append(CheckResult(
+            "L0", "investigation-members-only", WARN, HARD,
+            "carries legacy `studies:` key; rename to `members:`"))
+    else:
+        audit.checks.append(CheckResult("L0", "investigation-members-only", PASS, HARD))
 
 
 def main(argv=None) -> int:  # pragma: no cover — implemented in Task 4

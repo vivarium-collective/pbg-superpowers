@@ -76,3 +76,124 @@ def test_enumeration_produces_one_studyaudit_per_study(tmp_path):
     report = audit_workspace(tmp_path)
     slugs = {a.slug for a in report.studies}
     assert {"s1", "s2"} <= slugs
+
+
+# ---------------------------------------------------------------------------
+# Task 2 — L0 Structure + L1 Resolvability (HARD tier)
+# ---------------------------------------------------------------------------
+
+_KNOWN = {"pkg.good"}
+_GENPARAMS = {"pkg.good": {"rate"}}
+
+_GOOD_STUDY = """\
+name: s1
+conditions:
+  baseline:
+    name: base
+    composite: pkg.good
+  variants:
+    - name: v1
+      composite: pkg.good
+      params:
+        rate: 2
+  model_settings: []
+"""
+
+
+def _audit(tmp_path):
+    return audit_workspace(tmp_path, known_composites=_KNOWN, generator_params=_GENPARAMS)
+
+
+def test_good_study_passes_all_l0_l1(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1", _GOOD_STUDY)
+    report = _audit(tmp_path)
+    (a,) = [x for x in report.studies if x.slug == "s1"]
+    for name in ("slug-matches-dir", "canonical-model-schema",
+                 "composite-resolves", "params-are-generator-accepted",
+                 "inputs-from-resolves"):
+        c = _find(a, name)
+        assert c is not None, f"{name} missing"
+        assert c.status == "pass", f"{name} -> {c.status}: {c.detail}"
+    assert report.hard_failures() == []
+
+
+def test_nested_study_fails_no_nested(tmp_path):
+    _ws(tmp_path)
+    nested = tmp_path / "investigations" / "inv" / "study.yaml"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("name: nested\n", encoding="utf-8")
+    report = _audit(tmp_path)
+    c = _find_any(report, "no-nested-study")
+    assert c is not None and c.status == "fail" and c.tier == "hard"
+
+
+def test_slug_mismatch_fails(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1", "name: other\n")
+    report = _audit(tmp_path)
+    (a,) = [x for x in report.studies if x.slug == "s1"]
+    c = _find(a, "slug-matches-dir")
+    assert c.status == "fail" and c.tier == "hard"
+
+
+def test_missing_composite_fails_resolution(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1",
+           "name: s1\nconditions:\n  baseline:\n    composite: pkg.missing\n  model_settings: []\n")
+    report = _audit(tmp_path)
+    (a,) = [x for x in report.studies if x.slug == "s1"]
+    c = _find(a, "composite-resolves")
+    assert c.status == "fail" and c.tier == "hard"
+
+
+def test_bogus_params_fail(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1",
+           "name: s1\nconditions:\n  baseline:\n    composite: pkg.good\n    params:\n      bogus: 1\n  model_settings: []\n")
+    report = _audit(tmp_path)
+    (a,) = [x for x in report.studies if x.slug == "s1"]
+    c = _find(a, "params-are-generator-accepted")
+    assert c.status == "fail" and c.tier == "hard"
+
+
+def test_n_steps_param_is_accepted(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1",
+           "name: s1\nconditions:\n  baseline:\n    composite: pkg.good\n    params:\n      rate: 1\n      n_steps: 10\n  model_settings: []\n")
+    report = _audit(tmp_path)
+    (a,) = [x for x in report.studies if x.slug == "s1"]
+    assert _find(a, "params-are-generator-accepted").status == "pass"
+
+
+def test_dangling_input_from_fails(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1",
+           "name: s1\nconditions:\n  baseline:\n    composite: pkg.good\n  model_settings: []\n"
+           "inputs:\n  - artifact: x\n    from: nope\n")
+    report = _audit(tmp_path)
+    (a,) = [x for x in report.studies if x.slug == "s1"]
+    c = _find(a, "inputs-from-resolves")
+    assert c.status == "fail" and c.tier == "hard"
+
+
+def test_malformed_study_is_single_l0_fail(tmp_path):
+    _ws(tmp_path)
+    d = tmp_path / "studies" / "bad"
+    d.mkdir(parents=True)
+    (d / "study.yaml").write_text("name: [unterminated\n", encoding="utf-8")
+    report = _audit(tmp_path)  # must not raise
+    (a,) = [x for x in report.studies if x.slug == "bad"]
+    assert a.worst() == "fail"
+    assert any(c.level == "L0" and c.status == "fail" for c in a.checks)
+
+
+def test_legacy_studies_key_warns(tmp_path):
+    _ws(tmp_path)
+    inv = tmp_path / "investigations" / "inv"
+    inv.mkdir(parents=True)
+    (inv / "investigation.yaml").write_text("name: inv\nstudies:\n  - s1\n", encoding="utf-8")
+    report = _audit(tmp_path)
+    (a,) = [x for x in report.investigations if x.slug == "inv"]
+    c = _find(a, "investigation-members-only")
+    assert c.status == "warn"
