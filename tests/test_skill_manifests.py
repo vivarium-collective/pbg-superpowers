@@ -14,21 +14,26 @@ import pytest
 import yaml
 
 
-# The skills that ship with `user-invocable: true`. Post pbg→viva rebrand: 16
-# user-facing `viva-*` skills (incl. `/viva-init` machine setup) — `/viva-suggest`
-# is an internal dashboard callback and is deliberately NOT user-invocable — plus
-# their `pbg-*` back-compat aliases (16 mirrors + `/pbg-dashboard`, the legacy
-# dashboard→workbench alias; `/pbg-suggest` mirrors `/viva-suggest` as non-invocable).
+# The skills that ship with `user-invocable: true`.
+#
+# `_VIVA_MIRRORED`: the 16 pre-rebrand `viva-*` skills (incl. `/viva-init` machine
+# setup) that each carry a `pbg-*` back-compat alias from the pbg→viva rebrand
+# (`/viva-suggest` is an internal dashboard callback, deliberately NOT invocable;
+# `/pbg-dashboard` is the legacy dashboard→workbench alias).
+# `_VIVA_ONLY`: skills added AFTER the rebrand — viva-only, with NO deprecated
+# `pbg-*` mirror (the rebrand is complete; new skills don't accrue legacy aliases).
 # Keep in sync with docs/skills.md + README/CLAUDE counts — the test below fails on drift.
-_VIVA_INVOCABLE = {
+_VIVA_MIRRORED = {
     "viva-biology-forward", "viva-catalog", "viva-cite-bands", "viva-expert",
     "viva-explore", "viva-init", "viva-investigation", "viva-navigate",
     "viva-report", "viva-run", "viva-server", "viva-status", "viva-study",
     "viva-viz", "viva-workbench", "viva-workspace",
 }
+_VIVA_ONLY = {"viva-harden-investigation"}
+_VIVA_INVOCABLE = _VIVA_MIRRORED | _VIVA_ONLY
 USER_INVOCABLE_SKILLS = (
     _VIVA_INVOCABLE
-    | {name.replace("viva-", "pbg-", 1) for name in _VIVA_INVOCABLE}
+    | {name.replace("viva-", "pbg-", 1) for name in _VIVA_MIRRORED}
     | {"pbg-dashboard"}
 )
 
