@@ -541,8 +541,51 @@ def _audit_investigation_dag(audit, spec, wp, known_slugs):
             "execution order not derivable (DAG invalid)"))
 
 
-def main(argv=None) -> int:  # pragma: no cover — implemented in Task 4
-    raise NotImplementedError
+_GLYPH = {PASS: "✓", WARN: "⚠", FAIL: "✗"}  # ✓ ⚠ ✗
+
+
+def render_report(report: AuditReport) -> str:
+    """Human-readable table: per audit, one line per check, then a summary."""
+    lines: list[str] = []
+    sections = [("STUDY", report.studies), ("INVESTIGATION", report.investigations)]
+    for kind, audits in sections:
+        for audit in audits:
+            lines.append(f"{kind} {audit.slug}  [{audit.worst()}]")
+            for c in audit.checks:
+                glyph = _GLYPH.get(c.status, "?")
+                row = f"  {glyph} {c.level} {c.name} ({c.tier})"
+                if c.detail:
+                    row += f" — {c.detail}"
+                lines.append(row)
+    hard = report.hard_failures()
+    lines.append("")
+    lines.append(
+        f"summary: {len(report.studies)} studies, "
+        f"{len(report.investigations)} investigations, "
+        f"{len(hard)} hard failure(s)"
+    )
+    return "\n".join(lines)
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog="viva-study-audit")
+    ap.add_argument("--workspace", default=".", help="workspace root (default: .)")
+    ap.add_argument("--json", action="store_true",
+                    help="emit the report as JSON instead of a table")
+    ap.add_argument("--gate", action="store_true",
+                    help="exit non-zero if any hard-tier check fails (for CI)")
+    args = ap.parse_args(argv)
+
+    report = audit_workspace(args.workspace)
+
+    if args.json:
+        print(json.dumps(report.as_dict()))
+    else:
+        print(render_report(report))
+
+    if args.gate and report.hard_failures():
+        return 1
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover

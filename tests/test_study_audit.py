@@ -6,6 +6,8 @@ from viva_superpowers.study_audit import (
     StudyAudit,
     AuditReport,
     audit_workspace,
+    render_report,
+    main,
 )
 
 
@@ -311,3 +313,50 @@ def test_l5_dangling_member_edge_fails_hard(tmp_path):
     a = next(x for x in report.investigations if x.slug == "inv")
     c = _find(a, "no-dangling-edges")
     assert c.status == "fail" and c.tier == "hard"
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — CLI + --gate + --json
+# ---------------------------------------------------------------------------
+
+def test_gate_zero_on_clean_workspace(tmp_path):
+    # main() does not inject fakes, so it audits against the real generator
+    # registry; an empty workspace has no hard failures -> gate exits 0.
+    _ws(tmp_path)
+    assert main(["--workspace", str(tmp_path), "--gate"]) == 0
+
+
+def test_gate_nonzero_on_hard_fail(tmp_path):
+    _ws(tmp_path)
+    nested = tmp_path / "investigations" / "inv" / "study.yaml"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("name: nested\n", encoding="utf-8")
+    assert main(["--workspace", str(tmp_path), "--gate"]) == 1
+
+
+def test_no_gate_always_zero(tmp_path):
+    _ws(tmp_path)
+    nested = tmp_path / "investigations" / "inv" / "study.yaml"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("name: nested\n", encoding="utf-8")
+    # hard fail present, but no --gate -> exit 0
+    assert main(["--workspace", str(tmp_path)]) == 0
+
+
+def test_json_output_round_trips(tmp_path, capsys):
+    _ws(tmp_path)
+    _study(tmp_path, "s1", _GOOD_STUDY)
+    rc = main(["--workspace", str(tmp_path), "--json"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    parsed = json.loads(out)
+    assert isinstance(parsed, dict) and "studies" in parsed
+
+
+def test_render_report_is_a_string(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1", _GOOD_STUDY)
+    report = _audit(tmp_path)
+    text = render_report(report)
+    assert isinstance(text, str)
+    assert "s1" in text
