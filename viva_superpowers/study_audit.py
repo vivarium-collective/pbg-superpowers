@@ -84,13 +84,40 @@ class AuditReport:
     studies: list = field(default_factory=list)
     investigations: list = field(default_factory=list)
 
-    def hard_failures(self) -> list:
+    def hard_failures(self, allowlist=None) -> list:
+        """Hard-tier failures as ``(slug, CheckResult)``.
+
+        When ``allowlist`` (a set of ``"slug:check-name"`` keys) is given,
+        failures whose key is listed are EXCLUDED — they are known-accepted
+        debt tracked elsewhere. The gate fails only on what remains.
+        """
+        allow = allowlist or set()
         out = []
         for audit in list(self.studies) + list(self.investigations):
             for c in audit.checks:
                 if c.tier == HARD and c.status == FAIL:
+                    if f"{audit.slug}:{c.name}" in allow:
+                        continue
                     out.append((audit.slug, c))
         return out
+
+    def hard_failure_keys(self) -> set:
+        """All hard-failure ``"slug:check-name"`` keys (ignoring any allowlist)."""
+        keys = set()
+        for audit in list(self.studies) + list(self.investigations):
+            for c in audit.checks:
+                if c.tier == HARD and c.status == FAIL:
+                    keys.add(f"{audit.slug}:{c.name}")
+        return keys
+
+    def stale_allowlist_entries(self, allowlist) -> set:
+        """Allowlist keys that no longer match any hard failure.
+
+        These are the ratchet signal: an entry parked as known-debt whose
+        study has since been fixed must be REMOVED from the allowlist, so the
+        gate flags it (the allowlist may only shrink, never silently rot).
+        """
+        return set(allowlist or set()) - self.hard_failure_keys()
 
     def as_dict(self) -> dict:
         return {
@@ -674,6 +701,23 @@ def render_report(report: AuditReport) -> str:
     return "\n".join(lines)
 
 
+def load_allowlist(path) -> set:
+    """Parse a known-accepted-failures file into a set of ``"slug:check"`` keys.
+
+    One key per line; ``#`` starts a comment; blank lines ignored. A missing
+    file is an empty allowlist (not an error) so `--gate` degrades safely.
+    """
+    p = Path(path)
+    if not p.is_file():
+        return set()
+    entries = set()
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            entries.add(line)
+    return entries
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="viva-study-audit")
     ap.add_argument("--workspace", default=".", help="workspace root (default: .)")
@@ -685,6 +729,11 @@ def main(argv=None) -> int:
                     metavar="PKG",
                     help="extra package to import for composite discovery "
                          "(repeatable), e.g. --package v2ecoli.composites")
+    ap.add_argument("--allowlist", default=None, metavar="FILE",
+                    help="file of known-accepted 'slug:check' hard failures "
+                         "(one per line, # comments). --gate ignores these but "
+                         "STILL FAILS on any stale entry that no longer occurs "
+                         "(the allowlist may only shrink — a ratchet).")
     args = ap.parse_args(argv)
 
     if args.json:
@@ -698,9 +747,22 @@ def main(argv=None) -> int:
         report = audit_workspace(args.workspace, extra_packages=args.package)
         print(render_report(report))
 
-    if args.gate and report.hard_failures():
-        return 1
-    return 0
+    if not args.gate:
+        return 0
+
+    allow = load_allowlist(args.allowlist) if args.allowlist else set()
+    new_fails = report.hard_failures(allowlist=allow)
+    stale = report.stale_allowlist_entries(allow)
+    if allow:
+        known = len(allow) - len(stale)
+        print(f"[gate] allowlist: {known} known-accepted failure(s) suppressed",
+              file=sys.stderr)
+    for slug, c in new_fails:
+        print(f"[gate] FAIL {slug}:{c.name} — {c.detail}", file=sys.stderr)
+    for key in sorted(stale):
+        print(f"[gate] STALE allowlist entry '{key}' no longer fails — "
+              f"remove it from the allowlist (ratchet)", file=sys.stderr)
+    return 1 if (new_fails or stale) else 0
 
 
 if __name__ == "__main__":  # pragma: no cover
