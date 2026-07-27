@@ -223,13 +223,19 @@ def _env_stale_items(slug: str, spec: dict) -> list[dict]:
     pre-check). A confirmed env drift makes the replay's result comparison
     NOT like-for-like — a caution, not necessarily a bug.
 
-    Suppressed entirely for a study whose ``study.yaml`` declares
-    ``pinned_env:`` — an explicit opt-out: the study owner has accepted this
-    drift (e.g. a deliberate package/toolchain upgrade)."""
-    if spec.get("pinned_env"):
-        return []
+    Suppression is PER-RUN, not study-wide: a run is skipped only when its
+    own recorded ``env_id`` equals the study's declared ``pinned_env:`` —
+    i.e. THIS run's drift is the one the study owner explicitly accepted
+    (e.g. a deliberate package/toolchain upgrade). Mirrors vwb
+    ``rerun._flag_env_drift``'s own precise-match gate (it only suppresses
+    the stamp when ``pinned == orig_env``): a study that pinned one accepted
+    drift (env A -> B) must NOT also silently swallow an unrelated,
+    different drift (env B -> C) on another run."""
+    pinned = spec.get("pinned_env")
     items: list[dict] = []
     for run in _provenance_status_runs(spec, "env_stale"):
+        if pinned and run.get("env_id") == pinned:
+            continue  # THIS run's drift is the one accepted/pinned
         ref = _run_ref(run)
         items.append(_item(
             "env_stale", "medium", slug, ref,
