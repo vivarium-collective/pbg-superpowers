@@ -113,7 +113,7 @@ Mine these sources:
 2. **`open_questions:` with `status: open`** — if the verdict claims an architectural unblock, check whether any blocking open_question actually contradicts it.
 3. **Mass-listener gaps** — if behavior_tests in a study assert on observables that no chart visualizes, propose a chart.
 4. **Stale review-thread topics** — when on a PR-attached branch: `gh pr view <N> --json reviews,comments`. For each unresolved thread topic, see whether commits since address it; flag any that DON'T match a recent commit.
-5. **Run outcomes** — scan `$STUDIES_DIR/*/study.yaml` `runs:` for any outcome other than `completed`. Flag.
+5. **Run outcomes / case history** — scan `$STUDIES_DIR/*/study.yaml` `runs:` for any outcome other than `completed`. Flag. Also flag any run whose `provenance_status` is `env_stale` (reproduced under a DIFFERENT environment than the original run — the replay isn't like-for-like; suppressed automatically when the study declares `pinned_env:`) or `nondeterministic` (a CONFIRMED result_fingerprint mismatch under an IDENTICAL environment + seed — a real reproducibility bug). Both are stamped by `vivarium_workbench.lib.rerun` (Task 3/5) and surfaced by `viva_superpowers.needs_attention.scan_investigation` as `kind: "env_stale"` / `"nondeterministic"` items — cite those directly rather than re-deriving them.
 
 ### A8. Propose new visualizations — REQUIRED
 

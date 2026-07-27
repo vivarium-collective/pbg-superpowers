@@ -542,3 +542,62 @@ def test_diagnostic_branch_silent_on_pass():
                   "outcomes": {"t1": {"result": "pass"}}}],
     }
     assert _diagnostic_branch_items("s", spec) == []
+
+
+# ---------------------------------------------------------------------------
+# reproducible-rerun-spine Task 5 / G3 — env_stale + nondeterministic signals.
+#
+# vivarium_workbench stamps a run's ``provenance_status`` in its own
+# ``runs_meta`` table (``lib.rerun._flag_env_drift`` / ``verify_reproduction``)
+# — pbg-superpowers cannot import vivarium_workbench, so these tests construct
+# the run-record fixture state directly on a study.yaml ``runs:`` entry
+# (mirroring how a mechanically-recorded run's fields land there), rather than
+# driving an actual vwb Reproduce.
+# ---------------------------------------------------------------------------
+
+def test_env_stale_surfaces_unless_pinned(tmp_path):
+    """Key failing test: a run stamped ``provenance_status: env_stale``
+    (reproduced under a different environment than the original run)
+    surfaces as a needs_attention item; a study.yaml ``pinned_env:``
+    suppresses it."""
+    root = _ws(tmp_path)
+    _inv(root, "inv", {"studies": ["s1"]})
+    _study(root, "s1", {
+        "tests": [{"name": "t"}],
+        "runs": [
+            {"name": "r1", "status": "completed", "provenance_status": "env_stale"},
+        ],
+    }, inv="inv")
+
+    res = scan_investigation(root, "inv")
+    stale = [i for i in res["items"] if i["kind"] == "env_stale"]
+    assert stale and stale[0]["study"] == "s1"
+
+    # Pin the environment — the drift is now accepted; suppressed.
+    spec_file = root / "studies" / "s1" / "study.yaml"
+    spec = study_io.load_yaml(spec_file)
+    spec["pinned_env"] = "env-A"
+    study_io.save_yaml_atomic(spec_file, spec)
+
+    res = scan_investigation(root, "inv")
+    assert not any(i["kind"] == "env_stale" for i in res["items"])
+
+
+def test_nondeterministic_surfaces_needs_attention(tmp_path):
+    """A run stamped ``provenance_status: nondeterministic`` (confirmed
+    result_fingerprint mismatch under identical env_id + seed) surfaces as a
+    high-severity needs_attention item; ``pinned_env`` does NOT suppress it
+    (only env_stale is an environment-drift signal)."""
+    root = _ws(tmp_path)
+    _inv(root, "inv", {"studies": ["s1"]})
+    _study(root, "s1", {
+        "tests": [{"name": "t"}],
+        "pinned_env": "env-A",
+        "runs": [
+            {"name": "r2", "status": "completed", "provenance_status": "nondeterministic"},
+        ],
+    }, inv="inv")
+
+    res = scan_investigation(root, "inv")
+    items = [i for i in res["items"] if i["kind"] == "nondeterministic"]
+    assert items and items[0]["severity"] == "high" and items[0]["study"] == "s1"
