@@ -2,7 +2,7 @@ import json
 import sqlite3
 from pathlib import Path
 from viva_superpowers.run_registry import (
-    latest_run, register_run, get_run_params, RUNS_META_DDL,
+    latest_run, register_run, get_run_params, RUNS_META_DDL, build_run_manifest,
 )
 
 def _db(tmp):
@@ -108,6 +108,27 @@ def test_register_run_stamps_manifest_v2(tmp_path):
     assert m["spec_id"] == "ecoli"
     for k in ("env", "seed", "fingerprint_fields", "result_fingerprint"):
         assert k in m and m[k] is None
+
+
+def test_build_run_manifest_schema_matches_documented_v2_key_set():
+    # Drift guard (code review round 1): the two writers' manifests are
+    # documented as "one shared manifest schema" — pin the exact top-level
+    # key set here so any future divergence (a key added to one writer but
+    # not the other) fails this test, not just a comment.
+    m = build_run_manifest(spec_id="s", params={"seed": 0}, n_steps=1)
+    assert set(m) == {
+        "version", "spec_id", "params", "n_steps", "emitter", "emit_paths",
+        "runtime", "origin", "study", "pkg", "generation_id", "code_version",
+        "env", "seed", "fingerprint_fields", "result_fingerprint",
+    }
+
+
+def test_build_run_manifest_code_version_best_effort_null_without_ws_root():
+    # Parity with composite_runs.build_run_manifest: code_version degrades
+    # to {git_sha: None, package: None} rather than being omitted, and never
+    # raises when ws_root/pkg aren't resolvable.
+    m = build_run_manifest(spec_id="s", params={}, n_steps=1)
+    assert m["code_version"] == {"git_sha": None, "package": None}
 
 
 def test_register_run_manifest_null_on_legacy_db_without_column(tmp_path):

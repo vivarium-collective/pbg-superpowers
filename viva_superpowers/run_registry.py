@@ -71,7 +71,8 @@ def latest_run(runs_db: Path) -> dict | None:
 
 def build_run_manifest(*, spec_id, params, n_steps, emitter=None,
                        emit_paths=None, runtime=None, origin="bespoke",
-                       study=None, pkg=None, generation_id=None) -> dict:
+                       study=None, pkg=None, generation_id=None,
+                       ws_root=None) -> dict:
     """Assemble the replay manifest for a run recorded via :func:`register_run`.
 
     Ports the shape of ``vivarium_workbench.lib.composite_runs.build_run_manifest``
@@ -80,12 +81,41 @@ def build_run_manifest(*, spec_id, params, n_steps, emitter=None,
     dashboard-launched runs (reproducible-rerun-spine Task 1: one shared
     manifest schema across both run-record writers). ``viva_superpowers`` is a
     dependency *of* vivarium-workbench, not the reverse, so this is a
-    standalone port rather than an import — keep the two in sync by hand.
+    standalone port rather than an import — keep the two in sync by hand
+    (see ``test_build_run_manifest_schema_matches_documented_v2_key_set``,
+    which pins the exact top-level key set so a future divergence fails a
+    test rather than silently drifting).
+
+    ``code_version`` is best-effort, mirroring the workbench writer exactly:
+    a git-HEAD lookup on ``ws_root`` and a ``pkg`` version lookup, each
+    independently wrapped so a failure (no git repo, package not installed,
+    no ``ws_root``/``pkg`` given, ...) degrades to ``None`` rather than
+    raising — this must never block a run from being recorded.
 
     ``env``, ``seed``, ``fingerprint_fields``, ``result_fingerprint`` are v2
     keys filled in by later tasks (env capture, result fingerprinting,
     first-class seed threading) — present as ``null`` here, not computed.
     """
+    git_sha = None
+    if ws_root is not None:
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["git", "-C", str(ws_root), "rev-parse", "HEAD"],
+                capture_output=True, text=True, check=True, timeout=5,
+            )
+            git_sha = out.stdout.strip() or None
+        except Exception:  # noqa: BLE001 — best-effort provenance, never fatal
+            git_sha = None
+
+    pkg_version = None
+    if pkg:
+        try:
+            from importlib.metadata import version as _pkg_version
+            pkg_version = _pkg_version(pkg)
+        except Exception:  # noqa: BLE001 — best-effort provenance, never fatal
+            pkg_version = None
+
     return {
         "version": 2,
         "spec_id": spec_id,
@@ -98,6 +128,7 @@ def build_run_manifest(*, spec_id, params, n_steps, emitter=None,
         "study": study,
         "pkg": pkg,
         "generation_id": generation_id,
+        "code_version": {"git_sha": git_sha, "package": pkg_version},
         "env": None,
         "seed": None,
         "fingerprint_fields": None,
@@ -117,6 +148,8 @@ def register_run(
     completed_at: float | None = None,
     emitter_path: str | None = None,
     generation_id: str | None = None,
+    ws_root: str | Path | None = None,
+    pkg: str | None = None,
 ) -> None:
     """Upsert a ``runs_meta`` row for ``run_id``, writing ``params`` as
     ``params_json`` (the run-config provenance slot).
@@ -155,7 +188,7 @@ def register_run(
             try:
                 manifest_json = json.dumps(build_run_manifest(
                     spec_id=spec_id or run_id, params=params, n_steps=n_steps,
-                    generation_id=generation_id,
+                    generation_id=generation_id, ws_root=ws_root, pkg=pkg,
                 ), default=str)
             except Exception:  # noqa: BLE001 — best-effort, never block a run
                 manifest_json = None
