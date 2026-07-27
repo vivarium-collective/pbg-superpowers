@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from pathlib import Path
 from viva_superpowers.run_registry import (
@@ -88,6 +89,42 @@ def test_get_run_params_missing_run_or_db(tmp_path):
     db = tmp_path / "runs.db"
     sqlite3.connect(db).executescript(RUNS_META_DDL)
     assert get_run_params(db, "absent") is None
+
+
+# --- manifest_json (reproducible-rerun-spine Task 1: unify writers) --------
+
+def test_register_run_stamps_manifest_v2(tmp_path):
+    # Bespoke `run-script` runs go through register_run, not the dashboard's
+    # composite_runs.save_metadata — this is the "second writer" the
+    # reproducible-rerun-spine plan unifies onto the same manifest schema so
+    # those runs are replayable too.
+    db = tmp_path / "runs.db"
+    register_run(db, "run_a", spec_id="ecoli", params={"seed": 0}, n_steps=10)
+    row = latest_run(db)
+    m = json.loads(row["manifest_json"])
+    assert m["version"] == 2
+    assert m["params"]["seed"] == 0
+    assert m["n_steps"] == 10
+    assert m["spec_id"] == "ecoli"
+    for k in ("env", "seed", "fingerprint_fields", "result_fingerprint"):
+        assert k in m and m[k] is None
+
+
+def test_register_run_manifest_null_on_legacy_db_without_column(tmp_path):
+    # A pre-existing runs.db created before manifest_json existed must not
+    # break — register_run degrades gracefully (no manifest_json written),
+    # rather than raising "no such column".
+    db = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        "CREATE TABLE runs_meta (run_id TEXT PRIMARY KEY, spec_id TEXT NOT NULL,"
+        " started_at REAL NOT NULL, completed_at REAL, status TEXT NOT NULL);"
+    )
+    conn.commit(); conn.close()
+    register_run(db, "run_b", spec_id="ecoli", params={"seed": 1}, n_steps=5)
+    lr = latest_run(db)
+    assert lr["run_id"] == "run_b"
+    assert "manifest_json" not in lr  # column absent → key omitted, no crash
 
 
 def test_get_run_params_db_without_params_column(tmp_path):

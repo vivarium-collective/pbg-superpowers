@@ -17,7 +17,13 @@ from pathlib import Path
 
 # Minimal DDL for tests + first-time creation. Real DBs are migrated by the
 # dashboard's composite_runs connect()/_migrate_runs_meta which ALTERs in
-# nullable columns (incl. emitter_path, added in the dashboard phase).
+# nullable columns (incl. emitter_path, added in the dashboard phase;
+# manifest_json, added in reproducible-rerun-spine Task 1 to unify this
+# writer's bespoke `run-script` runs with the dashboard's on the same replay
+# manifest). A runs.db touched only by this module (never the dashboard) is
+# tolerated too: register_run/latest_run only read/write columns present in
+# `PRAGMA table_info`, so a pre-existing table missing manifest_json simply
+# omits it rather than raising.
 RUNS_META_DDL = """
 CREATE TABLE IF NOT EXISTS runs_meta (
     run_id        TEXT PRIMARY KEY,
@@ -30,12 +36,13 @@ CREATE TABLE IF NOT EXISTS runs_meta (
     status        TEXT NOT NULL,
     sim_name      TEXT,
     generation_id TEXT,
-    emitter_path  TEXT
+    emitter_path  TEXT,
+    manifest_json TEXT
 );
 """
 
 _COLS = ("run_id", "spec_id", "started_at", "completed_at", "status",
-         "generation_id", "emitter_path")
+         "generation_id", "emitter_path", "n_steps", "manifest_json")
 
 
 def latest_run(runs_db: Path) -> dict | None:
@@ -62,6 +69,42 @@ def latest_run(runs_db: Path) -> dict | None:
         return None
 
 
+def build_run_manifest(*, spec_id, params, n_steps, emitter=None,
+                       emit_paths=None, runtime=None, origin="bespoke",
+                       study=None, pkg=None, generation_id=None) -> dict:
+    """Assemble the replay manifest for a run recorded via :func:`register_run`.
+
+    Ports the shape of ``vivarium_workbench.lib.composite_runs.build_run_manifest``
+    (schema ``version: 2``) so bespoke ``run-script`` runs — which never go
+    through the dashboard's ``save_metadata`` — carry the same manifest as
+    dashboard-launched runs (reproducible-rerun-spine Task 1: one shared
+    manifest schema across both run-record writers). ``viva_superpowers`` is a
+    dependency *of* vivarium-workbench, not the reverse, so this is a
+    standalone port rather than an import — keep the two in sync by hand.
+
+    ``env``, ``seed``, ``fingerprint_fields``, ``result_fingerprint`` are v2
+    keys filled in by later tasks (env capture, result fingerprinting,
+    first-class seed threading) — present as ``null`` here, not computed.
+    """
+    return {
+        "version": 2,
+        "spec_id": spec_id,
+        "params": dict(params or {}),
+        "n_steps": int(n_steps) if n_steps is not None else None,
+        "emitter": emitter,
+        "emit_paths": list(emit_paths or []),
+        "runtime": dict(runtime or {}),
+        "origin": origin,
+        "study": study,
+        "pkg": pkg,
+        "generation_id": generation_id,
+        "env": None,
+        "seed": None,
+        "fingerprint_fields": None,
+        "result_fingerprint": None,
+    }
+
+
 def register_run(
     runs_db: Path,
     run_id: str,
@@ -69,6 +112,7 @@ def register_run(
     spec_id: str | None = None,
     status: str | None = None,
     params: dict | None = None,
+    n_steps: int | None = None,
     started_at: float | None = None,
     completed_at: float | None = None,
     emitter_path: str | None = None,
@@ -86,6 +130,12 @@ def register_run(
     (status ``complete``) without losing the recorded config.
 
     ``params`` is JSON-serialised; non-JSON values fall back to ``str``.
+
+    Whenever ``params`` and/or ``n_steps`` is supplied (i.e. this call is
+    recording — not just updating the status of — a run's config), a replay
+    manifest is (re)built via :func:`build_run_manifest` and stored as
+    ``manifest_json`` — best-effort: on a runs.db that predates the
+    ``manifest_json`` column, it's simply not written (see module docstring).
     """
     runs_db = Path(runs_db)
     runs_db.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +150,15 @@ def register_run(
             json.dumps(params, default=str, sort_keys=True)
             if params is not None else None
         )
+        manifest_json = None
+        if params is not None or n_steps is not None:
+            try:
+                manifest_json = json.dumps(build_run_manifest(
+                    spec_id=spec_id or run_id, params=params, n_steps=n_steps,
+                    generation_id=generation_id,
+                ), default=str)
+            except Exception:  # noqa: BLE001 — best-effort, never block a run
+                manifest_json = None
         now = time.time()
         if existing is None:
             cols = ["run_id", "spec_id", "started_at", "status"]
@@ -108,9 +167,11 @@ def register_run(
                     status or "recorded"]
             optional = {
                 "params_json": params_json,
+                "n_steps": n_steps,
                 "completed_at": completed_at,
                 "emitter_path": emitter_path,
                 "generation_id": generation_id,
+                "manifest_json": manifest_json,
             }
             for col, val in optional.items():
                 if val is not None and col in have:
@@ -126,10 +187,12 @@ def register_run(
                 "spec_id": spec_id,
                 "status": status,
                 "params_json": params_json,
+                "n_steps": n_steps,
                 "started_at": started_at,
                 "completed_at": completed_at,
                 "emitter_path": emitter_path,
                 "generation_id": generation_id,
+                "manifest_json": manifest_json,
             }
             for col, val in updates.items():
                 if val is not None and col in have:
