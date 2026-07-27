@@ -27,6 +27,11 @@ that most weakens the headline claim, and close that gap the right way for its k
 (or the branch you intend). Re-derive each study's state from its actual canonical axes in
 `study.yaml` — `simulation_status`, `gate_status`, `evaluation_status`, and the investigation's
 `executive.verdict_status` / `decisions_needed` — **not** from a memory, a prior survey, or prose.
+Then verify the claim is *real, not just declared*: (a) the artifacts/numbers a `ran`/`passed`
+study cites must actually exist on disk and its pipeline must run in the **canonical** env — a
+`ran` status with uncommitted artifacts or an un-runnable pipeline is a **reproducibility gap**,
+not a result; (b) when the claim is a *passed gate*, re-run it under a **seed/parameter sweep** — a
+pass that holds only at one seed or one calibration is **knife-edge**, not a certificate.
 
 **1. Survey & triage — locate the load-bearing gap.**
 Run `/viva-report --audit` if available (Pass A surfaces verdict↔chart drift, stale framings,
@@ -90,12 +95,11 @@ workflow goes **green** (a triggered run ≠ a successful one).
 
 ## Real-world impact
 
-On `v2ecoli-baseline-showcase` a survey (read off a stale branch) claimed the two foundational
-studies were "deferred scaffolds" — headline unbacked. Step 0 against `origin/main` showed both had
-run and passed; the real gap was a *single* failing report-card group (#143, O₂ −40% / CO₂ −20%),
-which also drives the sibling `ketchup` decision. Triage + cross-investigation leverage turned
-"harden the flagship" into one root-cause that hardened two investigations — verdict: real FBA
-behavior + an averaging-window fragility, *not* a bug, so it closed by documenting + resolving the
-decide (no forced patch). Landing it exposed the base-gap trap: the headless agent's branch diff
-falsely showed `ci.yml` deleted; a per-commit cherry-pick + a deliverables-only check kept main's
-newer work intact.
+Across 7 v2ecoli investigations hardened this way: a stale-branch survey mislabeled *passed*
+studies as "scaffolds" (Step 0 caught it); the real #143 gap was **real FBA behavior + an
+averaging-window fragility, not a bug** → closed by documenting + resolving the decide, no forced
+patch; a study marked `ran` proved **unreproducible** (uncommitted artifacts + an un-runnable
+pipeline) and an SBC "PASS" proved **knife-edge** under a seed sweep — both caught only by
+re-deriving, not trusting the status. Landing exposed the base-gap trap (a branch diff falsely
+showing `ci.yml` deleted) — per-commit cherry-pick + a deliverables-only check kept main's newer
+work intact.
