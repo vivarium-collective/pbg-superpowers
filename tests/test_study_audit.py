@@ -1,5 +1,8 @@
 """Tests for the L0-L5 study-reproducibility audit (viva_superpowers.study_audit)."""
 import json
+from types import SimpleNamespace
+
+import viva_superpowers.study_audit as study_audit
 
 from viva_superpowers.study_audit import (
     CheckResult,
@@ -8,7 +11,9 @@ from viva_superpowers.study_audit import (
     audit_workspace,
     render_report,
     main,
+    _composite_resolvable,
 )
+from viva_superpowers.workspace_paths import WorkspacePaths
 
 
 # ---------------------------------------------------------------------------
@@ -360,3 +365,168 @@ def test_render_report_is_a_string(tmp_path):
     text = render_report(report)
     assert isinstance(text, str)
     assert "s1" in text
+
+
+# ---------------------------------------------------------------------------
+# Review fixes — totality, relative workspace, extra_packages, --json hygiene
+# ---------------------------------------------------------------------------
+
+def test_scalar_variants_never_crashes_whole_audit(tmp_path):
+    _ws(tmp_path)
+    # malformed: variants is a scalar, not a list
+    _study(tmp_path, "bad",
+           "name: bad\nconditions:\n  baseline:\n    composite: pkg.good\n  variants: 5\n  model_settings: []\n")
+    _study(tmp_path, "s1", _GOOD_STUDY)
+    report = _audit(tmp_path)  # must NOT raise
+    slugs = {a.slug for a in report.studies}
+    assert {"bad", "s1"} <= slugs
+    # the good study is still fully audited
+    a1 = next(x for x in report.studies if x.slug == "s1")
+    assert _find(a1, "composite-resolves").status == "pass"
+    # the malformed one is a single L0 fail, not a crash
+    abad = next(x for x in report.studies if x.slug == "bad")
+    assert abad.worst() == "fail"
+    assert any(c.level == "L0" and c.status == "fail" for c in abad.checks)
+
+
+def test_scalar_inputs_never_crashes(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1",
+           "name: s1\nconditions:\n  baseline:\n    composite: pkg.good\n  model_settings: []\n"
+           "inputs: true\n")
+    report = _audit(tmp_path)  # must NOT raise
+    assert any(a.slug == "s1" for a in report.studies)
+
+
+def test_scalar_members_never_crashes(tmp_path):
+    _ws(tmp_path)
+    _inv(tmp_path, "inv", "name: inv\nmembers: 7\n")
+    report = _audit(tmp_path)  # must NOT raise
+    assert any(a.slug == "inv" for a in report.investigations)
+
+
+def test_relative_workspace_with_nested_study(tmp_path, monkeypatch):
+    _ws(tmp_path)
+    nested = tmp_path / "investigations" / "inv" / "study.yaml"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("name: n\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    report = audit_workspace(".", known_composites=_KNOWN, generator_params=_GENPARAMS)  # no ValueError
+    c = _find_any(report, "no-nested-study")
+    assert c is not None and c.status == "fail"
+
+
+def test_extra_packages_forwarded_to_discovery(tmp_path, monkeypatch):
+    _ws(tmp_path)
+    captured = {}
+
+    def fake_discover(extra_packages=None):
+        captured["extra"] = list(extra_packages or [])
+        return {}
+
+    monkeypatch.setattr(study_audit, "_discover_generators", fake_discover)
+    # no injection -> defaults derived -> discovery is called with our packages
+    audit_workspace(tmp_path, extra_packages=["foo.composites"])
+    assert "foo.composites" in captured["extra"]
+
+
+def test_package_flag_forwarded(tmp_path, monkeypatch):
+    _ws(tmp_path)
+    captured = {}
+
+    def fake_discover(extra_packages=None):
+        captured["extra"] = list(extra_packages or [])
+        return {}
+
+    monkeypatch.setattr(study_audit, "_discover_generators", fake_discover)
+    main(["--workspace", str(tmp_path), "--package", "v2ecoli.composites"])
+    assert "v2ecoli.composites" in captured["extra"]
+
+
+def test_json_clean_despite_discovery_stdout(tmp_path, capsys, monkeypatch):
+    _ws(tmp_path)
+
+    def noisy_discover(extra_packages=None):
+        print("Setting POLARS_MAX_THREADS=1")
+        print("skipping `foo`: ImportError")
+        return {}
+
+    monkeypatch.setattr(study_audit, "_discover_generators", noisy_discover)
+    rc = main(["--workspace", str(tmp_path), "--json"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    parsed = json.loads(out)  # must parse despite the discovery prints
+    assert "studies" in parsed
+
+
+def test_legacy_parameter_overrides_are_validated(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1",
+           "name: s1\nconditions:\n  baseline:\n    composite: pkg.good\n"
+           "    parameter_overrides:\n      bogus: 1\n  model_settings: []\n")
+    report = _audit(tmp_path)
+    a = next(x for x in report.studies if x.slug == "s1")
+    assert _find(a, "params-are-generator-accepted").status == "fail"
+
+
+def test_composite_resolvable_alias_forms(tmp_path):
+    _ws(tmp_path)
+    wp = WorkspacePaths.load(tmp_path)
+    # registry ids carry a duplicated trailing module segment (v2ecoli style)
+    known = {"v2ecoli.composites.reactor_bird_coupled.reactor_bird_coupled",
+             "v2ecoli.composites.parca.parca"}
+    # full id resolves
+    assert _composite_resolvable("v2ecoli.composites.parca.parca", known, wp) is True
+    # collapsed duplicated-tail (module) form resolves
+    assert _composite_resolvable(
+        "v2ecoli.composites.reactor_bird_coupled", known, wp) is True
+    # bare composite name resolves
+    assert _composite_resolvable("parca", known, wp) is True
+    # a genuinely-absent composite (different, uninstalled package) does NOT
+    assert _composite_resolvable("v2ecoli_pdmp.composites.x.x", known, wp) is False
+    # a non-duplicated id does NOT leak its parent module as resolvable
+    assert _composite_resolvable("pkg", {"pkg.good"}, wp) is False
+
+
+def test_composite_resolvable_no_bare_suffix_match(tmp_path):
+    _ws(tmp_path)
+    wp = WorkspacePaths.load(tmp_path)
+    assert _composite_resolvable("pkg.millard2017_metabolism", set(), wp) is True
+    assert _composite_resolvable("millard2017_metabolism", set(), wp) is True
+    # bare-suffix false positive must NOT resolve
+    assert _composite_resolvable("foo_millard2017_metabolism", set(), wp) is False
+
+
+_INHERIT_STUDY = """\
+name: s1
+conditions:
+  baseline:
+    name: base
+    composite: pkg.good
+  variants:
+    - name: v1
+      params:
+        rate: 2
+  model_settings: []
+"""
+
+
+def test_variant_inherits_baseline_composite(tmp_path):
+    # A variant that omits `composite` inherits the baseline's — legitimate
+    # canonical authoring. Both L1 resolution and L0 schema must pass.
+    _ws(tmp_path)
+    _study(tmp_path, "s1", _INHERIT_STUDY)
+    report = _audit(tmp_path)
+    a = next(x for x in report.studies if x.slug == "s1")
+    assert _find(a, "composite-resolves").status == "pass"
+    assert _find(a, "canonical-model-schema").status == "pass"
+
+
+def test_gate_zero_on_populated_clean_workspace(tmp_path, monkeypatch):
+    _ws(tmp_path)
+    _study(tmp_path, "s1", _GOOD_STUDY)
+    entry = SimpleNamespace(id="pkg.good", parameters={"rate": {"type": "integer"}})
+    monkeypatch.setattr(study_audit, "_discover_generators",
+                        lambda extra_packages=None: {"pkg.good": entry})
+    # main() does not inject fakes; with pkg.good registered the study is clean
+    assert main(["--workspace", str(tmp_path), "--gate"]) == 0

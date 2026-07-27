@@ -22,6 +22,7 @@ single L0 ``fail`` CheckResult, never a traceback that aborts the audit.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import graphlib
 import json
@@ -107,7 +108,7 @@ class AuditReport:
 # Registry-backed defaults (injectable for testability)
 # ---------------------------------------------------------------------------
 
-def _default_registry() -> tuple[set[str], dict]:
+def _default_registry(extra_packages=None) -> tuple[set[str], dict]:
     """Best-effort (known_composites, generator_params) from installed generators.
 
     ``known_composites`` is the set of registered generator names/ids;
@@ -116,14 +117,41 @@ def _default_registry() -> tuple[set[str], dict]:
     rather than crashing the audit (tests inject fakes and never hit this).
     """
     try:
-        from viva_superpowers.composite_generator import discover_generators
-
-        gens = discover_generators()
+        gens = _discover_generators(extra_packages=extra_packages)
     except Exception:  # noqa: BLE001 — discovery is best-effort
         return set(), {}
     known = set(gens.keys())
-    params = {sid: set((entry.parameters or {}).keys()) for sid, entry in gens.items()}
+    params = {sid: set((getattr(entry, "parameters", None) or {}).keys())
+              for sid, entry in gens.items()}
     return known, params
+
+
+def _discover_generators(extra_packages=None):
+    """Thin, monkeypatchable indirection over the real generator discovery.
+
+    Imported lazily so ``study_audit`` never hard-depends on process-bigraph at
+    import time, and so unit tests can patch this symbol without importing
+    ``composite_generator`` (whose import can fail in a minimal test venv)."""
+    from viva_superpowers.composite_generator import discover_generators
+
+    return discover_generators(extra_packages=extra_packages)
+
+
+def _workspace_packages(wp: WorkspacePaths) -> list[str]:
+    """Best-effort import names for the workspace's own composite generators.
+
+    The workspace Python package (e.g. ``pbg_v2ecoli`` / ``v2ecoli``) registers
+    its ``@composite_generator`` decorators only when imported, so include it and
+    its ``.composites`` subpackage in the discovery import set."""
+    out: list[str] = []
+    try:
+        name = wp.package.name
+        if name:
+            out.append(name)
+            out.append(f"{name}.composites")
+    except Exception:  # noqa: BLE001
+        pass
+    return out
 
 
 def audit_workspace(
@@ -131,22 +159,40 @@ def audit_workspace(
     *,
     known_composites: set | None = None,
     generator_params: dict | None = None,
+    extra_packages: list | None = None,
 ) -> AuditReport:
     """Audit the workspace at ``ws_root`` against the L0-L5 contract.
 
     ``known_composites`` / ``generator_params`` default to the installed
     generator registry (``discover_generators``); tests inject fakes so no real
-    workspace package is required.
+    workspace package is required. ``extra_packages`` are additional package
+    names to import so their ``@composite_generator`` decorators fire before the
+    registry is read (a workspace's own composites live in its package, not in an
+    installed top-level dist). The workspace's own package + ``.composites`` are
+    added automatically (best-effort).
     """
+    # Resolve up-front: WorkspacePaths.load resolves internally, so
+    # _nested_study_files returns absolute paths — relative_to needs an absolute
+    # base or it raises ValueError when ws_root is ".".
+    ws_root = Path(ws_root).resolve()
+    wp = WorkspacePaths.load(ws_root)
+
     if known_composites is None or generator_params is None:
-        default_known, default_params = _default_registry()
+        # Best-effort: make the workspace importable and include its own
+        # composites package so workspace-local composites resolve.
+        extra = list(extra_packages or [])
+        try:
+            for p in (str(ws_root), str(ws_root.parent)):
+                if p not in sys.path:
+                    sys.path.insert(0, p)
+            extra += _workspace_packages(wp)
+        except Exception:  # noqa: BLE001 — best-effort
+            pass
+        default_known, default_params = _default_registry(extra_packages=extra)
         if known_composites is None:
             known_composites = default_known
         if generator_params is None:
             generator_params = default_params
-
-    ws_root = Path(ws_root)
-    wp = WorkspacePaths.load(ws_root)
 
     report = AuditReport(studies=[], investigations=[])
 
@@ -155,7 +201,13 @@ def audit_workspace(
     known_slugs = {d.name for d in wp.iter_study_dirs()}
 
     # Workspace-level L0: no study.yaml may live under investigations/. Emitted
-    # once (only when a nested study exists, i.e. the fail case).
+    # once (only when a nested study exists, i.e. the fail case). NOTE: nested
+    # investigations/**/study.yaml is a DELIBERATE L0 violation — the
+    # reproducibility contract mandates the flat studies/ layout with
+    # investigations referencing members via `members:` (Phase 1 migrated
+    # v2ecoli to it). This intentionally diverges from
+    # WorkspacePaths.iter_study_dirs' general nested-study support; do not
+    # "fix" it to accept nested studies.
     nested = _nested_study_files(wp)
     if nested:
         wa = StudyAudit(slug=ws_root.name or "<workspace>", checks=[])
@@ -172,8 +224,13 @@ def audit_workspace(
         for sdir in sorted(p for p in studies_dir.iterdir() if p.is_dir()):
             if (sdir / "study.yaml").is_file():
                 audit = StudyAudit(slug=sdir.name, checks=[])
-                _audit_study(audit, sdir, wp, known_slugs,
-                             known_composites, generator_params)
+                # Safety net: totality is guaranteed even for unforeseen shapes.
+                try:
+                    _audit_study(audit, sdir, wp, known_slugs,
+                                 known_composites, generator_params)
+                except Exception as exc:  # noqa: BLE001
+                    audit.checks.append(CheckResult(
+                        "L0", "audit-error", FAIL, HARD, f"audit crashed: {exc}"))
                 report.studies.append(audit)
 
     inv_dir = wp.investigations
@@ -181,7 +238,11 @@ def audit_workspace(
         for idir in sorted(p for p in inv_dir.iterdir() if p.is_dir()):
             if (idir / "investigation.yaml").is_file():
                 audit = StudyAudit(slug=idir.name, checks=[])
-                _audit_investigation(audit, idir, wp, known_slugs)
+                try:
+                    _audit_investigation(audit, idir, wp, known_slugs)
+                except Exception as exc:  # noqa: BLE001
+                    audit.checks.append(CheckResult(
+                        "L0", "audit-error", FAIL, HARD, f"audit crashed: {exc}"))
                 report.investigations.append(audit)
 
     return report
@@ -206,18 +267,40 @@ def _iter_models(spec: dict):
     baseline = conditions.get("baseline")
     if isinstance(baseline, dict):
         yield ("baseline", baseline)
-    for v in (conditions.get("variants") or []):
+    variants = conditions.get("variants")
+    for v in (variants if isinstance(variants, list) else []):
         if isinstance(v, dict):
             yield (v.get("name", "variant"), v)
+
+
+def _composite_alias_set(known_composites: set) -> set:
+    """Expand registry ids into the forms a study.yaml may reference.
+
+    A registered generator id is ``<dotted_module>.<name>``. In a workspace whose
+    composite modules are named after the composite (v2ecoli style), the id
+    duplicates its tail — ``v2ecoli.composites.parca.parca`` — while studies
+    reference the collapsed module form ``v2ecoli.composites.parca`` or the bare
+    name ``parca``. Expand every known id into: the full id, its bare last
+    segment, and (only when the tail is duplicated) the collapsed module form."""
+    out: set = set()
+    for k in known_composites:
+        if not isinstance(k, str):
+            continue
+        out.add(k)
+        if "." in k:
+            module, _, last = k.rpartition(".")
+            out.add(last)  # bare composite name
+            if module.rpartition(".")[2] == last:  # duplicated tail -> collapse
+                out.add(module)
+    return out
 
 
 def _composite_resolvable(name: str, known_composites: set, wp: WorkspacePaths) -> bool:
     if not name:
         return False
-    if name in known_composites:
+    if name in _composite_alias_set(known_composites):
         return True
-    if any(name == s or name.endswith("." + s) or name.endswith(s)
-           for s in _RESOLVABLE_SUFFIXES):
+    if any(name == s or name.endswith("." + s) for s in _RESOLVABLE_SUFFIXES):
         return True
     # file-discovered *.composite.yaml whose stem matches the composite name
     comp_dir = wp.composites
@@ -259,9 +342,19 @@ def _audit_study(audit, sdir, wp, known_slugs, known_composites, generator_param
     # --- L0 canonical-model-schema -----------------------------------------
     _check_model_schema(audit, spec)
 
+    # The L1 model checks reason over the CANONICALIZED model: a variant that
+    # omits `composite` legitimately inherits the baseline's, so resolvability /
+    # param validation must see the effective (post-canonicalization) model, not
+    # the raw one.
+    try:
+        canon = copy.deepcopy(spec)
+        canonicalize_models(canon)
+    except Exception:  # noqa: BLE001
+        canon = spec
+
     # --- L1 composite-resolves ---------------------------------------------
     unresolved = []
-    for label, model in _iter_models(spec):
+    for label, model in _iter_models(canon):
         comp = model.get("composite") if isinstance(model, dict) else None
         if not _composite_resolvable(comp, known_composites, wp):
             unresolved.append(f"{label}:{comp!r}")
@@ -274,18 +367,27 @@ def _audit_study(audit, sdir, wp, known_slugs, known_composites, generator_param
 
     # --- L1 params-are-generator-accepted ----------------------------------
     bad_params = []
-    for label, model in _iter_models(spec):
+    for label, model in _iter_models(canon):
         comp = model.get("composite") if isinstance(model, dict) else None
-        # skip when the composite is unresolved (already caught) or we have no
-        # declared parameter set for it.
+        # Skip when the composite is unresolved (already caught) or we have no
+        # declared parameter set for it. NOTE: file-discovered *.composite.yaml
+        # composites resolve (composite-resolves passes) but have no
+        # generator_params entry, so their params are intentionally NOT validated
+        # here — an accepted coverage gap.
         if comp not in generator_params:
             continue
         allowed = set(generator_params.get(comp) or set()) | {"n_steps"}
-        params = model.get("params") if isinstance(model, dict) else None
-        if isinstance(params, dict):
-            extra = set(params.keys()) - allowed
-            if extra:
-                bad_params.append(f"{label}: {sorted(extra)} not in {sorted(allowed)}")
+        # Read both the canonical `params` and the legacy `parameter_overrides`
+        # key (canonicalize_models only renames it for variants, never baseline),
+        # so a legacy key can't smuggle unknown params past validation.
+        declared: set = set()
+        for key in ("params", "parameter_overrides"):
+            block = model.get(key) if isinstance(model, dict) else None
+            if isinstance(block, dict):
+                declared |= set(block.keys())
+        extra = declared - allowed
+        if extra:
+            bad_params.append(f"{label}: {sorted(extra)} not in {sorted(allowed)}")
     if bad_params:
         audit.checks.append(CheckResult(
             "L1", "params-are-generator-accepted", FAIL, HARD,
@@ -390,7 +492,8 @@ def _check_report_card_verdict(audit, sdir: Path) -> None:
 
 def _dangling_inputs(spec: dict, known_slugs: set) -> set:
     out = set()
-    for e in (spec.get("inputs") or []):
+    inputs = spec.get("inputs")
+    for e in (inputs if isinstance(inputs, list) else []):
         if isinstance(e, dict):
             frm = e.get("from")
             if frm and str(frm) not in known_slugs:
@@ -410,13 +513,16 @@ def _check_model_schema(audit, spec: dict) -> None:
             f"canonicalization error: {exc}"))
         return
 
-    # A non-no-op structural change (top-level baseline/variants that needed
-    # moving, or a case requiring a human) means the on-disk form isn't canonical.
+    # A genuinely non-canonical on-disk form: top-level baseline/variants that
+    # needed moving into conditions, or a case flagged for a human. NOTE:
+    # composite inheritance (a variant omitting `composite`) and the
+    # model_settings auto-add are accepted no-op-ish normalizations — they do
+    # NOT make a study non-canonical, so `inherited_composites` is deliberately
+    # not a failure trigger here.
     bad_flags = {"multi_baseline_needs_human", "both_dropped_toplevel",
                  "both_dropped_toplevel_variants"}
     flags = set(report.get("flags") or [])
-    if report.get("inherited_composites") or (flags & bad_flags) \
-            or ("baseline" in spec) or ("variants" in spec):
+    if (flags & bad_flags) or ("baseline" in spec) or ("variants" in spec):
         audit.checks.append(CheckResult(
             "L0", "canonical-model-schema", FAIL, HARD,
             f"non-canonical model schema (flags={sorted(flags)})"))
@@ -497,7 +603,8 @@ def _study_inputs_from(wp: WorkspacePaths, slug: str) -> list[str]:
     if not isinstance(spec, dict):
         return []
     out = []
-    for e in (spec.get("inputs") or []):
+    inputs = spec.get("inputs")
+    for e in (inputs if isinstance(inputs, list) else []):
         if isinstance(e, dict) and e.get("from"):
             out.append(str(e["from"]))
     return out
@@ -574,13 +681,21 @@ def main(argv=None) -> int:
                     help="emit the report as JSON instead of a table")
     ap.add_argument("--gate", action="store_true",
                     help="exit non-zero if any hard-tier check fails (for CI)")
+    ap.add_argument("--package", action="append", dest="package", default=None,
+                    metavar="PKG",
+                    help="extra package to import for composite discovery "
+                         "(repeatable), e.g. --package v2ecoli.composites")
     args = ap.parse_args(argv)
 
-    report = audit_workspace(args.workspace)
-
     if args.json:
+        # Package-import side effects print to stdout during discovery; keep the
+        # real stdout pristine so the emitted JSON always parses. Redirect that
+        # noise to stderr while the report is built.
+        with contextlib.redirect_stdout(sys.stderr):
+            report = audit_workspace(args.workspace, extra_packages=args.package)
         print(json.dumps(report.as_dict()))
     else:
+        report = audit_workspace(args.workspace, extra_packages=args.package)
         print(render_report(report))
 
     if args.gate and report.hard_failures():
