@@ -196,6 +196,77 @@ def _param_drift_items(slug: str, spec: dict) -> list[dict]:
     return items
 
 
+def _provenance_status_runs(spec: dict, status: str) -> list[dict]:
+    """Runs in ``spec["runs"]`` whose ``provenance_status`` equals ``status``.
+
+    ``provenance_status`` is stamped by ``vivarium_workbench.lib.rerun`` (Task
+    3/5) onto a run's ``runs_meta`` row — pbg-superpowers cannot import
+    vivarium_workbench, so it is read the same way every other signal here
+    reads a run's fields: directly off the run dict as mechanically recorded
+    onto the study's ``runs:`` list (mirrors ``_run_applied_params``'s
+    dict-only access, no DB/vwb import)."""
+    out: list[dict] = []
+    for run in (spec.get("runs") or []):
+        if isinstance(run, dict) and run.get("provenance_status") == status:
+            out.append(run)
+    return out
+
+
+def _run_ref(run: dict) -> str:
+    return str(run.get("run_id") or run.get("name") or "")
+
+
+def _env_stale_items(slug: str, spec: dict) -> list[dict]:
+    """Runs reproduced under a DIFFERENT environment than their original
+    (reproducible-rerun-spine Task 5 / G3: ``provenance_status ==
+    'env_stale'``, stamped by ``rerun._flag_env_drift`` as a Reproduce
+    pre-check). A confirmed env drift makes the replay's result comparison
+    NOT like-for-like — a caution, not necessarily a bug.
+
+    Suppression is PER-RUN, not study-wide: a run is skipped only when its
+    own recorded ``env_id`` equals the study's declared ``pinned_env:`` —
+    i.e. THIS run's drift is the one the study owner explicitly accepted
+    (e.g. a deliberate package/toolchain upgrade). Mirrors vwb
+    ``rerun._flag_env_drift``'s own precise-match gate (it only suppresses
+    the stamp when ``pinned == orig_env``): a study that pinned one accepted
+    drift (env A -> B) must NOT also silently swallow an unrelated,
+    different drift (env B -> C) on another run."""
+    pinned = spec.get("pinned_env")
+    items: list[dict] = []
+    for run in _provenance_status_runs(spec, "env_stale"):
+        if pinned and run.get("env_id") == pinned:
+            continue  # THIS run's drift is the one accepted/pinned
+        ref = _run_ref(run)
+        items.append(_item(
+            "env_stale", "medium", slug, ref,
+            f"Run '{ref}' in study '{slug}' was reproduced under a different environment",
+            "provenance_status == 'env_stale' — this run's env_id differs from the "
+            "original run it reproduces; the result comparison is not like-for-like.",
+            "pin the environment (study.yaml pinned_env) or re-run under the original environment",
+        ))
+    return items
+
+
+def _nondeterministic_items(slug: str, spec: dict) -> list[dict]:
+    """Runs with a CONFIRMED reproduction mismatch under an IDENTICAL
+    environment + seed (reproducible-rerun-spine Task 3 / G4:
+    ``provenance_status == 'nondeterministic'``, stamped by
+    ``rerun.verify_reproduction``). Unlike ``env_stale`` this is not
+    suppressed by ``pinned_env`` — the environment matched; the run itself
+    failed to reproduce."""
+    items: list[dict] = []
+    for run in _provenance_status_runs(spec, "nondeterministic"):
+        ref = _run_ref(run)
+        items.append(_item(
+            "nondeterministic", "high", slug, ref,
+            f"Run '{ref}' in study '{slug}' failed to reproduce under an identical environment + seed",
+            "provenance_status == 'nondeterministic' — result_fingerprint differed "
+            "despite matching env_id and seed.",
+            "investigate nondeterminism (uncontrolled randomness, threading, I/O ordering)",
+        ))
+    return items
+
+
 def _stale_finding_items(slug: str, spec: dict) -> list[dict]:
     items: list[dict] = []
     for f in _stale_findings(spec):
@@ -438,6 +509,14 @@ def scan_investigation(
             pass
         try:
             items.extend(_invariant_regression_items(slug, spec))
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            items.extend(_env_stale_items(slug, spec))
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            items.extend(_nondeterministic_items(slug, spec))
         except Exception:  # noqa: BLE001
             pass
         if observables_for_ref is not None:

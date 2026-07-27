@@ -87,6 +87,112 @@ def test_record_is_idempotent(tmp_path: Path):
     assert (d / "study.yaml").read_text() == first
 
 
+# ---------------------------------------------------------------------------
+# reproducible-rerun-spine Task 5 fix — provenance_status/env_id must sync
+# from the DB row into the study.yaml run entry. The dashboard's runs.db
+# (vivarium_workbench.lib.composite_runs) and pbg's own writer share the
+# SAME sqlite file per study; `run_registry.list_runs` already does
+# `SELECT *`, so a vwb-migrated DB's provenance_status/env_id columns come
+# through in `db_row` for free — the gap was `_mechanical_record`/
+# `_MECHANICAL` silently dropping them before they reach study.yaml. Without
+# this, needs_attention's env_stale/nondeterministic signals can never fire
+# on a real workspace (they read study.yaml `runs:`, never the DB).
+# ---------------------------------------------------------------------------
+
+def _add_provenance_columns(db: Path, run_id: str, *, provenance_status=None, env_id=None):
+    """Simulate a runs.db already migrated by vwb's composite_runs.py (which
+    ALTERs in these nullable columns) — pbg's own DDL doesn't create them."""
+    import sqlite3
+    conn = sqlite3.connect(db)
+    try:
+        have = {r[1] for r in conn.execute("PRAGMA table_info(runs_meta)")}
+        if "provenance_status" not in have:
+            conn.execute("ALTER TABLE runs_meta ADD COLUMN provenance_status TEXT")
+        if "env_id" not in have:
+            conn.execute("ALTER TABLE runs_meta ADD COLUMN env_id TEXT")
+        conn.execute("UPDATE runs_meta SET provenance_status=?, env_id=? WHERE run_id=?",
+                     (provenance_status, env_id, run_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_record_syncs_provenance_status_and_env_id(tmp_path: Path):
+    d = _study(tmp_path, {"name": "s1", "runs": []})
+    db = d / "runs.db"
+    run_registry.register_run(db, "r1", spec_id="s1", status="completed",
+                              started_at="2026-01-01T00:00:00Z", completed_at="2026-01-01T00:01:00Z")
+    _add_provenance_columns(db, "r1", provenance_status="env_stale", env_id="env-b-hash")
+
+    summary = so.record_runs(d)
+    assert summary == {"added": 1, "updated": 0}
+    spec = study_io.load_yaml_mapping(d / "study.yaml")
+    by = {r["name"]: r for r in spec["runs"]}
+    assert by["r1"]["provenance_status"] == "env_stale"
+    assert by["r1"]["env_id"] == "env-b-hash"
+
+
+def test_record_updates_provenance_status_on_existing_run(tmp_path: Path):
+    """An already-synced run whose provenance_status changes (e.g. a later
+    verify_reproduction/env-drift check stamps it after the first sync) must
+    be picked up on the next record_runs call."""
+    d = _study(tmp_path, {"name": "s1", "runs": [
+        {"name": "r1", "status": "completed"},
+    ]})
+    db = d / "runs.db"
+    run_registry.register_run(db, "r1", spec_id="s1", status="completed",
+                              started_at="2026-01-01T00:00:00Z", completed_at="2026-01-01T00:01:00Z")
+    _add_provenance_columns(db, "r1", provenance_status="nondeterministic", env_id="env-a-hash")
+
+    summary = so.record_runs(d)
+    assert summary == {"added": 0, "updated": 1}
+    spec = study_io.load_yaml_mapping(d / "study.yaml")
+    by = {r["name"]: r for r in spec["runs"]}
+    assert by["r1"]["provenance_status"] == "nondeterministic"
+    assert by["r1"]["env_id"] == "env-a-hash"
+
+
+def test_record_omits_provenance_status_when_db_lacks_it(tmp_path: Path):
+    """Old workspaces / DBs that predate the provenance_status/env_id
+    columns must not break — best-effort, nullable: the fields are simply
+    absent from the synced run entry rather than written as null/None."""
+    d = _study(tmp_path, {"name": "s1", "runs": []})
+    db = d / "runs.db"
+    run_registry.register_run(db, "r1", spec_id="s1", status="completed",
+                              started_at="2026-01-01T00:00:00Z", completed_at="2026-01-01T00:01:00Z")
+    so.record_runs(d)
+    spec = study_io.load_yaml_mapping(d / "study.yaml")
+    by = {r["name"]: r for r in spec["runs"]}
+    assert "provenance_status" not in by["r1"]
+    assert "env_id" not in by["r1"]
+
+
+def test_env_stale_synced_run_surfaces_needs_attention(tmp_path: Path):
+    """End-to-end proof (the load-bearing gap this fix closes): a DB row
+    stamped env_stale, synced via record_runs into study.yaml, is picked up
+    by needs_attention.scan_investigation as an env_stale item."""
+    from viva_superpowers import needs_attention
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    study_io.save_yaml_atomic(root / "workspace.yaml", {"name": "ws", "package_path": "pbg_ws"})
+    inv_yaml = root / "investigations" / "inv" / "investigation.yaml"
+    inv_yaml.parent.mkdir(parents=True, exist_ok=True)
+    study_io.save_yaml_atomic(inv_yaml, {"name": "inv", "studies": ["s1"]})
+    d = root / "studies" / "s1"
+    d.mkdir(parents=True)
+    study_io.save_yaml_atomic(d / "study.yaml", {"name": "s1", "runs": []})
+    db = d / "runs.db"
+    run_registry.register_run(db, "r1", spec_id="s1", status="completed",
+                              started_at="2026-01-01T00:00:00Z", completed_at="2026-01-01T00:01:00Z")
+    _add_provenance_columns(db, "r1", provenance_status="env_stale", env_id="env-b-hash")
+
+    so.record_runs(d)
+    res = needs_attention.scan_investigation(root, "inv")
+    stale = [i for i in res["items"] if i["kind"] == "env_stale"]
+    assert stale and stale[0]["study"] == "s1" and stale[0]["ref"] == "r1"
+
+
 def test_record_preserves_comments(tmp_path: Path):
     """record_runs must not strip YAML comments or reflow hand-authored content."""
     d = tmp_path / "studies" / "s_comments"
