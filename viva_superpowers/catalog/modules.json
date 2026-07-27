@@ -97,19 +97,6 @@
     }
   },
   {
-    "name": "pbg-cellpack",
-    "display_name": "viva-cellpack",
-    "description": "Process-bigraph wrapper for cellPACK \u2014 mesoscale molecular packing (recipes \u2192 3D molecular assemblies)",
-    "source": "https://github.com/vivarium-collective/pbg-cellpack.git",
-    "ref": "main",
-    "package": "pbg_cellpack",
-    "homepage": "https://github.com/vivarium-collective/pbg-cellpack",
-    "tags": [
-      "mesoscale",
-      "structure"
-    ]
-  },
-  {
     "name": "pbg-comets",
     "display_name": "viva-comets",
     "description": "Process-bigraph wrapper for COMETS (dynamic FBA + 2D spatial microbial ecosystems)",
