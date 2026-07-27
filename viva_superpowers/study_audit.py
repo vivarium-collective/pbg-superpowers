@@ -303,6 +303,90 @@ def _audit_study(audit, sdir, wp, known_slugs, known_composites, generator_param
     else:
         audit.checks.append(CheckResult("L1", "inputs-from-resolves", PASS, HARD))
 
+    # --- L2 node-keyable (soft) --------------------------------------------
+    # Content-addressable iff the composite resolves AND every inputs[].from
+    # producer resolves — then an artifact_id could be formed. Reuse L1 results.
+    composite_ok = _status_of(audit, "composite-resolves") == PASS
+    inputs_ok = _status_of(audit, "inputs-from-resolves") == PASS
+    if composite_ok and inputs_ok:
+        audit.checks.append(CheckResult("L2", "node-keyable", PASS, SOFT))
+    else:
+        reason = []
+        if not composite_ok:
+            reason.append("composite unresolved")
+        if not inputs_ok:
+            reason.append("input producer unresolved")
+        audit.checks.append(CheckResult(
+            "L2", "node-keyable", WARN, SOFT,
+            "not content-addressable: " + ", ".join(reason)))
+
+    # --- L3 outputs-present (soft) -----------------------------------------
+    _check_outputs_present(audit, sdir, spec)
+
+    # --- L4 report-card-verdict (soft) -------------------------------------
+    _check_report_card_verdict(audit, sdir)
+
+
+def _status_of(audit, name) -> str | None:
+    for c in audit.checks:
+        if c.name == name:
+            return c.status
+    return None
+
+
+def _declares_outputs(spec: dict) -> bool:
+    for key in ("visualizations", "report_cards", "observables"):
+        val = spec.get(key)
+        if isinstance(val, (list, dict)) and len(val) > 0:
+            return True
+    return False
+
+
+def _report_card_dir(sdir: Path) -> Path:
+    return sdir / "viz" / "report_card"
+
+
+def _check_outputs_present(audit, sdir: Path, spec: dict) -> None:
+    if not _declares_outputs(spec):
+        audit.checks.append(CheckResult("L3", "outputs-present", PASS, SOFT))
+        return
+    viz = sdir / "viz"
+    html = list(viz.glob("**/*.html")) if viz.is_dir() else []
+    rc = _report_card_dir(sdir)
+    cards = list(rc.glob("*.html")) if rc.is_dir() else []
+    if html or cards:
+        audit.checks.append(CheckResult("L3", "outputs-present", PASS, SOFT))
+    else:
+        audit.checks.append(CheckResult(
+            "L3", "outputs-present", WARN, SOFT,
+            "declares observables/report cards but viz/ has no rendered output"))
+
+
+def _check_report_card_verdict(audit, sdir: Path) -> None:
+    rc = _report_card_dir(sdir)
+    cards = sorted(rc.glob("*.html")) if rc.is_dir() else []
+    if not cards:
+        audit.checks.append(CheckResult("L4", "report-card-verdict", PASS, SOFT))
+        return
+    missing = []
+    for card in cards:
+        verdict = card.with_name(card.name[: -len(".html")] + ".verdict.json")
+        ok = False
+        if verdict.is_file():
+            try:
+                data = json.loads(verdict.read_text(encoding="utf-8"))
+                ok = isinstance(data, dict) and bool(data.get("overall"))
+            except Exception:  # noqa: BLE001
+                ok = False
+        if not ok:
+            missing.append(card.name)
+    if missing:
+        audit.checks.append(CheckResult(
+            "L4", "report-card-verdict", WARN, SOFT,
+            "cards without a computed verdict: " + ", ".join(missing)))
+    else:
+        audit.checks.append(CheckResult("L4", "report-card-verdict", PASS, SOFT))
+
 
 def _dangling_inputs(spec: dict, known_slugs: set) -> set:
     out = set()
@@ -372,12 +456,89 @@ def _audit_investigation(audit, idir, wp, known_slugs):
         audit.checks.append(CheckResult(
             "L0", "investigation-members-only", FAIL, HARD,
             "top-level YAML is not a mapping"))
-    elif "studies" in spec and "members" not in spec:
+        return
+    if "studies" in spec and "members" not in spec:
         audit.checks.append(CheckResult(
             "L0", "investigation-members-only", WARN, HARD,
             "carries legacy `studies:` key; rename to `members:`"))
     else:
         audit.checks.append(CheckResult("L0", "investigation-members-only", PASS, HARD))
+
+    # --- L5 ordering over the members inputs[].from DAG --------------------
+    _audit_investigation_dag(audit, spec, wp, known_slugs)
+
+
+def _member_slugs(spec: dict) -> list[str]:
+    """Normalize members entries: bare slugs or {study|slug|name: ...} dicts.
+    Falls back to the legacy `studies:` key."""
+    entries = spec.get("members")
+    if not isinstance(entries, list):
+        entries = spec.get("studies") or []
+    if not isinstance(entries, list):
+        return []
+    out = []
+    for e in entries:
+        if isinstance(e, str):
+            out.append(e)
+        elif isinstance(e, dict):
+            slug = e.get("study") or e.get("slug") or e.get("name")
+            if slug:
+                out.append(str(slug))
+    return out
+
+
+def _study_inputs_from(wp: WorkspacePaths, slug: str) -> list[str]:
+    """The inputs[].from producer slugs declared by study ``slug`` (best-effort)."""
+    try:
+        sdir = wp.study_dir(slug)
+        spec = study_io.load_yaml(sdir / "study.yaml")
+    except Exception:  # noqa: BLE001
+        return []
+    if not isinstance(spec, dict):
+        return []
+    out = []
+    for e in (spec.get("inputs") or []):
+        if isinstance(e, dict) and e.get("from"):
+            out.append(str(e["from"]))
+    return out
+
+
+def _audit_investigation_dag(audit, spec, wp, known_slugs):
+    members = _member_slugs(spec)
+    # Build producer -> consumer edges over members + implicit upstream producers.
+    graph: dict[str, set] = {}
+    dangling = set()
+    for m in members:
+        graph.setdefault(m, set())
+        for producer in _study_inputs_from(wp, m):
+            graph.setdefault(producer, set())
+            graph[m].add(producer)
+            if producer not in known_slugs:
+                dangling.add(producer)
+
+    # --- no-dangling-edges (hard) ------------------------------------------
+    if dangling:
+        audit.checks.append(CheckResult(
+            "L5", "no-dangling-edges", FAIL, HARD,
+            "member inputs[].from name non-existent studies: "
+            + ", ".join(sorted(dangling))))
+    else:
+        audit.checks.append(CheckResult("L5", "no-dangling-edges", PASS, HARD))
+
+    # --- dag-acyclic (hard) + topological-executable (soft) ----------------
+    try:
+        ts = graphlib.TopologicalSorter(graph)
+        order = list(ts.static_order())
+        audit.checks.append(CheckResult("L5", "dag-acyclic", PASS, HARD))
+        audit.checks.append(CheckResult(
+            "L5", "topological-executable", PASS, SOFT,
+            "order: " + " -> ".join(order)))
+    except graphlib.CycleError as exc:
+        audit.checks.append(CheckResult(
+            "L5", "dag-acyclic", FAIL, HARD, f"cycle in inputs[].from DAG: {exc.args}"))
+        audit.checks.append(CheckResult(
+            "L5", "topological-executable", WARN, SOFT,
+            "execution order not derivable (DAG invalid)"))
 
 
 def main(argv=None) -> int:  # pragma: no cover — implemented in Task 4

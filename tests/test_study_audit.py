@@ -197,3 +197,117 @@ def test_legacy_studies_key_warns(tmp_path):
     (a,) = [x for x in report.investigations if x.slug == "inv"]
     c = _find(a, "investigation-members-only")
     assert c.status == "warn"
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — L2/L3/L4 (SOFT) + L5 Ordering (per investigation)
+# ---------------------------------------------------------------------------
+
+def _inv(tmp_path, slug, text):
+    d = tmp_path / "investigations" / slug
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "investigation.yaml").write_text(text, encoding="utf-8")
+    return d
+
+
+def test_l2_node_keyable_pass_and_warn(tmp_path):
+    _ws(tmp_path)
+    # resolvable composite, no inputs -> keyable
+    _study(tmp_path, "s1", _GOOD_STUDY)
+    # resolvable composite but a dangling input -> not keyable
+    _study(tmp_path, "s2",
+           "name: s2\nconditions:\n  baseline:\n    composite: pkg.good\n  model_settings: []\n"
+           "inputs:\n  - artifact: x\n    from: nope\n")
+    report = _audit(tmp_path)
+    a1 = next(x for x in report.studies if x.slug == "s1")
+    a2 = next(x for x in report.studies if x.slug == "s2")
+    c1 = _find(a1, "node-keyable")
+    c2 = _find(a2, "node-keyable")
+    assert c1.status == "pass" and c1.tier == "soft"
+    assert c2.status == "warn" and c2.tier == "soft"
+
+
+def test_l3_outputs_present_warn_when_declared_but_absent(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1", _GOOD_STUDY + "visualizations:\n  - name: fig1\n")
+    report = _audit(tmp_path)
+    a = next(x for x in report.studies if x.slug == "s1")
+    c = _find(a, "outputs-present")
+    assert c.status == "warn" and c.tier == "soft"
+
+
+def test_l3_l4_pass_with_card_and_verdict(tmp_path):
+    _ws(tmp_path)
+    sdir = _study(tmp_path, "s1", _GOOD_STUDY + "visualizations:\n  - name: fig1\n")
+    rc = sdir / "viz" / "report_card"
+    rc.mkdir(parents=True)
+    (rc / "x.html").write_text("<html></html>", encoding="utf-8")
+    (rc / "x.verdict.json").write_text(json.dumps({"overall": "pass"}), encoding="utf-8")
+    report = _audit(tmp_path)
+    a = next(x for x in report.studies if x.slug == "s1")
+    assert _find(a, "outputs-present").status == "pass"
+    assert _find(a, "report-card-verdict").status == "pass"
+
+
+def test_l4_warn_when_card_lacks_verdict(tmp_path):
+    _ws(tmp_path)
+    sdir = _study(tmp_path, "s1", _GOOD_STUDY)
+    rc = sdir / "viz" / "report_card"
+    rc.mkdir(parents=True)
+    (rc / "x.html").write_text("<html></html>", encoding="utf-8")
+    report = _audit(tmp_path)
+    a = next(x for x in report.studies if x.slug == "s1")
+    c = _find(a, "report-card-verdict")
+    assert c.status == "warn" and c.tier == "soft"
+
+
+def test_l4_pass_when_no_cards(tmp_path):
+    _ws(tmp_path)
+    _study(tmp_path, "s1", _GOOD_STUDY)
+    report = _audit(tmp_path)
+    a = next(x for x in report.studies if x.slug == "s1")
+    assert _find(a, "report-card-verdict").status == "pass"
+
+
+def _study_with_input(tmp_path, slug, producer=None):
+    text = f"name: {slug}\nconditions:\n  baseline:\n    composite: pkg.good\n  model_settings: []\n"
+    if producer is not None:
+        text += f"inputs:\n  - artifact: {producer}\n    from: {producer}\n"
+    _study(tmp_path, slug, text)
+
+
+def test_l5_dag_acyclic_and_order(tmp_path):
+    _ws(tmp_path)
+    _study_with_input(tmp_path, "a")
+    _study_with_input(tmp_path, "b", producer="a")
+    _inv(tmp_path, "inv", "name: inv\nmembers:\n  - a\n  - b\n")
+    report = _audit(tmp_path)
+    a = next(x for x in report.investigations if x.slug == "inv")
+    assert _find(a, "dag-acyclic").status == "pass"
+    assert _find(a, "no-dangling-edges").status == "pass"
+    topo = _find(a, "topological-executable")
+    assert topo.status == "pass" and topo.tier == "soft"
+    assert topo.detail.index("a") < topo.detail.index("b")
+
+
+def test_l5_cycle_fails_hard(tmp_path):
+    _ws(tmp_path)
+    _study_with_input(tmp_path, "a", producer="b")
+    _study_with_input(tmp_path, "b", producer="a")
+    _inv(tmp_path, "inv", "name: inv\nmembers:\n  - a\n  - b\n")
+    report = _audit(tmp_path)
+    a = next(x for x in report.investigations if x.slug == "inv")
+    c = _find(a, "dag-acyclic")
+    assert c.status == "fail" and c.tier == "hard"
+    assert (a.slug, c) in report.hard_failures()
+
+
+def test_l5_dangling_member_edge_fails_hard(tmp_path):
+    _ws(tmp_path)
+    _study_with_input(tmp_path, "a")
+    _study_with_input(tmp_path, "b", producer="ghost")
+    _inv(tmp_path, "inv", "name: inv\nmembers:\n  - a\n  - b\n")
+    report = _audit(tmp_path)
+    a = next(x for x in report.investigations if x.slug == "inv")
+    c = _find(a, "no-dangling-edges")
+    assert c.status == "fail" and c.tier == "hard"
