@@ -2,23 +2,23 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prove a new heavy-mode output model for `viva-expert` — processes + `@composite_generator` composites + one showcase **investigation with studies** + a **published read-only workbench** (replacing the standalone HTML report) — by wrapping real FEniCSx end-to-end in `pbg-fenics/`, then codify the recipe into `viva-expert/SKILL.md` and the `viva_superpowers` tooling.
+**Goal:** Prove a new heavy-mode output model for `viva-expert` — processes + `@composite_generator` composites + one showcase **investigation with studies** + a **published read-only workbench** (replacing the standalone HTML report) — by wrapping real FEniCSx end-to-end in `viva-fenics/`, then codify the recipe into `viva-expert/SKILL.md` and the `viva_superpowers` tooling.
 
-**Architecture:** `pbg-fenics/` is a pixi-managed conda env (real `fenics-dolfinx`) that also holds the pbg/dashboard stack. FEM solvers are wrapped as PBG `Process`/`Step` classes with additive `array[float]` field ports; composites are `@composite_generator` functions; a `fenics-showcase` investigation binds 7 studies that run into `runs.db` and render interactive Plotly/Three.js viz; `vivarium-workbench-publish` exports a static read-only bundle. Then the skill + scaffolder are updated to make this the default terminus.
+**Architecture:** `viva-fenics/` is a pixi-managed conda env (real `fenics-dolfinx`) that also holds the pbg/dashboard stack. FEM solvers are wrapped as PBG `Process`/`Step` classes with additive `array[float]` field ports; composites are `@composite_generator` functions; a `fenics-showcase` investigation binds 7 studies that run into `runs.db` and render interactive Plotly/Three.js viz; `vivarium-workbench-publish` exports a static read-only bundle. Then the skill + scaffolder are updated to make this the default terminus.
 
 **Tech Stack:** FEniCSx (dolfinx, ufl, basix, petsc4py), gmsh, mpich; process-bigraph, bigraph-schema, bigraph-viz2; vivarium-workbench; pixi; Plotly.js + Three.js; pytest.
 
 ## Global Constraints
 
-- **Workspace root for the wrapper:** `/Users/eranagmon/code/pbg-fenics` (fresh `git init` repo; no worktree needed — brand new).
+- **Workspace root for the wrapper:** `/Users/eranagmon/code/viva-fenics` (fresh `git init` repo; no worktree needed — brand new).
 - **Skill/scaffolder work happens in the worktree:** `/Users/eranagmon/code/pbg-superpowers--viva-expert-investigation` on branch `viva-expert-investigation-workbench`. Never commit skill changes in the shared `~/code/pbg-superpowers` checkout.
 - **Real tool only** — no mock/reproduction of FEniCS. If an advanced study is genuinely intractable in-env, ship a guarded process that raises a clear requirement and surface it; do not silently downgrade.
-- **Env manager:** pixi (`pixi.toml`/`pixi.lock`), channels `["conda-forge"]`, platform `osx-arm64`, `python=3.12`. All commands run via `pixi run <cmd>` from `pbg-fenics/`.
+- **Env manager:** pixi (`pixi.toml`/`pixi.lock`), channels `["conda-forge"]`, platform `osx-arm64`, `python=3.12`. All commands run via `pixi run <cmd>` from `viva-fenics/`.
 - **Ports:** bare types with additive `apply` (`float`, `array[float]`, `map[string,float]`); `overwrite[T]` only for genuine setpoints/sensors (Port-Design rules). Field state is `array[float]` (additive) so Diffusion ⊕ Reaction compose.
-- **Discovery:** process classes inherit `process_bigraph.Process`/`Step`; `pbg_fenics/__init__.py` re-exports via `__all__`; `pyproject.toml` lists `bigraph-schema` + `process-bigraph`; no manual `register_link` for installed classes.
+- **Discovery:** process classes inherit `process_bigraph.Process`/`Step`; `viva_fenics/__init__.py` re-exports via `__all__`; `pyproject.toml` lists `bigraph-schema` + `process-bigraph`; no manual `register_link` for installed classes.
 - **Composites:** every generator is `@composite_generator`-decorated with first positional `core=None`, keyword-only params matching `parameters=`, `local:RAMEmitter` (PascalCase). `composites/__init__.py` imports each submodule for side effects.
 - **Emitter alias:** `local:RAMEmitter` (not `local:ram-emitter`).
-- **Publish base-path:** `/pbg-fenics/dashboard`. Output bundle: `reports/published/dashboard/`.
+- **Publish base-path:** `/viva-fenics/dashboard`. Output bundle: `reports/published/dashboard/`.
 - **Commits:** local only. NO push / gh-pages deploy until the user explicitly approves. Commit messages end with `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 - **Before every commit:** `git branch --show-current` + `git rev-parse --short HEAD` sanity check in the worktree tasks.
 
@@ -26,19 +26,19 @@
 
 ## File Structure
 
-**`pbg-fenics/` (new repo):**
+**`viva-fenics/` (new repo):**
 - `pixi.toml`, `pixi.lock` — conda env (dolfinx + gmsh + pbg/dashboard via pip).
-- `pyproject.toml` — `pbg_fenics` package metadata + discovery deps.
-- `pbg_fenics/__init__.py` — re-export processes + generators.
-- `pbg_fenics/fem.py` — dolfinx helpers (mesh build, function space, assemble/solve, node-array ↔ dolfinx Function conversion). Single home for the validated dolfinx API.
-- `pbg_fenics/types.py` — `register_types(core)` for `fem_field` (optional).
-- `pbg_fenics/processes/poisson.py` — `PoissonSolverStep`.
-- `pbg_fenics/processes/diffusion.py` — `DiffusionProcess`.
-- `pbg_fenics/processes/reaction.py` — `LogisticReactionProcess`.
-- `pbg_fenics/processes/flow.py` — `NavierStokesProcess`.
-- `pbg_fenics/processes/moving_boundary.py` — `MovingBoundaryProcess`.
-- `pbg_fenics/composites/{__init__,poisson,diffusion,reaction_diffusion,convergence,flow,moving_boundary,complex_geometry}.py`.
-- `pbg_fenics/viz.py` — shared interactive-viz helpers (Plotly field heatmap/animation, Three.js 3D mesh) built under the `dataviz` skill.
+- `pyproject.toml` — `viva_fenics` package metadata + discovery deps.
+- `viva_fenics/__init__.py` — re-export processes + generators.
+- `viva_fenics/fem.py` — dolfinx helpers (mesh build, function space, assemble/solve, node-array ↔ dolfinx Function conversion). Single home for the validated dolfinx API.
+- `viva_fenics/types.py` — `register_types(core)` for `fem_field` (optional).
+- `viva_fenics/processes/poisson.py` — `PoissonSolverStep`.
+- `viva_fenics/processes/diffusion.py` — `DiffusionProcess`.
+- `viva_fenics/processes/reaction.py` — `LogisticReactionProcess`.
+- `viva_fenics/processes/flow.py` — `NavierStokesProcess`.
+- `viva_fenics/processes/moving_boundary.py` — `MovingBoundaryProcess`.
+- `viva_fenics/composites/{__init__,poisson,diffusion,reaction_diffusion,convergence,flow,moving_boundary,complex_geometry}.py`.
+- `viva_fenics/viz.py` — shared interactive-viz helpers (Plotly field heatmap/animation, Three.js 3D mesh) built under the `dataviz` skill.
 - `tests/test_*.py` — one per process/composite + discovery + coupling.
 - `investigations/fenics-showcase/investigation.yaml` + `studies/<slug>/study.yaml` (7) + per-study `canonical_runs` scripts under `studies/<slug>/sims/`.
 - `workspace.yaml`, `scripts/publish_dashboard.sh`, `.github/workflows/publish-dashboard.yml`, `scripts/lint-workspace.py`.
@@ -53,24 +53,24 @@
 
 ---
 
-## Task 0: `pbg-fenics` repo + pixi env + dolfinx API spike
+## Task 0: `viva-fenics` repo + pixi env + dolfinx API spike
 
 **Files:**
-- Create: `pbg-fenics/pixi.toml`, `pbg-fenics/.gitignore`, `pbg-fenics/pyproject.toml`, `pbg-fenics/pbg_fenics/__init__.py`, `pbg-fenics/scratch/spike_poisson.py`
+- Create: `viva-fenics/pixi.toml`, `viva-fenics/.gitignore`, `viva-fenics/pyproject.toml`, `viva-fenics/viva_fenics/__init__.py`, `viva-fenics/scratch/spike_poisson.py`
 
 **Interfaces:**
-- Produces: a working `pixi run python` with `dolfinx`, `ufl`, `gmsh`, `process_bigraph`, `bigraph_schema`, `vivarium_workbench` importable; a validated minimal Poisson solve documenting the **exact dolfinx API** (module paths, `functionspace` vs `FunctionSpace`, `LinearProblem` location, PETSc options) that all later tasks reuse via `pbg_fenics/fem.py`.
+- Produces: a working `pixi run python` with `dolfinx`, `ufl`, `gmsh`, `process_bigraph`, `bigraph_schema`, `vivarium_workbench` importable; a validated minimal Poisson solve documenting the **exact dolfinx API** (module paths, `functionspace` vs `FunctionSpace`, `LinearProblem` location, PETSc options) that all later tasks reuse via `viva_fenics/fem.py`.
 
 - [ ] **Step 1: Scaffold repo + pixi.toml**
 
 ```bash
-mkdir -p /Users/eranagmon/code/pbg-fenics && cd /Users/eranagmon/code/pbg-fenics && git init
+mkdir -p /Users/eranagmon/code/viva-fenics && cd /Users/eranagmon/code/viva-fenics && git init
 ```
 
 `pixi.toml`:
 ```toml
 [workspace]
-name = "pbg-fenics"
+name = "viva-fenics"
 authors = ["Eran <agmon.eran@gmail.com>"]
 channels = ["conda-forge"]
 platforms = ["osx-arm64"]
@@ -92,7 +92,7 @@ bigraph-viz2 = "*"
 vivarium-workbench = "*"
 plotly = "*"
 pytest = "*"
-pbg-fenics = { path = ".", editable = true }
+viva-fenics = { path = ".", editable = true }
 ```
 
 `.gitignore`:
@@ -114,7 +114,7 @@ scratch/*.png
 
 - [ ] **Step 2: Install env**
 
-Run: `cd /Users/eranagmon/code/pbg-fenics && pixi install`
+Run: `cd /Users/eranagmon/code/viva-fenics && pixi install`
 Expected: solves and creates `.pixi/`. If solve fails on `python-gmsh`, drop it and use `gmsh` python bindings directly; re-run.
 
 - [ ] **Step 3: Verify imports**
@@ -169,9 +169,9 @@ Expected: `L2 error:` ~1e-14. **If any API name differs in the installed version
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/eranagmon/code/pbg-fenics
-git add pixi.toml pixi.lock .gitignore pyproject.toml pbg_fenics/__init__.py scratch/spike_poisson.py
-git commit -m "chore: pbg-fenics pixi env + dolfinx Poisson spike (real dolfinx validated)
+cd /Users/eranagmon/code/viva-fenics
+git add pixi.toml pixi.lock .gitignore pyproject.toml viva_fenics/__init__.py scratch/spike_poisson.py
+git commit -m "chore: viva-fenics pixi env + dolfinx Poisson spike (real dolfinx validated)
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -183,7 +183,7 @@ requires = ["hatchling>=1.18"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pbg-fenics"
+name = "viva-fenics"
 version = "0.1.0"
 description = "Process-bigraph wrapper for FEniCSx (dolfinx)"
 readme = "README.md"
@@ -191,7 +191,7 @@ requires-python = ">=3.12"
 dependencies = ["bigraph-schema>=0.0.60", "process-bigraph>=0.0.66"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["pbg_fenics"]
+packages = ["viva_fenics"]
 ```
 
 ---
@@ -199,7 +199,7 @@ packages = ["pbg_fenics"]
 ## Task 1: `fem.py` helpers + field type
 
 **Files:**
-- Create: `pbg_fenics/fem.py`, `pbg_fenics/types.py`, `tests/test_fem.py`
+- Create: `viva_fenics/fem.py`, `viva_fenics/types.py`, `tests/test_fem.py`
 
 **Interfaces:**
 - Produces:
@@ -212,7 +212,7 @@ packages = ["pbg_fenics"]
 - [ ] **Step 1: Write failing test** `tests/test_fem.py`:
 ```python
 import numpy as np
-from pbg_fenics import fem
+from viva_fenics import fem
 
 def test_poisson_mms_converges():
     domain, V = fem.build_mesh("unit_square", 16, degree=2)
@@ -239,8 +239,8 @@ def test_poisson_mms_converges():
 ## Task 2: `PoissonSolverStep` + `poisson_baseline` composite
 
 **Files:**
-- Create: `pbg_fenics/processes/poisson.py`, `pbg_fenics/composites/__init__.py`, `pbg_fenics/composites/poisson.py`, `tests/test_poisson.py`
-- Modify: `pbg_fenics/__init__.py`
+- Create: `viva_fenics/processes/poisson.py`, `viva_fenics/composites/__init__.py`, `viva_fenics/composites/poisson.py`, `tests/test_poisson.py`
+- Modify: `viva_fenics/__init__.py`
 
 **Interfaces:**
 - Consumes: `fem.build_mesh/solve_poisson/l2_error`.
@@ -249,7 +249,7 @@ def test_poisson_mms_converges():
 - [ ] **Step 1: Failing test** `tests/test_poisson.py`:
 ```python
 from process_bigraph import Process, Step, allocate_core
-from pbg_fenics.processes.poisson import PoissonSolverStep
+from viva_fenics.processes.poisson import PoissonSolverStep
 
 def test_poisson_step_update():
     core = allocate_core()
@@ -272,7 +272,7 @@ def test_poisson_generator_registered():
 
 ## Task 3: `DiffusionProcess` + `transient_diffusion` composite
 
-**Files:** Create `pbg_fenics/processes/diffusion.py`, `pbg_fenics/composites/diffusion.py`, `tests/test_diffusion.py`; Modify `composites/__init__.py`, `__init__.py`.
+**Files:** Create `viva_fenics/processes/diffusion.py`, `viva_fenics/composites/diffusion.py`, `tests/test_diffusion.py`; Modify `composites/__init__.py`, `__init__.py`.
 
 **Interfaces:**
 - Produces: `DiffusionProcess(Process)`, `config_schema={resolution:int=32, degree:int=1, D:float=0.1, dt:float=0.01, initial:string="gaussian"}`; `inputs()={"source":"array[float]"}` (additive nodal source a sibling can write); `outputs()={"solution":"array[float]","integral":"float"}`; `initial_state()` returns a gaussian bump array; `update(state, interval)` does backward-Euler diffusion steps over `interval` using real dolfinx (bilinear `(u v + dt·D·∇u·∇v)dx`, RHS `(u_n + dt·source) v dx`) and returns the **delta** field (`new - prev`) so the `array[float]` store accumulates. Generator `transient_diffusion(core=None,*,resolution=32,D=0.1,dt=0.01)`.
@@ -280,7 +280,7 @@ def test_poisson_generator_registered():
 - [ ] **Step 1: Failing test:**
 ```python
 from process_bigraph import allocate_core
-from pbg_fenics.processes.diffusion import DiffusionProcess
+from viva_fenics.processes.diffusion import DiffusionProcess
 import numpy as np
 
 def test_diffusion_mass_and_smoothing():
@@ -300,7 +300,7 @@ def test_diffusion_mass_and_smoothing():
 
 ## Task 4: `LogisticReactionProcess` + `reaction_diffusion` coupling composite
 
-**Files:** Create `pbg_fenics/processes/reaction.py`, `pbg_fenics/composites/reaction_diffusion.py`, `tests/test_reaction_diffusion.py`; Modify `composites/__init__.py`, `__init__.py`.
+**Files:** Create `viva_fenics/processes/reaction.py`, `viva_fenics/composites/reaction_diffusion.py`, `tests/test_reaction_diffusion.py`; Modify `composites/__init__.py`, `__init__.py`.
 
 **Interfaces:**
 - Produces: `LogisticReactionProcess(Process)`, pure-numpy, `config_schema={r:float=1.0, K:float=1.0}`; `inputs()={"solution":"array[float]"}`; `outputs()={"source":"array[float]"}`; `update(state, interval)` returns `r·u·(1 - u/K)·interval` as the `source` delta. Generator `reaction_diffusion(core=None,*,resolution=32,D=0.05,r=1.0,dt=0.01)` wiring **DiffusionProcess.source ← shared `source` store ← LogisticReactionProcess.source** and **both read shared `field` store** → Fisher-KPP by composition.
@@ -308,7 +308,7 @@ def test_diffusion_mass_and_smoothing():
 - [ ] **Step 1: Failing test** — build the composite, run a few steps, assert the field develops a growing/advancing front (max increases toward K where diffusion spreads it):
 ```python
 from process_bigraph import Composite, allocate_core, gather_emitter_results
-from pbg_fenics.composites.reaction_diffusion import reaction_diffusion
+from viva_fenics.composites.reaction_diffusion import reaction_diffusion
 
 def test_fisher_kpp_front_grows():
     core = allocate_core()
@@ -326,7 +326,7 @@ def test_fisher_kpp_front_grows():
 
 ## Task 5: `mesh_convergence` composite + convergence test
 
-**Files:** Create `pbg_fenics/composites/convergence.py`, `tests/test_convergence.py`; Modify `composites/__init__.py`.
+**Files:** Create `viva_fenics/composites/convergence.py`, `tests/test_convergence.py`; Modify `composites/__init__.py`.
 
 **Interfaces:**
 - Produces: `mesh_convergence(core=None,*,resolution=16,degree=1)` — a composite wrapping `PoissonSolverStep` at a given resolution (its `l2_error` is the readout). The convergence *sweep* is expressed as study variants over `resolution`.
@@ -335,7 +335,7 @@ def test_fisher_kpp_front_grows():
 ```python
 import numpy as np
 from process_bigraph import allocate_core
-from pbg_fenics.processes.poisson import PoissonSolverStep
+from viva_fenics.processes.poisson import PoissonSolverStep
 
 def test_convergence_rate():
     core = allocate_core()
@@ -354,7 +354,7 @@ def test_convergence_rate():
 
 ## Task 6: Interactive viz helpers
 
-**Files:** Create `pbg_fenics/viz.py`, `tests/test_viz.py`.
+**Files:** Create `viva_fenics/viz.py`, `tests/test_viz.py`.
 
 **Interfaces:**
 - Produces (build under the **dataviz** skill — invoke it before writing chart code):
@@ -368,7 +368,7 @@ def test_convergence_rate():
 - [ ] **Step 1: Failing test** — assert each returns non-empty HTML containing the expected library tag and a data payload:
 ```python
 import numpy as np
-from pbg_fenics import viz
+from viva_fenics import viz
 
 def test_field_heatmap_html():
     html = viz.field_heatmap_html(np.random.rand(20,2), np.random.rand(20), "t")
@@ -386,15 +386,15 @@ def test_convergence_loglog_html():
 
 ## Task 7: Workspace promotion + `fenics-showcase` investigation (core studies)
 
-**Files:** Create `pbg-fenics/workspace.yaml`, `investigations/fenics-showcase/investigation.yaml`, `investigations/fenics-showcase/studies/{poisson-validation,mesh-convergence,transient-diffusion,reaction-diffusion}/study.yaml` + `sims/run.py` each; `scripts/lint-workspace.py`.
+**Files:** Create `viva-fenics/workspace.yaml`, `investigations/fenics-showcase/investigation.yaml`, `investigations/fenics-showcase/studies/{poisson-validation,mesh-convergence,transient-diffusion,reaction-diffusion}/study.yaml` + `sims/run.py` each; `scripts/lint-workspace.py`.
 
 **Interfaces:**
 - Consumes: the 5 core generators (`poisson_baseline`, `mesh_convergence`, `transient_diffusion`, `reaction_diffusion`) by registry id.
 - Produces: a lint-clean workspace with an investigation binding the 4 core studies, each with `baseline[].composite` = real generator id, `expected_behavior`, `behavior_tests`, `parent_studies` DAG, `canonical_runs:[{name,script:sims/run.py,default:true}]`, and `visualizations`.
 
-- [ ] **Step 1:** `pixi run python -m viva_superpowers.scaffold workspace --in-place --name fenics --target . --package pbg_fenics --branch main` then `viva_superpowers.workspace_catalog add --path "$(pwd)" --name fenics --package pbg_fenics`.
+- [ ] **Step 1:** `pixi run python -m viva_superpowers.scaffold workspace --in-place --name fenics --target . --package viva_fenics --branch main` then `viva_superpowers.workspace_catalog add --path "$(pwd)" --name fenics --package viva_fenics`.
 - [ ] **Step 2:** Hand-author `investigation.yaml` (schema_version 2) with `executive`/`scientific_argument` spine, `studies: [poisson-validation, mesh-convergence, transient-diffusion, reaction-diffusion]`, `acceptance_criteria` linking each study to a `behavior` name.
-- [ ] **Step 3:** Author each `study.yaml` (baseline composite id, `expected_behavior[].name` matching acceptance_criteria, `parent_studies` = linear DAG, `canonical_runs`, `visualizations`) and a `sims/run.py` that builds the composite, runs it, writes `runs.db` (ParquetEmitter or the study run harness) and renders `viz/<name>.html` via `pbg_fenics.viz`.
+- [ ] **Step 3:** Author each `study.yaml` (baseline composite id, `expected_behavior[].name` matching acceptance_criteria, `parent_studies` = linear DAG, `canonical_runs`, `visualizations`) and a `sims/run.py` that builds the composite, runs it, writes `runs.db` (ParquetEmitter or the study run harness) and renders `viz/<name>.html` via `viva_fenics.viz`.
 - [ ] **Step 4:** `pixi run python scripts/lint-workspace.py` → "workspace lint: OK"; `pixi run pytest` green.
 - [ ] **Step 5: Commit** `feat(fenics): workspace + fenics-showcase investigation (4 core studies)`.
 
@@ -406,7 +406,7 @@ def test_convergence_loglog_html():
 
 - [ ] **Step 1:** For each core study run its canonical script:
 ```bash
-cd /Users/eranagmon/code/pbg-fenics
+cd /Users/eranagmon/code/viva-fenics
 for s in poisson-validation mesh-convergence transient-diffusion reaction-diffusion; do
   pixi run python investigations/fenics-showcase/studies/$s/sims/run.py
 done
@@ -420,40 +420,40 @@ done
 
 ## Task 9 (Tier 2, parallel): Navier-Stokes study
 
-**Files:** Create `pbg_fenics/processes/flow.py` (`NavierStokesProcess`), `pbg_fenics/composites/flow.py` (`navier_stokes(core=None,*,reynolds=100,resolution=32,dt=0.01)`), `investigations/fenics-showcase/studies/navier-stokes/{study.yaml,sims/run.py}`, `tests/test_flow.py`.
+**Files:** Create `viva_fenics/processes/flow.py` (`NavierStokesProcess`), `viva_fenics/composites/flow.py` (`navier_stokes(core=None,*,reynolds=100,resolution=32,dt=0.01)`), `investigations/fenics-showcase/studies/navier-stokes/{study.yaml,sims/run.py}`, `tests/test_flow.py`.
 
 **Interfaces:** `NavierStokesProcess(Process)` — incompressible NS (IPCS splitting or Stokes for low Re) on a lid-driven cavity or channel; `inputs()={"body_force":"array[float]"}`; `outputs()={"velocity":"array[float]","pressure":"array[float]","speed_integral":"float"}`. Viz: `viz.quiver_streamlines_html`.
 
 - [ ] Steps: failing test (steady velocity is non-trivial and divergence≈0; speed increases with lid velocity/Re trend) → implement real dolfinx NS → pass → author study.yaml (baseline `navier_stokes`, variants sweep `reynolds`, parent `poisson-validation`) + `sims/run.py` (runs.db + streamlines viz) → run → commit `feat(fenics): Navier-Stokes process + study + streamline viz`.
-- [ ] **Isolation:** build in a git worktree of `pbg-fenics` (`pbg-fenics--ns`) to avoid file collisions with Tasks 10–11; cherry-pick/merge onto current HEAD before combining.
+- [ ] **Isolation:** build in a git worktree of `viva-fenics` (`viva-fenics--ns`) to avoid file collisions with Tasks 10–11; cherry-pick/merge onto current HEAD before combining.
 
 ---
 
 ## Task 10 (Tier 2, parallel): Moving-boundary study
 
-**Files:** Create `pbg_fenics/processes/moving_boundary.py` (`MovingBoundaryProcess`), `pbg_fenics/composites/moving_boundary.py` (`moving_boundary(core=None,*,resolution=32,speed=0.1,dt=0.01)`), `investigations/.../studies/moving-boundary/{study.yaml,sims/run.py}`, `tests/test_moving_boundary.py`.
+**Files:** Create `viva_fenics/processes/moving_boundary.py` (`MovingBoundaryProcess`), `viva_fenics/composites/moving_boundary.py` (`moving_boundary(core=None,*,resolution=32,speed=0.1,dt=0.01)`), `investigations/.../studies/moving-boundary/{study.yaml,sims/run.py}`, `tests/test_moving_boundary.py`.
 
 **Interfaces:** `MovingBoundaryProcess(Process)` — ALE / deforming domain (e.g. a growing or oscillating boundary via mesh coordinate update + solve on the deformed mesh); `outputs()={"solution":"array[float]","domain_measure":"float","boundary_position":"float"}`. Viz: `viz.field_animation_html` over the moving mesh.
 
-- [ ] Steps: failing test (`boundary_position` / `domain_measure` changes monotonically with `speed`; solve stays finite) → implement real ALE update → pass → study.yaml (variants sweep `speed`, parent `navier-stokes`) + run.py → run → commit. **If ALE proves intractable in the installed dolfinx**, ship the process guarded with a clear `RuntimeError` describing the missing capability and mark the study `design_pivot_required` — surface to user, do not mock. Worktree `pbg-fenics--mb`.
+- [ ] Steps: failing test (`boundary_position` / `domain_measure` changes monotonically with `speed`; solve stays finite) → implement real ALE update → pass → study.yaml (variants sweep `speed`, parent `navier-stokes`) + run.py → run → commit. **If ALE proves intractable in the installed dolfinx**, ship the process guarded with a clear `RuntimeError` describing the missing capability and mark the study `design_pivot_required` — surface to user, do not mock. Worktree `viva-fenics--mb`.
 
 ---
 
 ## Task 11 (Tier 2, parallel): Complex-geometry study (gmsh)
 
-**Files:** Create `pbg_fenics/composites/complex_geometry.py` (`complex_geometry(core=None,*,geometry="obstacle",resolution=32)`), `pbg_fenics/fem_gmsh.py` (gmsh→dolfinx mesh import), `investigations/.../studies/complex-geometry/{study.yaml,sims/run.py}`, `tests/test_complex_geometry.py`.
+**Files:** Create `viva_fenics/composites/complex_geometry.py` (`complex_geometry(core=None,*,geometry="obstacle",resolution=32)`), `viva_fenics/fem_gmsh.py` (gmsh→dolfinx mesh import), `investigations/.../studies/complex-geometry/{study.yaml,sims/run.py}`, `tests/test_complex_geometry.py`.
 
 **Interfaces:** gmsh builds an obstacle/L-shape/annulus mesh imported via `dolfinx.io.gmshio`; reuse `DiffusionProcess`/`PoissonSolverStep` on the imported mesh (generalize `fem.build_mesh` to accept a gmsh mesh). Viz: `viz.field_heatmap_html` on the non-trivial domain + `viz.mesh3d_html` for a 3D variant.
 
-- [ ] Steps: failing test (mesh imports with expected #cells; Poisson solves on it, error finite) → implement gmsh import + generator → pass → study.yaml (variants over `geometry`, parent `poisson-validation`) + run.py → run → commit. Worktree `pbg-fenics--cg`.
+- [ ] Steps: failing test (mesh imports with expected #cells; Poisson solves on it, error finite) → implement gmsh import + generator → pass → study.yaml (variants over `geometry`, parent `poisson-validation`) + run.py → run → commit. Worktree `viva-fenics--cg`.
 
 ---
 
 ## Task 12 (Tier 3): merge advanced studies + wire investigation to 7 studies
 
-**Files:** Modify `investigations/fenics-showcase/investigation.yaml` (`studies:` → all 7; extend `acceptance_criteria`), `pbg_fenics/composites/__init__.py`, `pbg_fenics/__init__.py`.
+**Files:** Modify `investigations/fenics-showcase/investigation.yaml` (`studies:` → all 7; extend `acceptance_criteria`), `viva_fenics/composites/__init__.py`, `viva_fenics/__init__.py`.
 
-- [ ] Cherry-pick/merge the three Tier-2 worktrees onto `pbg-fenics` HEAD (verify no foreign commits). Update `investigation.yaml` `studies` list + `acceptance_criteria` for ns/moving-boundary/complex-geometry. `pixi run pytest` all green; `discover_generators()` shows all 7. Commit `feat(fenics): integrate 7-study showcase investigation`.
+- [ ] Cherry-pick/merge the three Tier-2 worktrees onto `viva-fenics` HEAD (verify no foreign commits). Update `investigation.yaml` `studies` list + `acceptance_criteria` for ns/moving-boundary/complex-geometry. `pixi run pytest` all green; `discover_generators()` shows all 7. Commit `feat(fenics): integrate 7-study showcase investigation`.
 
 ---
 
@@ -482,7 +482,7 @@ done
 **Files (worktree):** Modify `skills/viva-expert/SKILL.md`.
 
 - [ ] Replace **Phase 5 "Demo Report"** section with **"Phase 5: Showcase Investigation + Published Read-only Workbench"**: (a) `investigation-from-wrapper` scaffold from the repo's generators; (b) author `expected_behavior`/`behavior_tests`/`canonical_runs` + interactive viz per study (invoke `dataviz`); (c) run studies → `runs.db`; (d) `publish_assets.emit` + `vivarium-workbench-publish --workspace . --out reports/published/dashboard --base-path /pbg-<tool>/dashboard`; (e) open the bundle. Interactive viz lives in study `viz/`, not `demo/report.html`.
-- [ ] Add a **conda/pixi install path** subsection (for conda-only tools: pixi.toml on conda-forge, one env holding solver + pbg/dashboard, all commands via `pixi run`) next to the uv `.venv` path; reference `pbg-compucell3d` + `pbg-fenics`.
+- [ ] Add a **conda/pixi install path** subsection (for conda-only tools: pixi.toml on conda-forge, one env holding solver + pbg/dashboard, all commands via `pixi run`) next to the uv `.venv` path; reference `pbg-compucell3d` + `viva-fenics`.
 - [ ] Update frontmatter `description`, top-of-file "The Default"/intent, **Deliverables** checklist (investigation+studies+published dashboard replace demo report; keep processes+generators+workspace), **README Requirements** (link published dashboard), **Final Validation** (run studies + publish + lint), and the **Start** dispatch text. Mirror the same terminus into **Composite Mode**. Lightweight mode unchanged.
 - [ ] Commit `docs(viva-expert): terminate heavy mode at investigation + read-only workbench`.
 
@@ -490,12 +490,12 @@ done
 
 ## Task 16 (Tier 3): cross-link sibling skills + local publish verify
 
-**Files (worktree):** Modify `skills/viva-investigation|viva-study|viva-run|viva-workbench/SKILL.md` (see-also block linking the viva-expert → investigation → study → run → publish chain). **In `pbg-fenics`:** emit publish assets + produce the bundle.
+**Files (worktree):** Modify `skills/viva-investigation|viva-study|viva-run|viva-workbench/SKILL.md` (see-also block linking the viva-expert → investigation → study → run → publish chain). **In `viva-fenics`:** emit publish assets + produce the bundle.
 
-- [ ] `pixi run python -c "from viva_superpowers.publish_assets import emit; emit('.', 'fenics', base_path='/pbg-fenics/dashboard', interactive_url='https://github.com/vivarium-collective/pbg-fenics')"` (from `pbg-fenics`, with the worktree package importable), then `pixi run vivarium-workbench-publish --workspace . --out reports/published/dashboard --base-path /pbg-fenics/dashboard`; open `reports/published/dashboard/index.html`, click into each of the 7 studies, confirm interactive viz renders read-only.
+- [ ] `pixi run python -c "from viva_superpowers.publish_assets import emit; emit('.', 'fenics', base_path='/viva-fenics/dashboard', interactive_url='https://github.com/vivarium-collective/viva-fenics')"` (from `viva-fenics`, with the worktree package importable), then `pixi run vivarium-workbench-publish --workspace . --out reports/published/dashboard --base-path /viva-fenics/dashboard`; open `reports/published/dashboard/index.html`, click into each of the 7 studies, confirm interactive viz renders read-only.
 - [ ] Add see-also cross-links in the 4 sibling skills.
-- [ ] Commit skills in worktree (`docs(viva): cross-link investigation/study/run/publish chain`) and `pbg-fenics` bundle/README (`feat(fenics): published read-only workbench bundle + README`).
-- [ ] **STOP — no push.** Report to user: local commits on `pbg-fenics` (main) + worktree branch `viva-expert-investigation-workbench`; offer gh-pages deploy + PRs only on explicit approval.
+- [ ] Commit skills in worktree (`docs(viva): cross-link investigation/study/run/publish chain`) and `viva-fenics` bundle/README (`feat(fenics): published read-only workbench bundle + README`).
+- [ ] **STOP — no push.** Report to user: local commits on `viva-fenics` (main) + worktree branch `viva-expert-investigation-workbench`; offer gh-pages deploy + PRs only on explicit approval.
 
 ---
 
