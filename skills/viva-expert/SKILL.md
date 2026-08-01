@@ -1305,14 +1305,23 @@ Include:
 3. Quick start
 4. API reference table
 5. Architecture mapping
-6. **A link to the published read-only workbench** —
-   `https://vivarium-collective.github.io/viva-<tool>/dashboard/` — plus a
-   short pointer at the showcase investigation
+6. **A prominent, AUTO-MAINTAINED link to the published read-only workbench.**
+   Don't hand-write the URL — put the marker pair near the TOP of the README
+   (right after the `# <title>` line):
+   ```
+   <!-- BEGIN:dashboard -->
+   <!-- END:dashboard -->
+   ```
+   then run `vivarium-workbench gen-readme --workspace .`. It fills the block
+   with a prominent callout linking
+   `https://vivarium-collective.github.io/viva-<tool>/dashboard/` — the URL is
+   derived from the git remote, so there's no per-repo config and nothing to
+   keep in sync by hand. Wire `vivarium-workbench gen-readme --check` into CI so
+   the block never goes stale. (The `publish-dashboard.yml` workflow from
+   `publish_assets.emit` in Phase 5 keeps the dashboard itself live on every
+   push to `main`.) Also point at the showcase investigation
    (`investigations/<tool>-showcase/`) and how to run a study locally
-   (`python studies/<slug>/sims/run.py`). The `publish-dashboard.yml`
-   workflow (emitted by `publish_assets.emit` in Phase 5) keeps this URL
-   live on every push to `main`, but it does not touch this README —
-   add the banner/link here by hand.
+   (`python studies/<slug>/sims/run.py`).
 7. Expected outputs (the behavior-test verdicts from each study)
 8. Notes on authentication, if relevant
 9. Limitations and assumptions
