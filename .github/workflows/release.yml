@@ -30,9 +30,15 @@ jobs:
             exit 1
           fi
 
-      - name: Build distributions
-        run: uv build
+      - name: Build distributions (viva-superpowers + pbg-superpowers shim)
+        run: |
+          uv build --out-dir dist            # the real package: viva-superpowers
+          uv build shim --out-dir dist       # deprecated-alias shim: pbg-superpowers
+          ls -1 dist
 
+      # Publishes every dist in dist/ — viva-superpowers AND the pbg-superpowers
+      # shim. PYPI_API_TOKEN must be account-scoped (or cover both projects);
+      # viva-superpowers is a new project on its first release.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
