@@ -79,10 +79,10 @@ def test_pbg_expert_lightweight_covers_single_and_composite():
 
 
 def test_pbg_expert_documents_lightweight_output_layout():
-    """Lightweight mode should still write into pbg_<slug>/{processes,composites}/."""
+    """Lightweight mode should still write into viva_<slug>/{processes,composites}/."""
     text = _read("viva-expert")
-    assert "pbg_<slug>/processes/" in text, "single-tool lightweight writes processes/<tool>.py"
-    assert "pbg_<slug>/composites/" in text, "composite lightweight writes composites/<name>.py"
+    assert "viva_<slug>/processes/" in text, "single-tool lightweight writes processes/<tool>.py"
+    assert "viva_<slug>/composites/" in text, "composite lightweight writes composites/<name>.py"
 
 
 @pytest.mark.parametrize("removed", ["pbg-wrapper", "pbg-composer"])

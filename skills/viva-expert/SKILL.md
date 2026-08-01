@@ -1233,7 +1233,7 @@ print(len(fold_runs_jsonl(pathlib.Path('.'))), 'runs')
 ```bash
 python -c "
 from viva_superpowers.publish_assets import emit
-emit('.', '<tool>', base_path='/viva-<tool>/dashboard',
+emit('.', 'viva-<tool>', base_path='/viva-<tool>/dashboard',
      interactive_url='https://github.com/vivarium-collective/viva-<tool>')
 "
 vivarium-workbench-publish --workspace . --out reports/published/dashboard \
@@ -1281,9 +1281,8 @@ Include:
    (`investigations/<tool>-showcase/`) and how to run a study locally
    (`python studies/<slug>/sims/run.py`). The `publish-dashboard.yml`
    workflow (emitted by `publish_assets.emit` in Phase 5) keeps this URL
-   live on every push to `main` and features it in this README
-   automatically (`scripts/feature_dashboard_in_readme.py`) — don't
-   hand-maintain the banner once that workflow exists.
+   live on every push to `main`, but it does not touch this README —
+   add the banner/link here by hand.
 7. Expected outputs (the behavior-test verdicts from each study)
 8. Notes on authentication, if relevant
 9. Limitations and assumptions
