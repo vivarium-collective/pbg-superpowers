@@ -7,9 +7,10 @@ description: >
   that is difficult. It does NOT fall back to a mock/stub on its own; producing fake behavior is
   always an explicit opt-in. Only reimplement the science yourself when explicitly told to
   (--reproduce), and only emit a non-functional placeholder when explicitly told to (--mock).
-  Heavy mode (default) creates a sibling pbg-<name>/ repo with tests, README, HTML report, and a
+  Heavy mode (default) creates a sibling viva-<name>/ repo with tests, README, a showcase
+  investigation with studies and interactive viz, and a published read-only workbench, plus a
   local commit. Lightweight mode (--lightweight, alias --in-workspace) writes a single file inside
-  the current workspace's pbg_<slug>/ package and a test, with no sibling repo, no report, no
+  the current workspace's viva_<slug>/ package and a test, with no sibling repo, no publish, no
   commit — and still bridges the real tool by default. Reproduce mode (--reproduce, alias
   --reimplement) builds a clearly-labeled clean-room <Tool>ReproductionProcess instead of bridging
   the real tool. Mock mode (--mock, alias --stub) builds an explicitly-labeled non-functional
@@ -20,7 +21,7 @@ effort: high
 argument-hint: "[--lightweight] [--reproduce|--mock] <tool-name> | [--lightweight] <composite-name> <tool1> <tool2> [tool3 ...]"
 ---
 
-# pbg-expert
+# viva-expert
 
 You are a process-bigraph API expert. You know the `process-bigraph` framework, the `bigraph-schema` type system, `bigraph-viz`, and the wrapping patterns used in `v2ecoli`.
 
@@ -76,12 +77,12 @@ want `--reproduce` or `--mock`) — not to quietly ship a placeholder.
 Inspect `$ARGUMENTS`. Flags may appear in any order before the positionals;
 strip every recognized flag first, then dispatch on the remaining positional count.
 
-1. If `--lightweight` or `--in-workspace` is present, run **Lightweight Mode** (see bottom of this file) with the remaining args. Lightweight mode produces ONE Python file inside the current workspace's `pbg_<slug>/` package plus a test, with no sibling repo / README / HTML report / commit. It still **bridges the real tool by default** — combine with `--mock` for a placeholder instead.
+1. If `--lightweight` or `--in-workspace` is present, run **Lightweight Mode** (see bottom of this file) with the remaining args. Lightweight mode produces ONE Python file inside the current workspace's `viva_<slug>/` package plus a test, with no sibling repo / README / publish / commit. It still **bridges the real tool by default** — combine with `--mock` for a placeholder instead.
 2. If `--reproduce` or `--reimplement` is present, run **Reproduction Mode** (see the section after Single-Tool Mode): build a clean-room `<Tool>ReproductionProcess` instead of bridging the real tool. Combine with `--lightweight` to drop the reproduction into the current workspace.
 3. If `--mock` or `--stub` is present, run **Mock Mode** (see the section after Reproduction Mode): build an explicitly-labeled non-functional `<Tool>MockProcess` placeholder. This is the ONLY path that emits fake behavior, and it is opt-in only — never a fallback for a hard real-bridge build. Combine with `--lightweight` to drop the mock into the current workspace. `--mock` and `--reproduce` are mutually exclusive; if both appear, stop and ask the user which they want.
 4. Otherwise count the remaining positional args:
-   - **Heavy single-tool mode** (one arg): wrap a single simulator as a sibling `pbg-<tool>/` repo — **bridging the real tool** (see the default above).
-   - **Heavy composite mode** (two or more args): the first arg is the composite name; the rest are simulator/wrapper names. Compose into a sibling `pbg-<name>-composite/` repo.
+   - **Heavy single-tool mode** (one arg): wrap a single simulator as a sibling `viva-<tool>/` repo — **bridging the real tool** (see the default above), terminating in a scaffolded showcase investigation, studies with interactive viz, runs recorded in `.pbg/runs.jsonl`, and a published read-only workbench.
+   - **Heavy composite mode** (two or more args): the first arg is the composite name; the rest are simulator/wrapper names. Compose into a sibling `viva-<name>-composite/` repo, same investigation + publish terminus.
 
 For heavy single-tool mode, proceed to **Initial Repo Setup** below.
 
@@ -104,14 +105,14 @@ Your task is to take a simulation tool -- by name, GitHub URL, or description --
 1. Only create or modify files inside the new wrapper repo:
 
    ```text
-   ${PBG_WORKSPACE:-$HOME/code}/pbg-<tool>/
+   ${VIVA_WORKSPACE:-$HOME/code}/viva-<tool>/
    ```
 
-   Set `PBG_WORKSPACE` to override the default parent directory. Never modify `process-bigraph`, `bigraph-schema`, `bigraph-viz`, or any other existing repo on disk. Read those only as references.
+   Set `VIVA_WORKSPACE` to override the default parent directory. Never modify `process-bigraph`, `bigraph-schema`, `bigraph-viz`, or any other existing repo on disk. Read those only as references.
 
 2. Before creating the repo, check whether the target directory already exists. If it exists, stop and ask the user whether to:
    - overwrite,
-   - use a suffix such as `pbg-cobra-2`,
+   - use a suffix such as `viva-cobra-2`,
    - or abort.
 
 3. Never run destructive commands such as:
@@ -144,8 +145,8 @@ Derive a clean lowercase hyphenated `TOOL_NAME` from `$ARGUMENTS`, then create a
 
 ```bash
 TOOL_NAME="<tool>"
-WORKSPACE="${PBG_WORKSPACE:-$HOME/code}"
-REPO_DIR="${WORKSPACE}/pbg-${TOOL_NAME}"
+WORKSPACE="${VIVA_WORKSPACE:-$HOME/code}"
+REPO_DIR="${WORKSPACE}/viva-${TOOL_NAME}"
 
 if [ -d "$REPO_DIR" ]; then
     echo "ERROR: $REPO_DIR already exists."
@@ -173,28 +174,84 @@ dist/
 build/
 *.pyc
 .pytest_cache/
-demo/*.png
 output/
 *.nc
 .idea/
 ```
 
-Do not ignore `demo/*.html`; the generated report is a deliverable and should be committed.
-
 All subsequent work must happen inside the new repo.
+
+### Conda-only tools: use pixi instead of uv
+
+Some simulators are conda-only — no usable PyPI wheel, or the real
+dependency graph (native solvers, MPI, mesh libraries) only resolves
+cleanly through `conda-forge` (e.g. FEniCS/dolfinx, CompuCell3D). For
+these, skip the `uv venv` step above entirely and manage the environment
+with **pixi** instead: one `pixi.toml` on the `conda-forge` channel holding
+**both** the simulator (via `[dependencies]`, conda packages) **and** the
+pbg/dashboard stack (via `[pypi-dependencies]`: `process-bigraph`,
+`bigraph-schema`, `vivarium-workbench`, `pbg-superpowers`, plus this
+wrapper's own package as an editable path dependency). Every command in
+this skill (`pytest`, the study runners, `vivarium-workbench-publish`,
+`scripts/lint-workspace.py`) then runs via `pixi run <cmd>` instead of
+`source .venv/bin/activate && <cmd>`.
+
+Precedents: `viva-fenics` (dolfinx + gmsh + mpich alongside the full pbg
+stack in one pixi env) and `pbg-compucell3d` (cc3d from its own conda
+channel). Minimal `pixi.toml` shape (adapt channels/deps per tool):
+
+```toml
+[workspace]
+name = "viva-<tool>"
+channels = ["conda-forge"]
+platforms = ["osx-arm64"]   # add linux-64 / others as needed
+version = "0.1.0"
+
+[dependencies]
+python = "3.12.*"
+pip = "*"
+# <tool>'s native/conda deps here, e.g.:
+# fenics-dolfinx = "*"
+# mpich = "*"
+
+[pypi-dependencies]
+process-bigraph = { git = "https://github.com/vivarium-collective/process-bigraph.git", branch = "main" }
+bigraph-schema = "*"
+bigraph-viz2 = "*"
+vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", branch = "main" }
+pbg-superpowers = "*"    # dist name intentionally still "pbg-superpowers" post-rebrand (PyPI)
+plotly = "*"
+pytest = "*"
+viva-<tool> = { path = ".", editable = true }
+```
+
+Run `pixi install` once to solve + build the env (writes `pixi.lock`,
+commit it). From then on every invocation elsewhere in this skill that
+says `source .venv/bin/activate && <cmd>` becomes `pixi run <cmd>` for a
+pixi-managed repo. This changes **only** how commands are invoked — the
+repo/workspace layout, deliverables, and Phase-by-phase workflow below are
+identical between the uv and pixi paths. The default for pip-installable
+tools remains the uv `.venv` path above; reach for pixi only when the
+simulator itself needs conda.
+
+One consequence of pixi/uv-build editable installs: they are **not**
+auto-discovered by `allocate_core()` the way a standard `pip install -e .`
+is (see **Auto-Discovery Convention** below for why, and the required
+`build_core()` workaround).
 
 ## Deliverables
 
-Every `pbg-<tool>` repo this skill produces is **also a discoverable
+Every `viva-<tool>` repo this skill produces is **also a discoverable
 pbg-workspace** (`workspace.yaml` at root, registered in
 `~/.pbg/workspaces.json`, scanned by the dashboard's Composites tab via
 `@composite_generator` decorators). Heavy-mode is workspace-first; the
-package, demo report, and tests all live inside that workspace shape.
+package, showcase investigation, and tests all live inside that workspace
+shape.
 
-Final layout after Phase 3.5 (workspace promotion):
+Final layout after Phase 5 (showcase investigation + publish):
 
 ```text
-pbg-<tool>/
+viva-<tool>/
 ├── workspace.yaml              # schema_version: 2, name, package_path
 ├── pyproject.toml
 ├── README.md
@@ -203,9 +260,11 @@ pbg-<tool>/
 ├── .gitignore
 ├── .github/
 │   └── workflows/
-│       └── release.yml
-├── pbg_<tool>/
+│       ├── release.yml
+│       └── publish-dashboard.yml   # emitted by publish_assets.emit
+├── viva_<tool>/
 │   ├── __init__.py             # re-exports Process classes + generators
+│   ├── core.py                 # build_core() — explicit register_link + register_types
 │   ├── processes.py            # Process / Step subclasses
 │   ├── types.py                # custom bigraph-schema types (optional)
 │   └── composites/             # one module per generator family
@@ -214,13 +273,23 @@ pbg-<tool>/
 ├── tests/
 │   ├── test_processes.py
 │   └── test_composites.py      # asserts generator registration + run
-├── demo/
-│   └── demo_report.py
+├── investigations/
+│   └── <tool>-showcase/
+│       └── investigation.yaml  # schema_version 2, executive + scientific_argument + acceptance_criteria
+├── studies/
+│   └── <study-slug>/
+│       ├── study.yaml          # schema_version 4, expected_behavior + behavior_tests + pipeline_gate
+│       ├── sims/
+│       │   └── run.py          # canonical_runs entry: build → run → viz → record
+│       └── viz/
+│           └── <name>.html     # interactive Plotly/Three.js viz, committed
+├── reports/published/
+│   └── dashboard/               # vivarium-workbench-publish output (gitignored; rebuilt by CI)
 ├── protocols/ | datasets/      # raw fixtures the wrapper consumes
-├── experiments/                # scaffolded; populated by /viva-study
 ├── references/                 # scaffolded; papers + expert notes
-├── reports/                    # scaffolded; /viva-report renders here
-└── scripts/                    # scaffolded; dashboard runtime helpers
+└── scripts/
+    ├── lint-workspace.py
+    └── publish_dashboard.sh    # emitted by publish_assets.emit
 ```
 
 The completed repo must include:
@@ -232,16 +301,20 @@ The completed repo must include:
    is in `viva_superpowers.composite_generator._REGISTRY`)
 5. Offline-safe fixtures or examples
 6. **One or more `@composite_generator`-decorated functions** in
-   `pbg_<tool>/composites/` — these are the dashboard-visible entry points
+   `viva_<tool>/composites/` — these are the dashboard-visible entry points
 7. A README with installation, quick start, API reference, architecture,
-   and demo instructions
-8. A self-contained `demo/report.html`
+   and a link to the published dashboard
+8. **One showcase investigation** (`investigations/<tool>-showcase/`) binding
+   studies with committed interactive viz, runs recorded in
+   `.pbg/runs.jsonl`, and a published read-only workbench bundle
+   (`reports/published/dashboard/`) via `scripts/publish_dashboard.sh` +
+   `.github/workflows/publish-dashboard.yml`
 9. A `workspace.yaml` and registration in `~/.pbg/workspaces.json`
 10. A local git commit
 
 ## Auto-Discovery Convention
 
-Every `pbg-*` package scaffolded by this skill must be auto-discoverable by
+Every `viva-*` package scaffolded by this skill must be auto-discoverable by
 `allocate_core()`. See
 [docs/conventions/discovery.md](../../docs/conventions/discovery.md) for the
 full reference. The short version:
@@ -251,15 +324,49 @@ full reference. The short version:
 2. Process/Step classes must inherit from `process_bigraph.Process` or
    `process_bigraph.Step` (which inherit `bigraph_schema.Edge`). Stub classes
    that merely duck-type the interface are invisible to discovery.
-3. `pbg_<tool>/__init__.py` must import and re-export process classes via
+3. `viva_<tool>/__init__.py` must import and re-export process classes via
    `__all__`.
 
-Once the package is installed with `pip install -e .`, calling `allocate_core()`
-registers all processes automatically. **Do not add `core.register_link()` calls
-in `core.py`, `composites.py`, or test setup for classes that live in the
-installed package** — that is redundant boilerplate and an anti-pattern. Manual
-`register_link()` is only appropriate for classes defined inline in test files
-(which are not pip-installed and therefore not auto-discoverable).
+For a **standard `pip install -e .`** (hatchling/setuptools backend),
+calling `allocate_core()` registers all processes automatically via
+`importlib.metadata.packages_distributions()` — no manual
+`register_link()` needed. **This breaks under pixi/uv-build editable
+installs**: their `RECORD`/`direct_url.json` lists no package files (a
+pure redirect `.pth`/finder, not a file manifest), so
+`packages_distributions()` never associates the distribution with its
+top-level import name and `discover_packages()` silently skips it —
+`local:<Tool>Process` then fails to resolve with "no link found at
+address" even though the package imports fine by hand.
+
+For a workspace wrapper managed via pixi or uv-build (any tool from the
+**Conda-only tools** subsection above, or any repo whose editable install
+you've confirmed misses discovery), add an explicit `viva_<tool>/core.py`:
+
+```python
+# viva_<tool>/core.py — required when the editable install isn't
+# auto-discovered (pixi / uv-build). See docs/conventions/discovery.md
+# and the viva-fenics precedent (viva_fenics/core.py).
+from process_bigraph import allocate_core
+from .processes import <Tool>Process
+from .types import register_types
+
+def build_core(core=None):
+    if core is None:
+        core = allocate_core()
+    register_types(core)
+    core.register_link("<Tool>Process", <Tool>Process)
+    return core
+```
+
+The dashboard and every `sims/run.py` call this `build_core()` (not bare
+`allocate_core()`) so the workspace's own processes are always registered
+regardless of how the editable install was made. This is **not** the
+anti-pattern the old wording of this section warned against — that warning
+is about redundant `register_link()` calls for *other* compliant `pbg-*`/
+`viva-*` dependencies (those remain auto-discovered normally); it does not
+apply to the workspace's own package under a pixi/uv-build editable
+install, which genuinely needs the explicit registration. See the
+`pbg_artistoo` and `viva-fenics` precedents.
 
 ## Process-Bigraph API Essentials
 
@@ -313,6 +420,15 @@ Rules:
 - `inputs()` and `outputs()` return `{port_name: schema_expression}`.
 - `config_schema` uses bigraph-schema format.
 - Register processes with `core.register_link("MyProcess", MyProcess)`.
+
+> **Config gotcha:** `bigraph_schema.is_empty(Float, 0.0)` is `True`, so
+> `Core.fill()` treats an explicit `0.0` float config value as "not set" and
+> silently **replaces it with the schema default** instead of honoring the
+> zero. This bites config knobs where the exact zero is meaningful (a rate,
+> offset, or threshold intentionally set to 0.0). Avoid 0.0-valued float
+> configs where the exact zero matters — use a tiny epsilon (e.g. `1e-12`)
+> or encode it another way (e.g. a `maybe[float]` with `None` meaning
+> "unset", distinct from `0.0` meaning "zero").
 
 ## Port Design
 
@@ -387,12 +503,13 @@ class TissueSim(Process):
 
 ## Composite Assembly
 
-For pip-installed `pbg-*` packages, `allocate_core()` registers all processes
-automatically via `bigraph_schema.package.discover`. No `register_link()` is
-needed:
+For a standard `pip install -e .` of a `viva-*` package, `allocate_core()`
+registers all processes automatically via `bigraph_schema.package.discover`.
+No `register_link()` is needed (pixi/uv-build editable installs are the
+exception — see **Auto-Discovery Convention** above):
 
 ```python
-# MyProcess is in a pip-installed pbg-* package — already registered.
+# MyProcess is in a pip-installed viva-* package — already registered.
 core = allocate_core()
 
 document = {
@@ -415,14 +532,14 @@ sim.run(100.0)
 
 ### Ship composite generators, not free functions
 
-A `pbg-*` package's composites must be **`@composite_generator`-decorated**
+A `viva-*` package's composites must be **`@composite_generator`-decorated**
 so they surface in `discover_generators()` (and therefore in the
 dashboard's Composites tab). See the canonical spec at
 [docs/conventions/composite_generators.md](../../docs/conventions/composite_generators.md);
 the short version:
 
 ```python
-# pbg_<tool>/composites/<topic>.py
+# viva_<tool>/composites/<topic>.py
 from viva_superpowers.composite_generator import composite_generator
 
 
@@ -455,7 +572,7 @@ def baseline(core=None, *, rate=1.0, model="default"):
     }
 ```
 
-`pbg_<tool>/composites/__init__.py` must import each submodule for side
+`viva_<tool>/composites/__init__.py` must import each submodule for side
 effects so the decorators fire on package import:
 
 ```python
@@ -727,9 +844,9 @@ Use `Process` if the tool has time-stepping. Use `Step` if it is a stateless or 
 
 Implement:
 
-- `pbg_<tool>/processes.py`
-- `pbg_<tool>/types.py`
-- `pbg_<tool>/composites/__init__.py` + `pbg_<tool>/composites/<topic>.py`
+- `viva_<tool>/processes.py`
+- `viva_<tool>/types.py`
+- `viva_<tool>/composites/__init__.py` + `viva_<tool>/composites/<topic>.py`
   (one or more `@composite_generator`-decorated functions — see
   **Composite Assembly → Ship composite generators**)
 - package exports in `__init__.py` (re-export Process classes AND the
@@ -747,7 +864,7 @@ requires = ["hatchling>=1.18"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pbg-<tool>"
+name = "viva-<tool>"
 version = "0.1.0"
 description = "Process-bigraph wrapper for <Tool>"
 readme = "README.md"
@@ -767,18 +884,18 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/vivarium-collective/pbg-<tool>"
-Issues = "https://github.com/vivarium-collective/pbg-<tool>/issues"
+Homepage = "https://github.com/vivarium-collective/viva-<tool>"
+Issues = "https://github.com/vivarium-collective/viva-<tool>/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["pbg_<tool>"]
+packages = ["viva_<tool>"]
 ```
 
 **PyPI trusted publishing setup is required before the first release.**
 See https://docs.pypi.org/trusted-publishers/ for the one-time PyPI + GitHub
 configuration. Once set up, pushing a `v*` tag triggers the release workflow.
 
-**`pbg_<tool>/processes.py` template** — process classes must inherit from
+**`viva_<tool>/processes.py` template** — process classes must inherit from
 `process_bigraph.Process` (or `Step`) so discovery can find them:
 
 ```python
@@ -848,11 +965,11 @@ jobs:
 Add `.github/workflows/release.yml` to the deliverables directory structure
 and to `git add` during the final commit.
 
-**`pbg_<tool>/__init__.py` template** — import and re-export all process
+**`viva_<tool>/__init__.py` template** — import and re-export all process
 classes via `__all__` so discovery and users see a clean surface:
 
 ```python
-"""pbg-<tool>: process-bigraph wrapper for <ToolName>."""
+"""viva-<tool>: process-bigraph wrapper for <ToolName>."""
 
 from .processes import <ToolName>Process
 
@@ -911,27 +1028,30 @@ def test_generator_is_registered():
 
 ### Phase 4.5: Promote to a discoverable pbg-workspace
 
-After processes, generators, tests, and demo are in place, run the
+After processes, generators, and tests are in place, run the
 in-place workspace scaffolder so the repo also appears in the
 vivarium-workbench's workspace switcher and Composites tab. This is
-**not optional** — pbg-* repos are workspace-shaped by convention.
+**not optional** — viva-* repos are workspace-shaped by convention.
 
 ```bash
-# Resolve a Python that has pbg-superpowers (often a sibling venv).
-PBG_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv/bin/python)"
+# Resolve a Python that has pbg-superpowers (often a sibling venv). The
+# local checkout directory is still named pbg-superpowers even though the
+# GitHub repo and PyPI project were renamed to viva-superpowers/pbg-superpowers
+# respectively — adjust the fallback path if your machine differs.
+VIVA_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv/bin/python)"
 
 # Scaffold in place. Default would create a `<repo>-workspace` branch; for a
 # fresh single-developer wrapper, stay on main by passing --branch main.
-"$PBG_PYTHON" -m viva_superpowers.scaffold workspace \
+"$VIVA_PYTHON" -m viva_superpowers.scaffold workspace \
     --in-place \
     --name <tool> \
     --target . \
-    --package pbg_<tool> \
+    --package viva_<tool> \
     --branch main
 
 # Register the new workspace so the dashboard's switcher sees it.
-"$PBG_PYTHON" -m viva_superpowers.workspace_catalog add \
-    --path "$(pwd)" --name <tool> --package pbg_<tool>
+"$VIVA_PYTHON" -m viva_superpowers.workspace_catalog add \
+    --path "$(pwd)" --name <tool> --package viva_<tool>
 
 # Sanity-check the resulting layout.
 python scripts/lint-workspace.py    # prints "workspace lint: OK"
@@ -940,7 +1060,7 @@ python scripts/lint-workspace.py    # prints "workspace lint: OK"
 The scaffolder will:
 
 - Drop `workspace.yaml` at the repo root (schema_version 2).
-- Add top-level `experiments/`, `references/`, `reports/`, `scripts/`,
+- Add top-level `references/`, `reports/`, `scripts/`,
   `docs/`, `notes/`, `datasets/`.
 - Merge dashboard deps (`pyyaml`, `jsonschema`, `jinja2`, `vivarium-workbench`)
   into the existing `pyproject.toml`.
@@ -950,192 +1070,187 @@ The scaffolder will:
 If a previous run already promoted the repo, `--in-place` refuses to
 re-overlay — that's intentional. Re-run only after deleting `workspace.yaml`.
 
-After scaffolding, re-run the test suite and demo to confirm the
-restructure didn't break anything; then move on to Phase 5 (demo report).
+After scaffolding, re-run the test suite to confirm the restructure didn't
+break anything; then move on to Phase 5 (showcase investigation + published
+read-only workbench).
 
-### Phase 5: Demo Report
+### Phase 5: Showcase Investigation + Published Read-only Workbench
 
-Create `demo/demo_report.py` that generates:
+Heavy mode's terminus is no longer a standalone `demo/report.html`. It is a
+**showcase investigation** — a real `investigations/<tool>-showcase/` bound
+to one or more `studies/`, each with a genuine `expected_behavior` /
+`behavior_tests` pair, a canonical runner that drives the real bridge and
+renders a committed interactive visualization, and runs recorded into the
+workspace's `.pbg/runs.jsonl` log — published as a self-contained read-only
+workbench bundle anyone can browse with no server. This mirrors the
+`viva-fenics` reference build (seven studies, one investigation, one
+published bundle) — read `investigations/fenics-showcase/investigation.yaml`
+and any `studies/*/sims/run.py` there for a worked example when in doubt.
 
-```text
-demo/report.html
-```
+#### 1. Scaffold the investigation from the repo's generators
 
-The report must be self-contained except for CDN JavaScript dependencies.
-
-Include at least three distinct simulation configurations:
-
-```python
-CONFIGS = [
-    {
-        "id": "baseline",
-        "title": "Baseline",
-        "subtitle": "Reference behavior",
-        "description": "Brief explanation.",
-        "config": {},
-        "n_snapshots": 25,
-        "total_time": 500.0,
-    },
-]
-```
-
-For each configuration:
-
-- Run the wrapped process directly or through a small composite.
-- Collect snapshots.
-- Time execution with `time.perf_counter()`.
-- Include wall-clock runtime in the report.
-- Produce visually distinct outputs.
-
-Use a 120-second timeout guard for long-running demos.
-
-### Report Requirements
-
-The report should include:
-
-1. Sticky navigation
-2. Metrics cards
-3. Plotly time-series charts
-4. Bigraph architecture diagram
-5. Interactive collapsible PBG document tree
-6. Spatial viewer if the tool produces spatial data
-7. Responsive layout
-8. White/light styling
-9. Configuration-specific accent colors
-
-Use Plotly.js:
-
-```html
-<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-```
-
-For spatial tools, include Three.js viewers:
-
-```html
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-```
-
-Spatial viewers should include:
-
-- Orbit controls
-- Auto-rotation
-- Time slider
-- Play/pause
-- Sequential blue-cyan-green-yellow-red colormap
-- Low-opacity wireframe overlay
-- Smooth lighting
-
-### Bigraph diagram — use `bigraph-viz2`
-
-**Default for pbg-* reports.** `bigraph-viz2` is a lightweight interactive
-renderer: pan / zoom / click-to-inspect / double-click-to-collapse in the
-browser, no graphviz dependency, JS bundle inlines into the report.
-Preferred over the legacy graphviz-PNG `bigraph-viz` for HTML reports.
-
-Install from PyPI:
+One-liner, driven by the composite generators already implemented in
+Phase 3 (`viva_<tool>/composites/*.py`):
 
 ```bash
-uv pip install bigraph-viz2
+python -m viva_superpowers.scaffold investigation-from-wrapper \
+    --name <tool> \
+    --studies viva_<tool>.composites.<topic1>.<gen1>,viva_<tool>.composites.<topic2>.<gen2>
 ```
 
-In `pyproject.toml`:
+(comma-separated composite-generator names — fully-qualified or short, one
+per showcase study). This emits:
 
-```toml
-[project]
-dependencies = [
-    "bigraph-viz2",
-    # ...
-]
-```
+- `investigations/<tool>-showcase/investigation.yaml` (schema_version 2:
+  `question`/`hypothesis`/`description`, `studies:` list, an `executive`
+  block — `what_is_this`/`verdict`/`verdict_status`/`decisions_needed` — a
+  `scientific_argument` block — `main_claim`/`evidence_for`/
+  `evidence_against`/`key_figures`/`caveats` — and `acceptance_criteria`
+  mapping `{study, behavior}` pairs).
+- One skeleton `studies/<slug>/study.yaml` per generator (schema_version 4),
+  each with a stubbed `expected_behavior`/`behavior_tests` pair, a linear
+  `pipeline_gate.prerequisites` chain across the batch, and a
+  `canonical_runs` entry pointing at `studies/<slug>/sims/run.py`.
 
-Render one composite per report section as an interactive fragment. The
-first call on the page inlines the ~40 KB JS bundle; later calls pass
-`dedupe=True` to drop their copies:
+Existing `investigation.yaml`/`study.yaml` files are never overwritten
+(pass `--force` only if you intentionally want to re-stub one).
+
+#### 2. Fill each study: real behavior + a runner that produces interactive viz
+
+For every scaffolded study, replace the stubs with the real content:
+
+- **`expected_behavior` + `behavior_tests`** — state a genuine, falsifiable
+  claim about the wrapped tool's output (a tolerance against a known
+  analytic/theoretical result, a conservation law, a monotonicity or
+  convergence-order check — not "it runs without error"), using the
+  `en` / `measure` / `expect` grammar. See
+  [docs/concepts/expected-behavior-grammar.md](../../docs/concepts/expected-behavior-grammar.md)
+  for the full grammar reference and worked examples.
+- **`studies/<slug>/sims/run.py`** — the study's canonical runner
+  (referenced by `canonical_runs[].script`, resolved relative to the
+  **workspace root**, not the study dir). It must:
+  1. Build the composite via the workspace's `build_core()` (see **Auto-Discovery Convention**).
+  2. Run it with `Composite.run(...)`.
+  3. Render an **interactive** visualization — Plotly for 2D/time-series/
+     animated data, Three.js for 3D/spatial data — to
+     `studies/<slug>/viz/<name>.html`. **Invoke the `dataviz` skill** for
+     palette/theming before writing chart code: this viz is the showcase's
+     headline artifact and replaces the old report, so it must look
+     considered, not default-matplotlib. Commit the rendered `viz/*.html`.
+     If you inline a Plotly CDN `<script>` tag rather than using
+     `fig.write_html(..., include_plotlyjs="cdn")`, pin it to
+     `https://cdn.plot.ly/plotly-3.7.0.min.js` — **not** `plotly-2.27.0`.
+     Pin the CDN's major version to match the installed `plotly.py`'s major
+     version (verify with `plotly.offline.offline.get_plotlyjs_version()`):
+     plotly.py ≥6 serializes numpy arrays as compact typed-array JSON
+     (`{"dtype": "f8", "bdata": "..."}`), which `plotly-2.27.0.min.js`
+     cannot decode — the chart renders blank with no console error.
+  4. Record the run via `vivarium_workbench.lib.run_log.append_run_event` —
+     a `started` event before the run and a `completed` (or `failed`)
+     event after, both keyed by a fresh `run_id`, written against
+     `workspace_root` = the **repo root** (not the study dir):
 
 ```python
-from bigraph_viz2 import emit_html
+#!/usr/bin/env python3
+"""Canonical run for the ``<slug>`` study."""
+from __future__ import annotations
 
-doc = {
-    "process": {
-        "_type": "process",
-        "address": "local:MyProcess",
-        "outputs": {"output": ["stores", "output"]},
-    },
-    "stores": {},
-    "emitter": {
-        "_type": "step",
-        "address": "local:RAMEmitter",
-        "inputs": {
-            "output": ["stores", "output"],
-            "time": ["global_time"],
-        },
-    },
-}
+import time
+import uuid
+from pathlib import Path
 
-snippet = emit_html(doc, height="520px", inspector=True, dedupe=False)
-# drop `snippet` directly into your report HTML (no <img>, no base64)
+from process_bigraph import Composite, gather_emitter_results
+
+STUDY_DIR = Path(__file__).resolve().parents[1]
+WORKSPACE_ROOT = STUDY_DIR.parents[1]
+
+from viva_<tool>.core import build_core
+from viva_<tool>.composites.<topic> import <gen>
+from vivarium_workbench.lib.run_log import append_run_event
+
+SPEC_ID = "viva_<tool>.composites.<topic>.<gen>"
+STUDY_SLUG = "<slug>"
+INVESTIGATION_SLUG = "<tool>-showcase"
+
+
+def main() -> int:
+    run_id = uuid.uuid4().hex
+    append_run_event(WORKSPACE_ROOT, {
+        "run_id": run_id, "event": "started", "spec_id": SPEC_ID,
+        "label": STUDY_SLUG, "started_at": time.time(), "status": "running",
+        "n_steps": 1, "emitter": "ram", "origin": "canonical_run",
+        "study_slug": STUDY_SLUG, "investigation_slug": INVESTIGATION_SLUG,
+        "params": {},
+    })
+    try:
+        core = build_core()
+        doc = <gen>(core)
+        sim = Composite({"state": doc}, core=core)
+        sim.run(1.0)
+        rows = gather_emitter_results(sim)[("emitter",)]
+        # ... derive the behavior_tests observable(s) from `rows` ...
+
+        viz_dir = STUDY_DIR / "viz"
+        viz_dir.mkdir(parents=True, exist_ok=True)
+        # ... render an interactive Plotly/Three.js viz to viz_dir / "<name>.html" ...
+    except Exception:
+        append_run_event(WORKSPACE_ROOT, {
+            "run_id": run_id, "event": "completed",
+            "completed_at": time.time(), "n_steps": 0, "status": "failed",
+        })
+        raise
+
+    append_run_event(WORKSPACE_ROOT, {
+        "run_id": run_id, "event": "completed",
+        "completed_at": time.time(), "n_steps": 1, "status": "completed",
+    })
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 ```
 
-For a report with N sections, each with its own composite:
-
-```python
-for i, doc in enumerate(docs):
-    section_html[i] = emit_html(doc, id=f"bigraph_{i}", dedupe=(i > 0))
-```
-
-Pass the WHOLE document (not a simplified projection) so port wires
-resolve correctly — bigraph-viz2 reads `inputs:` / `outputs:` blocks
-directly from the spec. A trimmed dict that omits input wires will
-draw dangling per-port stores. (This is the same trap the legacy
-`bigraph-viz` falls into; the fix is the same: pass the full doc.)
-
-### Legacy: `bigraph-viz` (graphviz PNG)
-
-Only use the legacy renderer for static documentation snapshots where
-interactivity is undesirable (e.g. inclusion in a PDF). For everything
-else, prefer `bigraph-viz2` above. The legacy API:
-
-```python
-from bigraph_viz import plot_bigraph
-
-plot_bigraph(state=doc, out_dir=outdir, filename="bigraph",
-             file_format="png", remove_process_place_edges=True,
-             rankdir="LR", port_labels=False, dpi="150")
-```
-
-Keep legacy diagrams simplified: show only the key process, emitter, stores, and 5-6 key ports.
-
-### PBG Document Viewer
-
-Include a collapsible JSON tree with:
-
-- Purple keys: `#7c3aed`
-- Green strings: `#059669`
-- Blue numbers: `#2563eb`
-- Orange booleans: `#d97706`
-- Gray nulls
-- Monospace font
-- Depth >= 2 collapsed by default
-- Short primitive arrays rendered inline
-
-### Auto-Open Report
-
-After generating the report, open it in the default browser (cross-platform):
-
-```python
-import os
-import webbrowser
-webbrowser.open("file://" + os.path.abspath(output_path))
-```
-
-Also run:
+#### 3. Run the studies
 
 ```bash
-python -c "import os, webbrowser; webbrowser.open('file://' + os.path.abspath('demo/report.html'))"
+python studies/<slug>/sims/run.py    # per study — or:
 ```
 
-after the final report is generated.
+or drive every study's canonical runner via `/viva-study run-script`.
+Then verify the runs actually landed in the workspace-level run log:
+
+```bash
+python -c "
+from vivarium_workbench.lib.run_log import fold_runs_jsonl
+import pathlib
+print(len(fold_runs_jsonl(pathlib.Path('.'))), 'runs')
+"
+```
+
+#### 4. Emit publish assets and build the read-only bundle
+
+```bash
+python -c "
+from viva_superpowers.publish_assets import emit
+emit('.', '<tool>', base_path='/viva-<tool>/dashboard',
+     interactive_url='https://github.com/vivarium-collective/viva-<tool>')
+"
+vivarium-workbench-publish --workspace . --out reports/published/dashboard \
+    --base-path /viva-<tool>/dashboard
+```
+
+`emit(...)` writes `scripts/publish_dashboard.sh` (executable) and
+`.github/workflows/publish-dashboard.yml` — the same publish flow every
+`viva-*` workspace ships (see **README Requirements** below for the
+gh-pages side of this). Open `reports/published/dashboard/index.html` and
+click into each study to confirm its interactive viz renders read-only
+(no live server, no Launch buttons — that's expected for a snapshot).
+
+**Interactive viz now lives in each study's `viz/` directory** (snapshotted
+verbatim into the published workbench), **not** in `demo/report.html` —
+there is no `demo/` directory and no standalone report in heavy mode's
+final deliverable.
 
 ## README Requirements
 
@@ -1145,9 +1260,9 @@ Include:
 2. Installation — PyPI is the primary install path; editable install for development:
    ```
    # From PyPI (recommended):
-   pip install pbg-<tool>
+   pip install viva-<tool>
    # or with uv:
-   uv pip install pbg-<tool>
+   uv pip install viva-<tool>
 
    # For development (editable):
    uv venv .venv && source .venv/bin/activate
@@ -1160,8 +1275,16 @@ Include:
 3. Quick start
 4. API reference table
 5. Architecture mapping
-6. Demo instructions
-7. Expected outputs
+6. **A link to the published read-only workbench** —
+   `https://vivarium-collective.github.io/viva-<tool>/dashboard/` — plus a
+   short pointer at the showcase investigation
+   (`investigations/<tool>-showcase/`) and how to run a study locally
+   (`python studies/<slug>/sims/run.py`). The `publish-dashboard.yml`
+   workflow (emitted by `publish_assets.emit` in Phase 5) keeps this URL
+   live on every push to `main` and features it in this README
+   automatically (`scripts/feature_dashboard_in_readme.py`) — don't
+   hand-maintain the banner once that workflow exists.
+7. Expected outputs (the behavior-test verdicts from each study)
 8. Notes on authentication, if relevant
 9. Limitations and assumptions
 
@@ -1170,7 +1293,7 @@ Include:
 Include a `CONTRIBUTING.md` with at minimum:
 
 ```markdown
-# Contributing to pbg-<tool>
+# Contributing to viva-<tool>
 
 ## Development setup
 
@@ -1189,22 +1312,24 @@ using trusted publishing (no tokens needed after initial setup).
 
 PyPI trusted publishing must be configured once per repo. See
 https://docs.pypi.org/trusted-publishers/ and
-[docs/conventions/distribution.md](https://github.com/vivarium-collective/pbg-superpowers/blob/main/docs/conventions/distribution.md).
+[docs/conventions/distribution.md](https://github.com/vivarium-collective/viva-superpowers/blob/main/docs/conventions/distribution.md).
 ```
 
 ## Final Validation and Commit
 
-After implementation (including the Phase 4.5 workspace promotion):
+After implementation (including the Phase 4.5 workspace promotion and the
+Phase 5 showcase investigation):
 
 ```bash
 source .venv/bin/activate
 # Install the package so allocate_core() + the composite-generator registry
 # pick it up. Hatchling's editable install does NOT emit top_level.txt,
 # which breaks bigraph-schema's distribution-keyed discovery — use a regular
-# install for the final validation (uv pip install . without -e).
+# install for the final validation (uv pip install . without -e). (pixi-managed
+# repos: `pixi run pytest` etc. — the editable install is already handled by
+# `pixi install`, see build_core() in Auto-Discovery Convention.)
 uv pip install .
 
-python demo/demo_report.py
 pytest
 python scripts/lint-workspace.py    # must print "workspace lint: OK"
 
@@ -1212,38 +1337,52 @@ python scripts/lint-workspace.py    # must print "workspace lint: OK"
 python -c "
 from viva_superpowers.composite_generator import discover_generators
 gens = discover_generators()
-matches = [g for g in gens if 'pbg_<tool>' in g]
+matches = [g for g in gens if 'viva_<tool>' in g]
 assert matches, 'no <tool> generators discovered'
 print('discovered:', matches)
 "
 
+# Run every showcase study and confirm the runs landed in the run log.
+for f in studies/*/sims/run.py; do python "$f"; done
+python -c "
+from vivarium_workbench.lib.run_log import fold_runs_jsonl
+import pathlib
+n = len(fold_runs_jsonl(pathlib.Path('.')))
+assert n > 0, 'no runs recorded in .pbg/runs.jsonl'
+print(n, 'runs recorded')
+"
+
+# Build the published read-only bundle (see Phase 5, step 4) and confirm it
+# has content.
+bash scripts/publish_dashboard.sh reports/published/dashboard "/viva-<tool>/dashboard"
+test -f reports/published/dashboard/index.html
+
 git add -A
-git commit -m "Initial pbg-<tool> wrapper: workspace, processes, composite generators, tests, demo, README"
-python -c "import os, webbrowser; webbrowser.open('file://' + os.path.abspath('demo/report.html'))"
+git commit -m "Initial viva-<tool> wrapper: workspace, processes, composite generators, showcase investigation, tests, README"
+python -c "import os, webbrowser; webbrowser.open('file://' + os.path.abspath('reports/published/dashboard/index.html'))"
 ```
 
 Do not push.
 
 ## Optional GitHub Pages Deployment
 
-Only do this after the user explicitly approves pushing to GitHub. The user must provide the GitHub org or username (set `GITHUB_ORG` below) and have already created/pushed the repo.
-
-After `main` has been pushed, deploy the report to `gh-pages`:
+Only do this after the user explicitly approves pushing to GitHub, and only
+if `publish_assets.emit` (Phase 5, step 4) hasn't already wired it up as CI.
+The normal path is **not** a manual deploy step — `publish-dashboard.yml`
+(emitted alongside `scripts/publish_dashboard.sh`) publishes the read-only
+workbench to `gh-pages:dashboard/` automatically on every push to `main`,
+and features the live URL in `README.md`. The only manual action is a
+one-time repo setting:
 
 ```bash
 GITHUB_ORG="<your-github-org-or-username>"
 TOOL_NAME="<tool>"
 
-git checkout --orphan gh-pages
-git rm -rf .
-git checkout main -- demo/report.html
-mv demo/report.html index.html
-printf '.venv/\n.pytest_cache/\n__pycache__/\n*.pyc\n' > .gitignore
-git add -A
-git commit -m "Deploy interactive demo report to GitHub Pages"
-git push -u origin gh-pages
-git checkout main
-gh api -X POST "repos/${GITHUB_ORG}/pbg-${TOOL_NAME}/pages" \
+# One-time: Settings → Pages → Source = "Deploy from a branch" → gh-pages.
+# publish-dashboard.yml bootstraps the gh-pages branch itself on first run
+# (push to main, or `gh workflow run publish-dashboard.yml`) — there is no
+# manual `git checkout --orphan gh-pages` step.
+gh api -X POST "repos/${GITHUB_ORG}/viva-${TOOL_NAME}/pages" \
   -f 'source[branch]=gh-pages' \
   -f 'source[path]=/' || true
 ```
@@ -1251,10 +1390,10 @@ gh api -X POST "repos/${GITHUB_ORG}/pbg-${TOOL_NAME}/pages" \
 Then verify:
 
 ```bash
-curl -sI "https://${GITHUB_ORG}.github.io/pbg-${TOOL_NAME}/"
+curl -sI "https://${GITHUB_ORG}.github.io/viva-${TOOL_NAME}/dashboard/"
 ```
 
-A `200` response means the site is live.
+A `200` response means the read-only workbench is live.
 
 ## Read-Only Reference Repos
 
@@ -1275,10 +1414,11 @@ bigraph-schema/bigraph_schema/edge.py
 bigraph-viz/bigraph_viz/visualize_types.py
 ```
 
-Optional wrapper-pattern references (study their bridge implementations and demo reports if available):
+Optional wrapper-pattern references (study their bridge implementations and showcase investigations if available):
 
-- `v2ecoli` — bridge pattern for tools with internal simulation loops (look at `v2ecoli/bridge.py`, `v2ecoli/generate.py`, `v2ecoli/types/__init__.py`, `colony_report.py`).
-- `pbg-mem3dg` — canonical demo-report template (look at `demo/demo_report.py`).
+- `v2ecoli` — bridge pattern for tools with internal simulation loops (look at `v2ecoli/bridge.py`, `v2ecoli/generate.py`, `v2ecoli/types/__init__.py`).
+- `viva-fenics` — canonical showcase-investigation + pixi + `build_core()` template (look at `investigations/fenics-showcase/investigation.yaml`, any `studies/*/sims/run.py`, `viva_fenics/core.py`, and `pixi.toml`). The worked example for the whole of **Phase 5** above.
+- `pbg-compucell3d` — conda-only tool managed via pixi (no PyPI wheel for the simulator itself); precedent for the **Conda-only tools** subsection above.
 
 If you have local clones of any of the above, prefer reading them directly. Otherwise, work from the patterns documented in this skill.
 
@@ -1322,7 +1462,8 @@ vs. in-workspace file), with these differences:
    with its requirement (e.g. "(requires CUDA)").
 
 Everything else — ports, composite-spec/generator discovery, workspace
-promotion, tests, report — is identical to the matching default mode.
+promotion, tests, showcase investigation + publish — is identical to the
+matching default mode.
 
 ---
 
@@ -1376,7 +1517,8 @@ vs. in-workspace file), with these differences:
    for real results.
 
 Everything else — composite-spec/generator discovery, workspace promotion,
-report scaffolding — is identical to the matching default mode. When the user
+showcase investigation + publish scaffolding — is identical to the matching
+default mode. When the user
 later asks for the real wrapper, the mock's ports carry over and only
 `update()` (and the deps) change.
 
@@ -1390,8 +1532,8 @@ When `$ARGUMENTS` contains two or more tokens, the first token is `<name>` (the 
 
 ```bash
 COMPOSITE_NAME="<name>"
-WORKSPACE="${PBG_WORKSPACE:-$HOME/code}"
-REPO_DIR="${WORKSPACE}/pbg-${COMPOSITE_NAME}-composite"
+WORKSPACE="${VIVA_WORKSPACE:-$HOME/code}"
+REPO_DIR="${WORKSPACE}/viva-${COMPOSITE_NAME}-composite"
 ```
 
 Check whether the directory already exists. If it does, stop and ask the user to overwrite, use a suffix, or abort.
@@ -1411,27 +1553,29 @@ uv pip install process-bigraph bigraph-schema bigraph-viz pytest matplotlib plot
 Install each wrapper from a local sibling clone (preferred) or PyPI:
 
 ```bash
-uv pip install -e "${WORKSPACE}/pbg-<tool1>"   # editable local clone
-uv pip install pbg-<tool2>                     # or from PyPI if published
+uv pip install -e "${WORKSPACE}/viva-<tool1>"   # editable local clone
+uv pip install viva-<tool2>                     # or from PyPI if published
 ```
 
-Write `.gitignore` (same as single-tool mode — exclude `.venv/`, `__pycache__/`, `*.egg-info/`, `dist/`, `build/`, `*.pyc`, `.pytest_cache/`, `demo/*.png`, `output/`, `.idea/`; do NOT ignore `demo/*.html`).
+Write `.gitignore` (same as single-tool mode — exclude `.venv/`, `__pycache__/`, `*.egg-info/`, `dist/`, `build/`, `*.pyc`, `.pytest_cache/`, `output/`, `.idea/`).
 
 ### Deliverables for composite mode
 
 Same workspace-shaped layout as single-tool mode — `workspace.yaml` at
-root, `experiments/` + `references/` + `reports/` + `scripts/`
-scaffolded, registered in `~/.pbg/workspaces.json`. The package gains a
+root, `references/` + `scripts/` scaffolded, registered in
+`~/.pbg/workspaces.json`, plus the same showcase-investigation +
+published-workbench terminus (Phase 5). The package gains a
 `composites/` subpackage whose `@composite_generator` wraps the
 hand-built `document.py` output:
 
 ```text
-pbg-<name>-composite/
+viva-<name>-composite/
 ├── workspace.yaml
 ├── pyproject.toml
 ├── README.md
 ├── .gitignore
-├── pbg_<name>_composite/
+├── .github/workflows/publish-dashboard.yml   # emitted by publish_assets.emit
+├── viva_<name>_composite/
 │   ├── __init__.py
 │   ├── core.py            # build_core() registering adapters + stubs
 │   ├── wiring.py          # WIRING dict: (process, port) → store path
@@ -1446,16 +1590,20 @@ pbg-<name>-composite/
 │   ├── test_assembly.py
 │   ├── test_adapters.py
 │   └── test_run.py
-├── experiments/ references/ reports/ scripts/ docs/ datasets/ notes/   (scaffolded)
-└── demo/
-    └── demo_report.py
+├── investigations/<name>-showcase/investigation.yaml
+├── studies/<study-slug>/{study.yaml, sims/run.py, viz/}
+├── reports/published/dashboard/     # vivarium-workbench-publish output
+├── references/ docs/ datasets/      (scaffolded)
+└── scripts/
+    ├── lint-workspace.py
+    └── publish_dashboard.sh         # emitted by publish_assets.emit
 ```
 
 ### Workflow (composite mode)
 
 #### Step 1: Inventory the wrappers
 
-For each `pbg-<tool>`, read its `processes.py` and record:
+For each `viva-<tool>`, read its `processes.py` and record:
 
 - Class name and registered link string.
 - All `inputs()` ports and schemas.
@@ -1493,8 +1641,8 @@ Encode the table in `wiring.py` as a `WIRING` dict (see the **Lightweight Mode**
 
 ```python
 from process_bigraph import Composite
-from pbg_<name>_composite.core import build_core
-from pbg_<name>_composite.document import build_document
+from viva_<name>_composite.core import build_core
+from viva_<name>_composite.document import build_document
 
 core = build_core()
 sim = Composite({"state": build_document()}, core=core)
@@ -1511,29 +1659,35 @@ Three test files:
 - `test_assembly.py` — instantiate the Composite without error (schema-reconciliation check).
 - `test_run.py` — run for the largest declared interval and assert state propagated through every adapter chain.
 
-#### Step 6: Demo report
+#### Step 6: Showcase investigation + published read-only workbench
 
-The HTML report for composite mode must include:
+Same terminus as single-tool mode's **Phase 5** — scaffold the investigation
+from the composite's own generator(s), author real `expected_behavior` /
+`behavior_tests` per study, and write each study's `sims/run.py` to build
+via `build_core()`, run the composite, and render an interactive viz. For
+composite mode specifically, make sure the studies collectively demonstrate:
 
-1. **Architecture diagram** using `bigraph-viz` (PNG embedded) showing every process node, shared store, and wire. Distinct accent colors per tool.
-2. **Cross-process metrics** — plot the shared stores, not just per-tool internals.
-3. **Coupling visualization** — at least one chart with two tools' outputs on the same time axis.
-4. **Three configurations**: decoupled baseline, coupled, and stressed (one parameter pushed to a demanding regime).
+1. **The wiring/coupling itself** — at least one study whose viz plots two
+   composed tools' outputs on the same time axis, showing the coupling is
+   real (not two independent traces overlaid by accident).
+2. **Cross-process metrics** — the shared stores from `wiring.py`, not just
+   per-tool internals.
+3. **A decoupled-vs-coupled comparison** — ideally as two baselines
+   (or two studies) so a reader can see what the coupling adds.
 
-Use the same report structure as single-tool mode (sticky nav, metrics cards, Plotly charts, PBG document viewer, responsive layout).
-
-Open the report in the default browser after generation.
+Then run `investigation-from-wrapper`, fill in the studies, run them,
+verify `.pbg/runs.jsonl`, and publish exactly as in Phase 5 steps 1-4.
 
 #### Step 7: README
 
-Include: science motivation, which tools are composed and where to find their wrappers, installation (including editable-local-clone install), wiring diagram (PNG), wiring table, quick start, demo instructions, and known limitations.
+Include: science motivation, which tools are composed and where to find their wrappers, installation (including editable-local-clone install), a wiring diagram, wiring table, quick start, a link to the published read-only workbench, and known limitations.
 
 #### Step 7.5: Promote to a discoverable pbg-workspace
 
 Same ritual as single-tool mode's Phase 4.5 — `workspace.yaml`,
 `scripts/`, dashboard catalog registration. Wrap the composite's
 `build_document` in a `@composite_generator` (in
-`pbg_<name>_composite/composites/<name>.py`) so the dashboard's Composites
+`viva_<name>_composite/composites/<name>.py`) so the dashboard's Composites
 tab can run it with parameter sweeps:
 
 ```python
@@ -1556,12 +1710,12 @@ def <name>(core=None, *, interval=1.0):
 Run the scaffolder + catalog add:
 
 ```bash
-PBG_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv/bin/python)"
-"$PBG_PYTHON" -m viva_superpowers.scaffold workspace \
+VIVA_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv/bin/python)"
+"$VIVA_PYTHON" -m viva_superpowers.scaffold workspace \
     --in-place --name <name>-composite --target . \
-    --package pbg_<name>_composite --branch main
-"$PBG_PYTHON" -m viva_superpowers.workspace_catalog add \
-    --path "$(pwd)" --name <name>-composite --package pbg_<name>_composite
+    --package viva_<name>_composite --branch main
+"$VIVA_PYTHON" -m viva_superpowers.workspace_catalog add \
+    --path "$(pwd)" --name <name>-composite --package viva_<name>_composite
 python scripts/lint-workspace.py
 ```
 
@@ -1570,12 +1724,17 @@ python scripts/lint-workspace.py
 ```bash
 source .venv/bin/activate
 uv pip install .                   # non-editable so discovery sees the package
-python demo/demo_report.py
 pytest
 python scripts/lint-workspace.py
+
+# Run every showcase study, verify .pbg/runs.jsonl, publish the bundle —
+# same as single-tool mode's Final Validation.
+for f in studies/*/sims/run.py; do python "$f"; done
+bash scripts/publish_dashboard.sh reports/published/dashboard "/viva-<name>-composite/dashboard"
+
 git add -A
-git commit -m "Initial pbg-<name>-composite: workspace, generators, wiring, demo, tests"
-python -c "import os, webbrowser; webbrowser.open('file://' + os.path.abspath('demo/report.html'))"
+git commit -m "Initial viva-<name>-composite: workspace, generators, wiring, showcase investigation, tests"
+python -c "import os, webbrowser; webbrowser.open('file://' + os.path.abspath('reports/published/dashboard/index.html'))"
 ```
 
 Do not push.
@@ -1594,17 +1753,22 @@ Given `$ARGUMENTS` (strip recognized flags first; they may appear in any order):
 - If `--reproduce` (alias `--reimplement`) is present: run **Reproduction Mode** — build a labeled `<Tool>ReproductionProcess`, keeping the bare `<Tool>Process` name for a (possibly guarded) real bridge.
 - If `--mock` (alias `--stub`) is present: run **Mock Mode** — build a labeled, non-functional `<Tool>MockProcess` placeholder for wiring/scaffolding only. Opt-in only; never a fallback for a hard real-bridge build. (`--mock` and `--reproduce` are mutually exclusive.)
 - If `--lightweight` (alias `--in-workspace`) is present: run **Lightweight Mode** with the remaining args.
-- Else if one positional arg: study the tool, install the real upstream simulator, create `pbg-<tool>/`,
+- Else if one positional arg: study the tool, install the real upstream simulator, create `viva-<tool>/`,
   implement the package with **`@composite_generator`-decorated
-  composites under `pbg_<tool>/composites/`**, test it, **promote it to a
+  composites under `viva_<tool>/composites/`**, test it, **promote it to a
   pbg-workspace via `scaffold workspace --in-place` and register it in
-  the dashboard catalog**, generate the report, commit locally, and open
-  the report.
+  the dashboard catalog**, then **scaffold the showcase investigation
+  (`investigation-from-wrapper`), author each study's `expected_behavior` +
+  `behavior_tests` + `sims/run.py` with a committed interactive viz, run the
+  studies into `.pbg/runs.jsonl`, publish the read-only workbench, and open
+  the published bundle** (Phase 5) — commit locally.
 - Else if two or more positional args: inventory the listed wrappers,
-  design the wiring table, build `pbg-<name>-composite/` (workspace-shaped
+  design the wiring table, build `viva-<name>-composite/` (workspace-shaped
   with a top-level `@composite_generator` wrapping `build_document`),
-  validate, test, **promote to a pbg-workspace and register it**, generate
-  the composite report, commit locally, and open the report.
+  validate, test, **promote to a pbg-workspace and register it**, then
+  **scaffold the showcase investigation, author studies + interactive viz,
+  run into `.pbg/runs.jsonl`, publish the read-only workbench, and open the
+  published bundle** (same terminus as single-tool mode) — commit locally.
 
 ---
 
@@ -1612,12 +1776,13 @@ Given `$ARGUMENTS` (strip recognized flags first; they may appear in any order):
 
 Invoked when `$ARGUMENTS` starts with `--lightweight` or `--in-workspace`. Strip that flag and dispatch on the remaining positional count.
 
-This mode produces a single file inside the **current workspace's** `pbg_<slug>/` package plus a test. No sibling repo, no README, no HTML report, no commit. The dashboard's active-branch workstream is the canonical commit surface — this mode leaves the working tree dirty so the user (or the dashboard's Push button) commits when ready.
+This mode produces a single file inside the **current workspace's** `viva_<slug>/` package plus a test. No sibling repo, no README, no showcase investigation, no publish, no commit. The dashboard's active-branch workstream is the canonical commit surface — this mode leaves the working tree dirty so the user (or the dashboard's Push button) commits when ready.
 
 **Lightweight does not mean mock.** The default is still a **real bridge** —
 an `update()` that lazily imports and drives the genuine tool. The only thing
-"lightweight" drops is the surrounding repo scaffolding (README, HTML report,
-sibling repo, commit), not the fidelity of the wrapper. Emit a placeholder
+"lightweight" drops is the surrounding repo scaffolding (README, showcase
+investigation + publish, sibling repo, commit), not the fidelity of the
+wrapper. Emit a placeholder
 only under `--mock` (see below).
 
 (Replaces the v0.8.x skills `/pbg-wrapper` and `/pbg-composer`.)
@@ -1625,7 +1790,7 @@ only under `--mock` (see below).
 ### Common preconditions
 
 1. Walk up from cwd to find `workspace.yaml`. Fail with a clear message if absent.
-2. Read `package_path` from `workspace.yaml`; default to `pbg_<workspace_name_underscored>` if missing.
+2. Read `package_path` from `workspace.yaml`; default to `viva_<workspace_name_underscored>` if missing.
 3. NEVER install simulator dependencies — that's a separate step (`/viva-catalog install <pkg>` or manual `uv pip install`). The real bridge therefore **lazily imports** the tool inside `update()` / a `_build_model()` helper, so the file is valid even before the dependency is installed; the import only fires at run time.
 4. NEVER modify `workspace.yaml`. The Process/Composite lives in code, not metadata.
 5. NEVER auto-commit.
@@ -1636,12 +1801,12 @@ only under `--mock` (see below).
 
 Default (real bridge) steps:
 
-1. Create `pbg_<slug>/processes/` if missing (touch `__init__.py`).
+1. Create `viva_<slug>/processes/` if missing (touch `__init__.py`).
 2. **Study the tool's API first** (its docs/source/examples — read enough to
    know the real call surface). If it's already importable in the workspace
    venv, run a one-liner to confirm the entry points; if it isn't installed,
    work from its published API and lazily import inside the bridge.
-3. Write `pbg_<slug>/processes/<tool>.py` containing:
+3. Write `viva_<slug>/processes/<tool>.py` containing:
    - Module docstring naming the simulator and stating this is a real bridge.
    - `from process_bigraph import Process`.
    - Class `<Tool>Process(Process)` with:
@@ -1672,7 +1837,7 @@ Example:
 ```text
 /viva-expert --lightweight tellurium     # in a workspace called chromosome-rep1
 
-  pbg_chromosome_rep1/processes/tellurium.py    # TelluriumProcess — real bridge
+  viva_chromosome_rep1/processes/tellurium.py    # TelluriumProcess — real bridge
   tests/test_tellurium.py                        # shape + importorskip run test
 ```
 
@@ -1689,7 +1854,7 @@ explicitly asks for a scaffold.
 ```text
 /viva-expert --lightweight --mock tellurium   # explicit placeholder
 
-  pbg_chromosome_rep1/processes/tellurium.py    # TelluriumMockProcess (labeled)
+  viva_chromosome_rep1/processes/tellurium.py    # TelluriumMockProcess (labeled)
   tests/test_tellurium.py                        # shape-only smoke test
 ```
 
@@ -1697,13 +1862,13 @@ explicitly asks for a scaffold.
 
 `/viva-expert --lightweight <name> <tool1> <tool2> [...]` (replaces `/pbg-composer <name> <tools…>`)
 
-Two or more `<tool>` args after `<name>`. Each `<tool>` must be an already-installed importable package (e.g. `pbg_tellurium`). If any is missing, abort and direct the user at `/viva-catalog install <pkg>` or the Registry tab.
+Two or more `<tool>` args after `<name>`. Each `<tool>` must be an already-installed importable package (e.g. `viva_tellurium`). If any is missing, abort and direct the user at `/viva-catalog install <pkg>` or the Registry tab.
 
 Steps:
 
 1. Verify each `<tool>` is importable. If any are missing, report and abort.
-2. Create `pbg_<slug>/composites/` if missing (touch `__init__.py`).
-3. Write `pbg_<slug>/composites/<name>.py` containing:
+2. Create `viva_<slug>/composites/` if missing (touch `__init__.py`).
+3. Write `viva_<slug>/composites/<name>.py` containing:
    - Module docstring naming the composite and its participants.
    - Imports for each tool's Process class (use `__all__` or known process names from the package).
    - A `build_composite(core=None) -> Composite` function that:
@@ -1717,14 +1882,14 @@ Steps:
    - Call `build_composite()`.
    - Assert the result is a `Composite`.
    - Run for 1 timestep and verify no exception.
-5. Print a summary listing the two files, any `# TODO:` wires left, and "Run from terminal: `python -m pbg_<slug>.composites.<name>`".
+5. Print a summary listing the two files, any `# TODO:` wires left, and "Run from terminal: `python -m viva_<slug>.composites.<name>`".
 
 Example:
 
 ```text
-/viva-expert --lightweight metabolism pbg_cobra pbg_tellurium  # in chromosome-rep1
+/viva-expert --lightweight metabolism viva_cobra viva_tellurium  # in chromosome-rep1
 
-  pbg_chromosome_rep1/composites/metabolism.py    # build_composite()
+  viva_chromosome_rep1/composites/metabolism.py    # build_composite()
   tests/test_metabolism_composite.py              # smoke test
 ```
 
@@ -1734,8 +1899,8 @@ Example:
 |---|---|
 | A real bridge to a tool inside an existing workspace without a sibling repo | `--lightweight <tool>` |
 | To compose two installed wrappers inside the workspace before deciding to publish | `--lightweight <name> <t1> <t2>` |
-| A publication-ready sibling `pbg-<tool>/` repo with README, tests, HTML report, PR | (heavy) `/viva-expert <tool>` |
-| A composite repo `pbg-<name>-composite/` with wiring table, validation, report | (heavy) `/viva-expert <name> <t1> <t2>` |
+| A publication-ready sibling `viva-<tool>/` repo with README, tests, a showcase investigation + published read-only workbench, PR | (heavy) `/viva-expert <tool>` |
+| A composite repo `viva-<name>-composite/` with wiring table, validation, showcase investigation + published workbench | (heavy) `/viva-expert <name> <t1> <t2>` |
 | A clean-room reimplementation of the tool's published algorithm (honest, labeled) | add `--reproduce` |
 | A non-functional placeholder to scaffold wiring before the real tool is ready | add `--mock` |
 
