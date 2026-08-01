@@ -247,6 +247,13 @@ never pip-installed. Before pushing, make the workflows conda-aware:
   (pin a version, `cache: true`), then `pixi run python scripts/lint-workspace.py`
   and `pixi run pytest -q`. Keep the `check-no-local-paths.sh` step. Real dolfinx
   is present via the conda env, so tests run for real (not skipped).
+- **Commit the vendored `.pbg/schemas/`.** `scripts/lint-workspace.py` validates
+  `workspace.yaml`/`study.yaml` against `.pbg/schemas/*.json` with no package
+  fallback, so a fresh CI checkout needs them tracked. `.pbg/` is otherwise
+  runtime state — use a **granular** ignore (`\.pbg/*` + `!\.pbg/schemas/`), never
+  a blanket `.pbg/` (a blanket line overrides the re-include and the lint step
+  fails on CI with "missing schema … was workspace scaffolded?"). `git add
+  .pbg/schemas/`.
 - **Convert `publish-dashboard.yml`** to build under pixi too
   (`pixi run bash scripts/publish_dashboard.sh reports/published/dashboard`) so
   the static export has the simulator available for composite discovery.
