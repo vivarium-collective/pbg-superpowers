@@ -26,6 +26,16 @@ This block governs the paths below: where older text says `studies/<slug>/` or `
 
 A Study is a self-contained research unit holding one-or-more baseline composites, variants (parameter perturbations), interventions (text-described conditions), runs, and visualizations. The **Build** phase between Design and Simulate doesn't have pbg-study subcommands directly — it's handled by `/viva-expert` (heavy mode → sibling repo) or `/viva-expert --lightweight` (in-workspace, single-tool or composite form), or by hand-edited code in `pbg_<workspace>/processes/`.
 
+## See also — viva-expert → investigation → study → run → publish
+
+This skill sits at step 3 of the showcase chain: [`/viva-expert`](../viva-expert/SKILL.md)
+scaffolds the investigation + its member studies (`investigation-from-wrapper`);
+studies are grouped by [`/viva-investigation`](../viva-investigation/SKILL.md)
+(step 2, one level up); a study's individual composites can be smoke-tested
+directly via [`/viva-run`](../viva-run/SKILL.md) (step 4, sibling to
+`run-baseline`/`run-variant` below); and the finished workspace is published
+read-only via [`/viva-workbench`](../viva-workbench/SKILL.md) (step 5).
+
 <!-- House rules distilled from a cross-study expert-feedback friction review. General to any investigation. -->
 ## House rules (expert-feedback guardrails)
 
@@ -641,6 +651,15 @@ After a successful run, automatically invokes `refresh-viz` for the study so reg
 > and removes any `runs:` entries from `study.yaml`. Safe to call
 > before re-running a problematic baseline / variant. See
 > mem3dg-readdy friction log #27.
+
+> **Canonical run index is `.pbg/runs.jsonl`.** Alongside each study's
+> `runs.db` (sqlite), the canonical per-workspace run INDEX is
+> `.pbg/runs.jsonl`, written via `vivarium_workbench.lib.run_log`
+> (workbench #612) — the dashboard dual-writes both. Bespoke runners
+> (`canonical_runs:` scripts, see `run-script` below) should record via
+> `run_log.append_run_event` rather than only writing to a study-local
+> `runs.db`. (Pointer only — the `runs.db` prose elsewhere in this doc is
+> unchanged.)
 
 #### `run-script <study-name> [--entry <name>] [--list] [--no-refresh-viz]`
 

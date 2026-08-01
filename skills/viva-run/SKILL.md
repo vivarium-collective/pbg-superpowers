@@ -11,6 +11,16 @@ argument-hint: <composite-id> [--steps N] [--emit p1,p2,...]
 Run a composite (spec or generator) for `N` steps and print a summary of
 the emitted observables. Wraps `/api/composite-test-run`.
 
+## See also — viva-expert → investigation → study → run → publish
+
+This skill is step 4 of the showcase chain: it smoke-tests one composite
+directly, ad hoc, outside any Study — the fast sibling to
+[`/viva-study`](../viva-study/SKILL.md)'s `run-baseline` / `run-variant`
+(step 3), which is itself scaffolded by [`/viva-expert`](../viva-expert/SKILL.md)
+and grouped by [`/viva-investigation`](../viva-investigation/SKILL.md) (step 2).
+Once studies have real runs, [`/viva-workbench`](../viva-workbench/SKILL.md)
+(step 5) builds the published read-only snapshot.
+
 <!-- Cross-skill house rule from a study-feedback friction review. General. -->
 ## House rule: bias to execute
 
