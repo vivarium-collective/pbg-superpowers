@@ -51,7 +51,11 @@ def test_each_study_written_with_expected_shape(tmp_path):
         study = yaml.safe_load(study_path.read_text())
         assert study["schema_version"] == 4
         assert study["baseline"][0]["composite"] == generator
-        assert study["canonical_runs"][0]["script"] == "sims/run.py"
+        # script: is resolved relative to the WORKSPACE ROOT (not the study
+        # dir) by /viva-study run-script — matches every hand-authored
+        # viva-fenics reference study (e.g. studies/poisson-validation/
+        # study.yaml -> script: studies/poisson-validation/sims/run.py).
+        assert study["canonical_runs"][0]["script"] == f"studies/{entry['slug']}/sims/run.py"
         assert study["canonical_runs"][0]["default"] is True
 
 

@@ -692,7 +692,10 @@ def _investigation_from_wrapper_study_stub(
     composite entry, expected_behavior/behavior_tests carrying the
     en/measure/expect grammar (stubbed), a pipeline_gate wiring a linear
     chain across the batch, and a canonical_runs default entry pointing at
-    ``sims/run.py``.
+    ``studies/<slug>/sims/run.py`` — ``script:`` is resolved relative to the
+    WORKSPACE ROOT by ``/viva-study run-script``, not the study dir (see
+    ``docs/concepts/vivarium-workbench-model.md``), matching every
+    hand-authored viva-fenics reference study.
     """
     import datetime as _dt
 
@@ -741,7 +744,7 @@ def _investigation_from_wrapper_study_stub(
         },
         "canonical_runs": [{
             "name": "default",
-            "script": "sims/run.py",
+            "script": f"studies/{slug}/sims/run.py",
             "args": [],
             "label": slug,
             "default": True,
