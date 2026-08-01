@@ -1,7 +1,7 @@
 [project]
-name = "pbg-superpowers"
-version = "0.17.0"
-description = "Plugin Python helpers for the pbg-superpowers skills"
+name = "viva-superpowers"
+version = "0.18.0"
+description = "Plugin Python helpers for the viva-superpowers skills (was pbg-superpowers)"
 requires-python = ">=3.11"
 dependencies = [
     "pyyaml>=6.0",
@@ -84,10 +84,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-# `viva_superpowers` is the real package; `pbg_superpowers` is a back-compat shim
-# (renamed 2026 — pbg→viva). Both ship so existing `import pbg_superpowers` keeps
-# working during the deprecation window. The dist NAME stays `pbg-superpowers`
-# until consumers switch their dependency string (they pin it via git @main).
+# `viva_superpowers` is the real package; `pbg_superpowers` is a back-compat
+# IMPORT shim (renamed 2026 — pbg→viva). Both ship so existing
+# `import pbg_superpowers` keeps working during the deprecation window. The dist
+# NAME is now `viva-superpowers`; a separate `pbg-superpowers` DIST shim (see
+# shim/) depends on this one so existing `pbg-superpowers` PyPI deps keep
+# resolving to the renamed package.
 packages = ["viva_superpowers", "pbg_superpowers"]
 # templates/ and server/ live outside the package but are required at runtime
 # (report renderer, scaffold helper, server scripts). Force-include them in the
