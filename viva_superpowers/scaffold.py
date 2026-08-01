@@ -639,5 +639,276 @@ def import_model(workspace: Path, name: str, source: str, ref: str,
     click.echo(f"import '{name}' registered (mode={mode})")
 
 
+# ---------------------------------------------------------------------------
+# investigation-from-wrapper — scaffold an investigation + skeleton studies
+# from a list of composite-generator names (Task 14).
+#
+# Emits the "canonical" shapes hand-authored in the viva-fenics build:
+#   investigations/<slug>/investigation.yaml  (schema_version 2)
+#   studies/<study-slug>/study.yaml           (schema_version 4, one per
+#     generator, wired into a linear pipeline_gate chain)
+#
+# The goal is that wrapping a batch of composite generators into a showcase
+# investigation becomes a one-liner; the author then fills in the
+# expected_behavior / behavior_tests placeholders and writes sims/run.py per
+# study.
+# ---------------------------------------------------------------------------
+
+
+_SLUG_SEGMENT_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _kebab(s: str) -> str:
+    """Lowercase + non-alnum runs -> single hyphen, trimmed."""
+    return _SLUG_SEGMENT_RE.sub("-", s.strip().lower()).strip("-")
+
+
+def _study_slug_for_generator(generator: str, used: set[str]) -> str:
+    """Derive a study slug from a (possibly dotted) generator id/name.
+
+    Uses the last dotted segment (e.g. ``pkg.composites.poisson.poisson_baseline``
+    -> ``poisson-baseline``; a bare short name like ``poisson_baseline`` maps
+    the same way). Collisions (two generators whose last segment kebab-cases
+    to the same slug) are disambiguated with a ``-2``, ``-3``, ... suffix.
+    """
+    last = generator.strip().split(".")[-1]
+    base = _kebab(last) or "study"
+    slug = base
+    n = 2
+    while slug in used:
+        slug = f"{base}-{n}"
+        n += 1
+    used.add(slug)
+    return slug
+
+
+def _investigation_from_wrapper_study_stub(
+    slug: str, generator: str, prev_slug: str | None,
+) -> dict:
+    """A skeleton study.yaml dict (schema_version 4) for one generator.
+
+    Mirrors the shape hand-authored + reviewed in the viva-fenics build
+    (``studies/poisson-validation/study.yaml``): baseline -> a single
+    composite entry, expected_behavior/behavior_tests carrying the
+    en/measure/expect grammar (stubbed), a pipeline_gate wiring a linear
+    chain across the batch, and a canonical_runs default entry pointing at
+    ``sims/run.py``.
+    """
+    import datetime as _dt
+
+    today = _dt.date.today().isoformat()
+    behavior_name = f"{slug}-behaves"
+    prerequisites = (
+        [{"study": prev_slug, "condition": "tests-passed"}] if prev_slug else []
+    )
+    return {
+        "schema_version": 4,
+        "name": slug,
+        "title": slug.replace("-", " ").capitalize(),
+        "created": today,
+        "status": "planned",
+        "phase": "Design",
+        "question": "TBD — what question does this study answer?",
+        "hypothesis": "TBD — what do we expect and why?",
+        "objective": f"TBD — describe what {generator} is expected to demonstrate.",
+        "description": f"Wraps the `{generator}` composite generator as a study. Fill in.",
+        "baseline": [{
+            "name": "baseline",
+            "composite": generator,
+            "params": {},
+        }],
+        "variants": [],
+        "expected_behavior": [{
+            "name": behavior_name,
+            "en": "TBD — plain-language statement of the expected behavior.",
+            "observable": "TBD",
+            "condition": "TBD",
+            "rationale": "TBD — why this condition should hold.",
+            "measure": {"kind": "derived_scalar", "field": "TBD"},
+            "expect": {"op": "<", "value": None},
+        }],
+        "behavior_tests": [{
+            "name": behavior_name,
+            "classification": "primary",
+            "description": "TBD — fill in from expected_behavior above.",
+            "measure": {"kind": "derived_scalar", "field": "TBD"},
+            "pass_if": {"op": "<", "value": None},
+            "requires_simulation": "baseline",
+        }],
+        "pipeline_gate": {
+            "prerequisites": prerequisites,
+            "enables": [],
+        },
+        "canonical_runs": [{
+            "name": "default",
+            "script": "sims/run.py",
+            "args": [],
+            "label": slug,
+            "default": True,
+        }],
+        "visualizations": [],
+        "conclusion": None,
+    }
+
+
+def _investigation_from_wrapper_stub(
+    inv_slug: str, name: str, study_slugs: list[str], acceptance_criteria: list[dict],
+) -> dict:
+    """A skeleton investigation.yaml dict (schema_version 2).
+
+    Mirrors ``investigations/fenics-showcase/investigation.yaml``.
+    """
+    import datetime as _dt
+
+    today = _dt.date.today().isoformat()
+    return {
+        "schema_version": 2,
+        "name": inv_slug,
+        "title": name.replace("-", " ").capitalize(),
+        "created": today,
+        "status": "planning",
+        "question": "TBD — what overarching question ties these studies together?",
+        "hypothesis": "TBD — what do we expect the composed studies to show?",
+        "description": (
+            f"Scaffolded from {len(study_slugs)} composite generator(s) via "
+            "`investigation-from-wrapper`. Fill in the narrative."
+        ),
+        "studies": list(study_slugs),
+        "executive": {
+            "what_is_this": "TBD — one paragraph, for a reader who has never seen this.",
+            "verdict": "TBD — fill in once studies are run.",
+            "verdict_status": "in-progress",
+            "verdict_detail": "TBD",
+            "decisions_needed": [],
+        },
+        "scientific_argument": {
+            "main_claim": "TBD — the one-sentence claim this investigation supports.",
+            "evidence_for": [],
+            "evidence_against": [],
+            "key_figures": [],
+            "caveats": [],
+        },
+        "acceptance_criteria": acceptance_criteria,
+    }
+
+
+def scaffold_investigation_from_wrapper(
+    workspace: Path,
+    name: str,
+    studies: list[str],
+    *,
+    investigation_slug: str | None = None,
+    force: bool = False,
+) -> dict:
+    """Write an investigation + one skeleton study per composite generator.
+
+    ``studies`` is the list of composite generator ids/short names (as given
+    by the caller — the raw string is written verbatim into each study's
+    ``baseline[0].composite``). Study slugs are derived from each generator's
+    last dotted segment, kebab-cased, deduplicated on collision.
+
+    Existing ``investigation.yaml`` / ``study.yaml`` files are never
+    overwritten unless ``force=True`` — a collision is reported (not raised)
+    so a partial re-run is safe.
+
+    Returns a summary dict: ``{investigation_path, investigation_written,
+    studies: [{slug, generator, path, written}]}``.
+    """
+    from . import study_io
+    from .workspace_paths import WorkspacePaths
+
+    if not studies:
+        raise click.ClickException("--studies must list at least one composite generator")
+
+    ws = Path(workspace).resolve()
+    wp = WorkspacePaths.load(ws)
+    inv_slug = investigation_slug or _kebab(name) or name
+
+    used_slugs: set[str] = set()
+    study_slugs: list[str] = []
+    for gen in studies:
+        gen = gen.strip()
+        if not gen:
+            continue
+        study_slugs.append(_study_slug_for_generator(gen, used_slugs))
+
+    study_results: list[dict] = []
+    acceptance_criteria: list[dict] = []
+    prev_slug: str | None = None
+    for slug, gen in zip(study_slugs, [s.strip() for s in studies if s.strip()]):
+        study_dir = wp.studies / slug
+        study_path = study_dir / "study.yaml"
+        stub = _investigation_from_wrapper_study_stub(slug, gen, prev_slug)
+        acceptance_criteria.append({
+            "study": slug,
+            "behavior": stub["expected_behavior"][0]["name"],
+        })
+        written = False
+        if study_path.exists() and not force:
+            click.echo(f"skip: {study_path} already exists (use --force to overwrite)")
+        else:
+            study_dir.mkdir(parents=True, exist_ok=True)
+            study_io.save_yaml_atomic(study_path, stub)
+            written = True
+            click.echo(f"wrote: {study_path}")
+        study_results.append({
+            "slug": slug, "generator": gen, "path": str(study_path), "written": written,
+        })
+        prev_slug = slug
+
+    inv_dir = wp.investigations / inv_slug
+    inv_path = inv_dir / "investigation.yaml"
+    inv_written = False
+    if inv_path.exists() and not force:
+        click.echo(f"skip: {inv_path} already exists (use --force to overwrite)")
+    else:
+        inv_dir.mkdir(parents=True, exist_ok=True)
+        inv_stub = _investigation_from_wrapper_stub(
+            inv_slug, name, study_slugs, acceptance_criteria,
+        )
+        study_io.save_yaml_atomic(inv_path, inv_stub)
+        inv_written = True
+        click.echo(f"wrote: {inv_path}")
+
+    click.echo(
+        f"\n{len(study_results)} stud{'y' if len(study_results) == 1 else 'ies'} + "
+        f"1 investigation scaffolded for '{inv_slug}'.\n"
+        "Next: fill in expected_behavior/behavior_tests + author sims/run.py "
+        "per study (studies/<slug>/sims/run.py)."
+    )
+
+    return {
+        "investigation_path": str(inv_path),
+        "investigation_written": inv_written,
+        "studies": study_results,
+    }
+
+
+@cli.command("investigation-from-wrapper")
+@click.option("--name", required=True, help="Investigation name (used to derive the slug and title).")
+@click.option("--studies", required=True,
+              help="Comma-separated composite generator ids/names, e.g. "
+                   "'pkg.composites.a.a_baseline,pkg.composites.b.b_baseline'.")
+@click.option("--workspace", "workspace_", default=".", type=click.Path(path_type=Path),
+              help="Workspace root (must contain workspace.yaml). Default: current dir.")
+@click.option("--investigation-slug", "investigation_slug", default=None,
+              help="Directory slug for the investigation (default: kebab-cased --name).")
+@click.option("--force", is_flag=True, default=False,
+              help="Overwrite existing investigation.yaml/study.yaml files.")
+def investigation_from_wrapper(
+    name: str, studies: str, workspace_: Path,
+    investigation_slug: str | None, force: bool,
+) -> None:
+    """Scaffold an investigation + one skeleton study per composite generator."""
+    ws = workspace_.resolve()
+    if not (ws / "workspace.yaml").exists():
+        raise click.ClickException(f"workspace.yaml missing at {ws}")
+    gen_list = [s for s in (studies.split(",")) if s.strip()]
+    scaffold_investigation_from_wrapper(
+        ws, name, gen_list,
+        investigation_slug=investigation_slug, force=force,
+    )
+
+
 if __name__ == "__main__":
     cli()
