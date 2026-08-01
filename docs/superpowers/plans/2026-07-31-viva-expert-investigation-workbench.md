@@ -4,7 +4,7 @@
 
 **Goal:** Prove a new heavy-mode output model for `viva-expert` — processes + `@composite_generator` composites + one showcase **investigation with studies** + a **published read-only workbench** (replacing the standalone HTML report) — by wrapping real FEniCSx end-to-end in `viva-fenics/`, then codify the recipe into `viva-expert/SKILL.md` and the `viva_superpowers` tooling.
 
-**Architecture:** `viva-fenics/` is a pixi-managed conda env (real `fenics-dolfinx`) that also holds the pbg/dashboard stack. FEM solvers are wrapped as PBG `Process`/`Step` classes with additive `array[float]` field ports; composites are `@composite_generator` functions; a `fenics-showcase` investigation binds 7 studies that run into `runs.db` and render interactive Plotly/Three.js viz; `vivarium-workbench-publish` exports a static read-only bundle. Then the skill + scaffolder are updated to make this the default terminus.
+**Architecture:** `viva-fenics/` is a pixi-managed conda env (real `fenics-dolfinx`) that also holds the pbg/dashboard stack. FEM solvers are wrapped as PBG `Process`/`Step` classes with additive `array[float]` field ports; composites are `@composite_generator` functions; a `fenics-showcase` investigation binds 7 studies that run into `.pbg/runs.jsonl` and render interactive Plotly/Three.js viz; `vivarium-workbench-publish` exports a static read-only bundle. Then the skill + scaffolder are updated to make this the default terminus.
 
 **Tech Stack:** FEniCSx (dolfinx, ufl, basix, petsc4py), gmsh, mpich; process-bigraph, bigraph-schema, bigraph-viz2; vivarium-workbench; pixi; Plotly.js + Three.js; pytest.
 
@@ -394,15 +394,15 @@ def test_convergence_loglog_html():
 
 - [ ] **Step 1:** `pixi run python -m viva_superpowers.scaffold workspace --in-place --name fenics --target . --package viva_fenics --branch main` then `viva_superpowers.workspace_catalog add --path "$(pwd)" --name fenics --package viva_fenics`.
 - [ ] **Step 2:** Hand-author `investigation.yaml` (schema_version 2) with `executive`/`scientific_argument` spine, `studies: [poisson-validation, mesh-convergence, transient-diffusion, reaction-diffusion]`, `acceptance_criteria` linking each study to a `behavior` name.
-- [ ] **Step 3:** Author each `study.yaml` (baseline composite id, `expected_behavior[].name` matching acceptance_criteria, `parent_studies` = linear DAG, `canonical_runs`, `visualizations`) and a `sims/run.py` that builds the composite, runs it, writes `runs.db` (ParquetEmitter or the study run harness) and renders `viz/<name>.html` via `viva_fenics.viz`.
+- [ ] **Step 3:** Author each `study.yaml` (baseline composite id, `expected_behavior[].name` matching acceptance_criteria, `parent_studies` = linear DAG, `canonical_runs`, `visualizations`) and a `sims/run.py` that builds the composite, runs it, writes `.pbg/runs.jsonl` (ParquetEmitter or the study run harness) and renders `viz/<name>.html` via `viva_fenics.viz`.
 - [ ] **Step 4:** `pixi run python scripts/lint-workspace.py` → "workspace lint: OK"; `pixi run pytest` green.
 - [ ] **Step 5: Commit** `feat(fenics): workspace + fenics-showcase investigation (4 core studies)`.
 
 ---
 
-## Task 8: Run core studies → `runs.db` + committed interactive viz
+## Task 8: Run core studies → `.pbg/runs.jsonl` + committed interactive viz
 
-**Files:** Modify each core `studies/<slug>/` (adds `runs.db`, `viz/*.html`, `*.meta.json`).
+**Files:** Modify each core `studies/<slug>/` (adds `.pbg/runs.jsonl`, `viz/*.html`, `*.meta.json`).
 
 - [ ] **Step 1:** For each core study run its canonical script:
 ```bash
@@ -411,10 +411,10 @@ for s in poisson-validation mesh-convergence transient-diffusion reaction-diffus
   pixi run python investigations/fenics-showcase/studies/$s/sims/run.py
 done
 ```
-- [ ] **Step 2:** Verify `runs.db` exists per study and `viz/*.html` render (open one).
+- [ ] **Step 2:** Verify `.pbg/runs.jsonl` exists per study and `viz/*.html` render (open one).
 - [ ] **Step 3:** Run behavior tests (`/viva-study`-style pytest under `studies/<slug>/tests/` if authored, else the process tests already cover the behaviors).
 - [ ] **Step 4:** Confirm outcomes recorded.
-- [ ] **Step 5: Commit** `feat(fenics): run core studies → runs.db + interactive viz`.
+- [ ] **Step 5: Commit** `feat(fenics): run core studies → .pbg/runs.jsonl + interactive viz`.
 
 ---
 
@@ -424,7 +424,7 @@ done
 
 **Interfaces:** `NavierStokesProcess(Process)` — incompressible NS (IPCS splitting or Stokes for low Re) on a lid-driven cavity or channel; `inputs()={"body_force":"array[float]"}`; `outputs()={"velocity":"array[float]","pressure":"array[float]","speed_integral":"float"}`. Viz: `viz.quiver_streamlines_html`.
 
-- [ ] Steps: failing test (steady velocity is non-trivial and divergence≈0; speed increases with lid velocity/Re trend) → implement real dolfinx NS → pass → author study.yaml (baseline `navier_stokes`, variants sweep `reynolds`, parent `poisson-validation`) + `sims/run.py` (runs.db + streamlines viz) → run → commit `feat(fenics): Navier-Stokes process + study + streamline viz`.
+- [ ] Steps: failing test (steady velocity is non-trivial and divergence≈0; speed increases with lid velocity/Re trend) → implement real dolfinx NS → pass → author study.yaml (baseline `navier_stokes`, variants sweep `reynolds`, parent `poisson-validation`) + `sims/run.py` (.pbg/runs.jsonl + streamlines viz) → run → commit `feat(fenics): Navier-Stokes process + study + streamline viz`.
 - [ ] **Isolation:** build in a git worktree of `viva-fenics` (`viva-fenics--ns`) to avoid file collisions with Tasks 10–11; cherry-pick/merge onto current HEAD before combining.
 
 ---
@@ -481,7 +481,7 @@ done
 
 **Files (worktree):** Modify `skills/viva-expert/SKILL.md`.
 
-- [ ] Replace **Phase 5 "Demo Report"** section with **"Phase 5: Showcase Investigation + Published Read-only Workbench"**: (a) `investigation-from-wrapper` scaffold from the repo's generators; (b) author `expected_behavior`/`behavior_tests`/`canonical_runs` + interactive viz per study (invoke `dataviz`); (c) run studies → `runs.db`; (d) `publish_assets.emit` + `vivarium-workbench-publish --workspace . --out reports/published/dashboard --base-path /pbg-<tool>/dashboard`; (e) open the bundle. Interactive viz lives in study `viz/`, not `demo/report.html`.
+- [ ] Replace **Phase 5 "Demo Report"** section with **"Phase 5: Showcase Investigation + Published Read-only Workbench"**: (a) `investigation-from-wrapper` scaffold from the repo's generators; (b) author `expected_behavior`/`behavior_tests`/`canonical_runs` + interactive viz per study (invoke `dataviz`); (c) run studies → `.pbg/runs.jsonl`; (d) `publish_assets.emit` + `vivarium-workbench-publish --workspace . --out reports/published/dashboard --base-path /pbg-<tool>/dashboard`; (e) open the bundle. Interactive viz lives in study `viz/`, not `demo/report.html`.
 - [ ] Add a **conda/pixi install path** subsection (for conda-only tools: pixi.toml on conda-forge, one env holding solver + pbg/dashboard, all commands via `pixi run`) next to the uv `.venv` path; reference `pbg-compucell3d` + `viva-fenics`.
 - [ ] Update frontmatter `description`, top-of-file "The Default"/intent, **Deliverables** checklist (investigation+studies+published dashboard replace demo report; keep processes+generators+workspace), **README Requirements** (link published dashboard), **Final Validation** (run studies + publish + lint), and the **Start** dispatch text. Mirror the same terminus into **Composite Mode**. Lightweight mode unchanged.
 - [ ] Commit `docs(viva-expert): terminate heavy mode at investigation + read-only workbench`.
