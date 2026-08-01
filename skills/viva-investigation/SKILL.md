@@ -14,6 +14,17 @@ An Investigation lives at `$INVESTIGATIONS_DIR/<slug>/investigation.yaml` (resol
 
 See [`docs/concepts/vivarium-workbench-model.md`](../../docs/concepts/vivarium-workbench-model.md) for the canonical data model.
 
+## See also — viva-expert → investigation → study → run → publish
+
+This skill sits at step 2 of the showcase chain: [`/viva-expert`](../viva-expert/SKILL.md)
+(heavy mode) scaffolds a whole investigation via `investigation-from-wrapper`;
+each member study is then managed via [`/viva-study`](../viva-study/SKILL.md)
+(step 3); individual composites can be smoke-tested directly via
+[`/viva-run`](../viva-run/SKILL.md) (step 4); and the workspace is exposed as an
+interactive UI — and built into a **published read-only** snapshot
+(`viva_superpowers.publish_assets.emit(...)` + `vivarium-workbench-publish` →
+gh-pages) — via [`/viva-workbench`](../viva-workbench/SKILL.md) (step 5).
+
 ## Layout (investigation-centric, nested)
 
 Studies live **nested under their investigation**:
@@ -74,6 +85,15 @@ These are **study-level** fields — author them per member study via `/viva-stu
 **State-first opening — `executive` is the single source.** The investigation opening is state-first and is rendered from `executive: {what_is_this, verdict, verdict_status, verdict_detail, decisions_needed:[{question, context}]}`. The **same `executive` block** drives the report's Executive summary — do not maintain a second copy. Update `verdict` / `verdict_status` (`in-progress | passed | complete | blocked | failed | planning`) as member studies pass or fail. The framing + argument come from `question:`, `hypothesis:`, and `scientific_argument: {main_claim, evidence_for[], evidence_against[], key_figures[], caveats[]}`.
 
 **parquet-runs / SimulationsDB convention.** For a member study's run to appear in SimulationsDB tagged to its study + investigation, the run's emitter output must live under the per-study path `studies/<slug>/parquet-runs/<run>/` (ParquetEmitter hive) or `studies/<slug>/runs.db` (SQLite, with `emitter_path` recorded). Bespoke runners (`canonical_runs:` scripts) must write there; the dashboard-managed `run-baseline` / `run-variant` flow already does.
+
+> **Canonical run index is `.pbg/runs.jsonl`.** The per-workspace run INDEX
+> (across studies) is now `.pbg/runs.jsonl`, written via
+> `vivarium_workbench.lib.run_log` (workbench #612) — the dashboard
+> dual-writes `runs_meta` (sqlite, per-study) + `.pbg/runs.jsonl`
+> (workspace-wide). Bespoke `canonical_runs` scripts should record events via
+> `run_log.append_run_event` rather than relying on a study-local `runs.db`
+> alone. (This is a pointer, not a migration — the `runs.db` prose above
+> stays as-is.)
 
 
 ## Investigation ≡ branch ≡ worktree

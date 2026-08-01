@@ -23,6 +23,18 @@ Studies, Simulations DB, Visualizations, Composites, GitHub Branches.
 > Unrelated processes — different ports, state dirs, purposes. Run both if you
 > want.
 
+## See also — viva-expert → investigation → study → run → publish
+
+This skill is step 5 (final) of the showcase chain: [`/viva-expert`](../viva-expert/SKILL.md)
+scaffolds a whole showcase investigation via `investigation-from-wrapper`, whose
+member studies are managed via [`/viva-investigation`](../viva-investigation/SKILL.md)
+(step 2) and [`/viva-study`](../viva-study/SKILL.md) (step 3), with individual
+composites smoke-testable via [`/viva-run`](../viva-run/SKILL.md) (step 4). This
+skill drives the *interactive* workbench, and the same workspace also builds the
+**published read-only** flow: `viva_superpowers.publish_assets.emit(...)` writes
+`scripts/publish_dashboard.sh` + `.github/workflows/publish-dashboard.yml`, then
+`vivarium-workbench-publish` renders a static snapshot deployed to gh-pages.
+
 ## Session-per-tab — one workspace per browser tab
 
 The workbench multiplexes **many workspaces from one running server, one per
