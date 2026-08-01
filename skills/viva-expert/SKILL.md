@@ -234,6 +234,29 @@ identical between the uv and pixi paths. The default for pip-installable
 tools remains the uv `.venv` path above; reach for pixi only when the
 simulator itself needs conda.
 
+**CI for a pixi workspace.** The workspace scaffolder ships a `uv`/`pip`-based
+`.github/workflows/workspace-ci.yml` (plus legacy `publish-reports.yml` and a
+`build-and-push.yml` Docker job). For a conda-only tool these are **guaranteed
+red** — `pytest` will `import <tool>` and fail because the conda simulator was
+never pip-installed. Before pushing, make the workflows conda-aware:
+
+- **Add the CI platform to `pixi.toml`.** GitHub runners are Linux, so the
+  osx-only default won't solve there: `platforms = ["osx-arm64", "linux-64"]`,
+  then `pixi lock` (re-locks for both) and commit `pixi.lock`.
+- **Convert `workspace-ci.yml` to pixi** — `uses: prefix-dev/setup-pixi@v0.8.1`
+  (pin a version, `cache: true`), then `pixi run python scripts/lint-workspace.py`
+  and `pixi run pytest -q`. Keep the `check-no-local-paths.sh` step. Real dolfinx
+  is present via the conda env, so tests run for real (not skipped).
+- **Convert `publish-dashboard.yml`** to build under pixi too
+  (`pixi run bash scripts/publish_dashboard.sh reports/published/dashboard`) so
+  the static export has the simulator available for composite discovery.
+- **Delete the workflows that don't apply**: legacy `publish-reports.yml` (the
+  read-only workbench supersedes the client-side HTML-report flow) and
+  `build-and-push.yml` (GHCR Docker image — not part of this deliverable).
+
+Precedent: `viva-fenics`'s `.github/workflows/` (pixi `workspace-ci.yml` +
+`publish-dashboard.yml`, no report/docker jobs).
+
 One consequence of pixi/uv-build editable installs: they are **not**
 auto-discovered by `allocate_core()` the way a standard `pip install -e .`
 is (see **Auto-Discovery Convention** below for why, and the required
