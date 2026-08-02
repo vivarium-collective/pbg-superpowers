@@ -58,7 +58,7 @@ The output reports `{filled: N, skipped: N}`.
 If `filled == 0` and you expected fills, check:
 - Does the finding have `evidence.from_test: <test-name>`?
 - Does the canonical run's `computed_outcomes` have a `measured_value` for that test?
-  Run `study_outcomes.sync` or `pbg-sync-runs` to refresh.
+  Run `study_outcomes.sync` or `viva-sync-runs` to refresh.
 
 ---
 

@@ -1,6 +1,6 @@
 # viva-superpowers
 
-> _Renamed from **pbg-superpowers** (pbg→viva rebrand). Old repo/marketplace paths redirect; `/pbg-*` skills stay as deprecated aliases; the PyPI dist is still `pbg-superpowers` for now._
+> _Renamed from **pbg-superpowers** (pbg→viva rebrand, now complete). Old repo/marketplace paths redirect and the `/pbg-*` alias skills have been removed — use `/viva-*`. The `pbg-superpowers` PyPI dist and the `pbg_superpowers` import both remain only as thin back-compat shims that re-export `viva-superpowers`._
 
 A Claude Code plugin for building **multiscale models in the Process Bigraph framework**. Ships 16 `/viva-*` skills that scaffold the mechanical parts of compositional modeling — wrapping a simulator as a typed Process, composing Processes into a Composite, organizing the work as a reproducible workspace, and managing studies + runs + visualizations through a local dashboard.
 

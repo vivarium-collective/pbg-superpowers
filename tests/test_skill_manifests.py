@@ -16,30 +16,25 @@ import yaml
 
 # The skills that ship with `user-invocable: true`.
 #
-# `_VIVA_MIRRORED`: the 16 pre-rebrand `viva-*` skills (incl. `/viva-init` machine
-# setup) that each carry a `pbg-*` back-compat alias from the pbg→viva rebrand
-# (`/viva-suggest` is an internal dashboard callback, deliberately NOT invocable;
-# `/pbg-dashboard` is the legacy dashboard→workbench alias).
-# `_VIVA_ONLY`: skills added AFTER the rebrand — viva-only, with NO deprecated
-# `pbg-*` mirror (the rebrand is complete; new skills don't accrue legacy aliases).
+# `_VIVA_CORE`: the 16 core `/viva-*` skills (incl. `/viva-init` machine setup;
+# `/viva-suggest` is an internal dashboard callback, deliberately NOT invocable).
+# `_VIVA_EXTRA`: skills added after the core set.
+# The pbg→viva rebrand is complete — the legacy `pbg-*` alias skills were removed,
+# so the invocable set is now viva-only.
 # Keep in sync with docs/skills.md + README/CLAUDE counts — the test below fails on drift.
-_VIVA_MIRRORED = {
+_VIVA_CORE = {
     "viva-biology-forward", "viva-catalog", "viva-cite-bands", "viva-expert",
     "viva-explore", "viva-init", "viva-investigation", "viva-navigate",
     "viva-report", "viva-run", "viva-server", "viva-status", "viva-study",
     "viva-viz", "viva-workbench", "viva-workspace",
 }
-_VIVA_ONLY = {"viva-harden-investigation"}
-_VIVA_INVOCABLE = _VIVA_MIRRORED | _VIVA_ONLY
-USER_INVOCABLE_SKILLS = (
-    _VIVA_INVOCABLE
-    | {name.replace("viva-", "pbg-", 1) for name in _VIVA_MIRRORED}
-    | {"pbg-dashboard"}
-)
+_VIVA_EXTRA = {"viva-harden-investigation"}
+_VIVA_INVOCABLE = _VIVA_CORE | _VIVA_EXTRA
+USER_INVOCABLE_SKILLS = _VIVA_INVOCABLE
 
 
 REQUIRED_FIELDS = {"name", "description"}
-SKILL_NAME_RE = re.compile(r"^(?:viva|pbg)-[a-z][a-z0-9-]*$")
+SKILL_NAME_RE = re.compile(r"^viva-[a-z][a-z0-9-]*$")
 
 
 def _frontmatter(text: str) -> dict:
@@ -63,7 +58,7 @@ def test_at_least_one_skill_present(plugin_root):
 def test_skill_dir_names_well_formed(plugin_root):
     bad = [p.parent.name for p in _skill_files(plugin_root)
            if not SKILL_NAME_RE.match(p.parent.name)]
-    assert not bad, f"skill dirs with bad names: {bad} (expected pbg-<kebab>)"
+    assert not bad, f"skill dirs with bad names: {bad} (expected viva-<kebab>)"
 
 
 def pytest_generate_tests(metafunc):

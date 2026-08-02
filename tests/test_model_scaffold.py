@@ -1,4 +1,4 @@
-"""Integration tests for `pbg-scaffold model`."""
+"""Integration tests for `viva-scaffold model`."""
 import subprocess
 import sys
 from pathlib import Path

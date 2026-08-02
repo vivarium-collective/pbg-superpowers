@@ -12,7 +12,7 @@ SKILL = Path(__file__).resolve().parent.parent / "skills" / "viva-cite-bands" / 
 def test_skill_mentions_citation_gaps_surface():
     text = SKILL.read_text(encoding="utf-8")
     assert "investigation_citation_gaps" in text
-    assert "pbg-citation-gaps" in text
+    assert "viva-citation-gaps" in text
 
 
 def test_skill_mentions_set_band_provenance_apply():

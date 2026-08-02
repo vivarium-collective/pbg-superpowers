@@ -34,7 +34,7 @@ back-ref. The investigation's publication/report lives at `investigations/<inv>/
 
 - **Resolve a study dir** (nested- and flat-aware): `python -m viva_superpowers.paths --study <slug>`.
 - **Create a new study** under `$INVESTIGATIONS_DIR/<inv>/studies/<slug>/` (write the `investigation:` back-ref).
-- Legacy flat `studies/<slug>/` still resolves (back-compat) until a repo is migrated with `pbg-migrate-nested`.
+- Legacy flat `studies/<slug>/` still resolves (back-compat) until a repo is migrated with `viva-migrate-nested`.
 
 This block governs the paths below: where older text says `studies/<slug>/` or `$STUDIES_DIR/<slug>/`, prefer the resolver / the nested path.
 
@@ -48,7 +48,7 @@ inputs:
   expert_docs: []
 ```
 
-Repo-wide source packages and shared/unused inputs stay global (repo-level `datasets/`, `references/papers.bib`). To migrate existing repo-level datasets, run `pbg-migrate-inputs` (`python -m viva_superpowers.migrate_inputs --workspace <ws> [--apply]`): it assigns a dataset to an investigation only when exactly ONE investigation's studies reference it (by filename in `study.yaml`); multi-investigation and unused datasets are reported and left global. Default prints the plan; `--apply` performs the `git mv` and updates `investigation.yaml`.
+Repo-wide source packages and shared/unused inputs stay global (repo-level `datasets/`, `references/papers.bib`). To migrate existing repo-level datasets, run `viva-migrate-inputs` (`python -m viva_superpowers.migrate_inputs --workspace <ws> [--apply]`): it assigns a dataset to an investigation only when exactly ONE investigation's studies reference it (by filename in `study.yaml`); multi-investigation and unused datasets are reported and left global. Default prints the plan; `--apply` performs the `git mv` and updates `investigation.yaml`.
 
 **NEVER silently add an input the expert did not provide.** `inputs.references`, `inputs.datasets`, and `expert_docs` are the *provided* inputs — things the expert supplied or explicitly approved. If, while working, you find yourself wanting to cite a paper, invoke a mechanism, or lean on a parameter the expert did **not** give you, do **not** add it to `inputs.` and do **not** weave it into the prose as fact. Instead record it under `proposed_inputs:` with `status: pending`, plus the `provenance` (which commit / why it came up) and the `rationale` (what you used it for). The expert then Accepts or Declines each item in the report; on Accept the dashboard promotes a `kind: reference` item into `inputs.references` (a `kind: mechanism` is marked accepted for a human to integrate), on Decline it is marked declined and left out. This keeps the agent from quietly importing outside claims as if they were expert-sanctioned.
 

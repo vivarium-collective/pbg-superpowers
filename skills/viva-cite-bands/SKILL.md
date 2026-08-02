@@ -66,7 +66,7 @@ already declares a curated pool of supporting references in its
 `investigation.yaml` `inputs.references` block (workspace bib_keys that resolve
 in `references/papers.bib`). These are first-class candidates for the uncited
 bands — surface them deterministically with `investigation_citation_gaps`
-(or the `pbg-citation-gaps` console script):
+(or the `viva-citation-gaps` console script):
 
 ```bash
 WS_ROOT="<workspace-root>"
@@ -78,7 +78,7 @@ print(json.dumps(investigation_citation_gaps('$WS_ROOT', '$INV_SLUG'), indent=2)
 "
 # equivalently:
 .venv/bin/python -m viva_superpowers.citation_gaps --workspace "$WS_ROOT" --investigation "$INV_SLUG"
-# or the console script: pbg-citation-gaps --workspace "$WS_ROOT" --investigation "$INV_SLUG"
+# or the console script: viva-citation-gaps --workspace "$WS_ROOT" --investigation "$INV_SLUG"
 ```
 
 The output is keyed by member study slug:

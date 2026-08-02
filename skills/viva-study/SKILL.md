@@ -19,7 +19,7 @@ back-ref. The investigation's publication/report lives at `investigations/<inv>/
 
 - **Resolve a study dir** (nested- and flat-aware): `python -m viva_superpowers.paths --study <slug>`.
 - **Create a new study** under `$INVESTIGATIONS_DIR/<inv>/studies/<slug>/` (write the `investigation:` back-ref).
-- Legacy flat `studies/<slug>/` still resolves (back-compat) until a repo is migrated with `pbg-migrate-nested`.
+- Legacy flat `studies/<slug>/` still resolves (back-compat) until a repo is migrated with `viva-migrate-nested`.
 
 This block governs the paths below: where older text says `studies/<slug>/` or `$STUDIES_DIR/<slug>/`, prefer the resolver / the nested path.
 
@@ -997,7 +997,7 @@ Lift a parent's `followup_proposals[id == <proposal-id>]` entry into a brand-new
 #### `feedback-respond <slug> [--apply] [--dry-run]`
 
 Turn **open expert feedback** into tracked, applied actions — the closing half
-of the reflexive loop (SP3b). Imported feedback (via `pbg-feedback-import`)
+of the reflexive loop (SP3b). Imported feedback (via `viva-feedback-import`)
 dead-ends at a free-text status today; this subcommand maps each open feedback
 item to a concrete action and persists it as a tracked artifact in the feedback
 yaml's `actions:` block (parallel to `responses:`), keyed by a deterministic
