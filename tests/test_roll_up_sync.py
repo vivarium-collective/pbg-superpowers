@@ -2,7 +2,7 @@
 
 Covers:
 - study_outcomes.sync includes gate_evaluator in summary
-- pbg-roll-up CLI via main()
+- viva-roll-up CLI via main()
 """
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ class TestSyncGateWiring:
 
 
 # ---------------------------------------------------------------------------
-# CLI: pbg-roll-up main()
+# CLI: viva-roll-up main()
 # ---------------------------------------------------------------------------
 
 class TestRollUpCLI:

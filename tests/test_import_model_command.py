@@ -1,4 +1,4 @@
-"""Tests for `pbg-scaffold import-model` across all three modes."""
+"""Tests for `viva-scaffold import-model` across all three modes."""
 import os
 import subprocess
 import sys

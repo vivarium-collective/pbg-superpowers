@@ -38,8 +38,7 @@ pbg-basic-processes = { git = "https://github.com/vivarium-collective/pbg-basic-
 investigation-contracts = { git = "https://github.com/vivarium-collective/investigation-contracts.git", branch = "main" }
 
 [project.scripts]
-# viva-* are the current CLI names; pbg-* are kept as back-compat aliases
-# (identical targets) during the deprecation window (pbg→viva rebrand).
+# viva-* CLI entry points (pbg→viva rebrand complete; the pbg-* aliases were dropped).
 viva-scaffold = "viva_superpowers.scaffold:cli"
 viva-feedback-import = "viva_superpowers.feedback_import:cli"
 viva-migrate-nested = "viva_superpowers.migrate_nested:main"
@@ -54,21 +53,6 @@ viva-roll-up = "viva_superpowers.roll_up:main"
 viva-citation-gaps = "viva_superpowers.citation_gaps:main"
 viva-canonicalize-studies = "viva_superpowers.study_canonicalize:main"
 viva-canonicalize-investigations = "viva_superpowers.investigation_canonicalize:main"
-# --- deprecated pbg-* aliases (same targets) ---
-pbg-scaffold = "viva_superpowers.scaffold:cli"
-pbg-feedback-import = "viva_superpowers.feedback_import:cli"
-pbg-migrate-nested = "viva_superpowers.migrate_nested:main"
-pbg-migrate-inputs = "viva_superpowers.migrate_inputs:main"
-pbg-backfill-runs = "viva_superpowers.backfill_runs:main"
-pbg-compute-outcomes = "viva_superpowers.study_evaluator:compute_outcomes_cli"
-pbg-sync-runs = "viva_superpowers.study_outcomes:main"
-pbg-migrate-readouts = "viva_superpowers.readout_migration:main"
-pbg-populate-simulation-set = "viva_superpowers.simulation_set:main"
-pbg-populate-findings = "viva_superpowers.finding_observations:main"
-pbg-roll-up = "viva_superpowers.roll_up:main"
-pbg-citation-gaps = "viva_superpowers.citation_gaps:main"
-pbg-canonicalize-studies = "viva_superpowers.study_canonicalize:main"
-pbg-canonicalize-investigations = "viva_superpowers.investigation_canonicalize:main"
 
 # Register viva_superpowers' composite-generator discovery into the
 # process_bigraph.spec_generators entry-point group. This lets

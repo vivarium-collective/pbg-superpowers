@@ -14,8 +14,7 @@ Studies, Simulations DB, Visualizations, Composites, GitHub Branches.
 
 > **Renamed from `/pbg-dashboard`.** The product is the **workbench**
 > (`vivarium-workbench` pip package); "dashboard" is the legacy name. The old
-> `/pbg-dashboard` command still works as a deprecated alias — prefer
-> `/viva-workbench`.
+> `/pbg-dashboard` alias has been removed — use `/viva-workbench`.
 
 > **This is NOT `pbg-server`.** `/viva-server` manages the workspace's
 > *report-mirror* server (renders stage-skill guidance into the static

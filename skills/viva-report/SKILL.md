@@ -267,7 +267,7 @@ The per-investigation report a reviewer downloads is built **client-side**
 `runs[].outcomes` + the 6-axis status — not from a study's hand-set
 `status: passed`. So:
 
-1. **Open the dashboard and look at the actual study cards** (`/pbg-dashboard
+1. **Open the workbench and look at the actual study cards** (`/viva-workbench
    open --investigation <slug>`), or download the report. Confirm the
    "Ran · Tests · Verdict" strip and the test pills say what you expect — a
    test with no recorded `runs[].outcomes` shows **⏳ pending** even if its

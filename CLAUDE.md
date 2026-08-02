@@ -1,4 +1,4 @@
-# pbg-superpowers — agent entry point
+# viva-superpowers — agent entry point
 
 This is the Claude Code plugin that drives the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench) — a web UI for building and running process-bigraph simulation workspaces. Skills in this plugin read from the dashboard, write to it, and fill it out with content generated from user prompts.
 
@@ -59,10 +59,10 @@ For the full set of skill commands, see [`docs/concepts/vivarium-workbench-model
 ## Repo layout
 
 ```
-pbg-superpowers/
+viva-superpowers/
 ├── .claude-plugin/        # plugin.json + marketplace.json (manifest format)
 ├── viva_superpowers/       # Python package (schemas, visualizations, helpers)
-├── server/                # the report-mirror server (NOT the dashboard — see pbg-server skill)
+├── server/                # the report-mirror server (NOT the dashboard — see /viva-server skill)
 ├── skills/                # user-invocable `/viva-*` skills + `/viva-init` (machine setup) + `/viva-suggest` (internal dashboard callback)
 ├── templates/             # Jinja templates for scaffolding workspaces + models
 ├── tests/                 # pytest suite for the Python package

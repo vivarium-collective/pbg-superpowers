@@ -18,7 +18,7 @@
 | Skill | What it does |
 |---|---|
 | [`/viva-workspace <name>`](../skills/viva-workspace/SKILL.md) | Scaffold a fresh workspace — three modes: upstream-branch (clone an upstream model repo and create a workspace branch), standalone (clone `pbg-template`), or in-place (promote an existing checkout). |
-| [`/viva-workbench [start\|stop\|status\|open\|restart]`](../skills/viva-workbench/SKILL.md) | Start/stop/open the interactive vivarium-workbench (the side-rail-tabbed UI) and use its **session-per-tab** model — one workspace per browser tab. The server the Studies skills depend on. Distinct from `/viva-server`. (Renamed from `/pbg-dashboard`, which stays as a deprecated alias.) |
+| [`/viva-workbench [start\|stop\|status\|open\|restart]`](../skills/viva-workbench/SKILL.md) | Start/stop/open the interactive vivarium-workbench (the side-rail-tabbed UI) and use its **session-per-tab** model — one workspace per browser tab. The server the Studies skills depend on. Distinct from `/viva-server`. (Renamed from the former `/pbg-dashboard`.) |
 | [`/viva-server [start\|stop\|status]`](../skills/viva-server/SKILL.md) | Start/stop the **report-mirror** server (serves `reports/index.html`, proxies stage-skill events). NOT the interactive workbench — that's `/viva-workbench`. |
 | [`/viva-status`](../skills/viva-status/SKILL.md) | Print workspace health: is this a workspace? server up? recent activity? Delegates the server-liveness section to `/viva-server status`. |
 
