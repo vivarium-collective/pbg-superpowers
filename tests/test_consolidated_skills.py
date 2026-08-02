@@ -121,11 +121,11 @@ def test_pbg_package_skill_dir_is_gone():
 # ----------------------------------------------------------- status delegation
 
 
-def test_pbg_status_delegates_server_section():
+def test_pbg_status_reports_server_liveness():
     text = _read("viva-status")
-    assert "/viva-server status" in text, (
-        "viva-status must delegate its server-liveness section to /viva-server status "
-        "instead of duplicating the TCP probe"
+    assert ".pbg/server/server-info" in text, (
+        "viva-status must probe the workbench server-info for its "
+        "server-liveness section (the report-mirror /viva-server was retired)"
     )
 
 

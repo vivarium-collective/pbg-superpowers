@@ -1,6 +1,6 @@
 ---
 name: viva-workbench
-description: Start / stop / open the interactive vivarium-workbench server (the side-rail-tabbed UI — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB) and use its session-per-tab model — one workspace per browser tab, opened from the workspace switcher. Distinct from /viva-server (the report-mirror server). Subcommands start, stop, status, open, restart. (Formerly /pbg-dashboard.)
+description: Start / stop / open the interactive vivarium-workbench server (the side-rail-tabbed UI — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB) and use its session-per-tab model — one workspace per browser tab, opened from the workspace switcher. This is the server every dashboard-touching skill depends on, and it also serves the study reports. Subcommands start, stop, status, open, restart. (Formerly /pbg-dashboard.)
 user-invocable: true
 allowed-tools: Bash(*) Read Write
 argument-hint: start|stop|status|open|restart [--port N] [--browser] [--investigation SLUG]
@@ -16,11 +16,11 @@ Studies, Simulations DB, Visualizations, Composites, GitHub Branches.
 > (`vivarium-workbench` pip package); "dashboard" is the legacy name. The old
 > `/pbg-dashboard` alias has been removed — use `/viva-workbench`.
 
-> **This is NOT `pbg-server`.** `/viva-server` manages the workspace's
-> *report-mirror* server (renders stage-skill guidance into the static
-> `reports/index.html`). `/viva-workbench` manages the *interactive* workbench.
-> Unrelated processes — different ports, state dirs, purposes. Run both if you
-> want.
+> **Serves reports too.** The workbench also serves the static
+> `reports/index.html` (and mirrors stage-skill guidance into it). The old
+> standalone report-mirror server (`/viva-server`) was retired — the workbench
+> is now the single server. For a quick offline look without the workbench,
+> open `reports/index.html` directly, or run `python -m http.server -d reports`.
 
 ## See also — viva-expert → investigation → study → run → publish
 
@@ -185,7 +185,7 @@ macOS), polling up to 8 s for the function to be defined.
 - Binds to `127.0.0.1` only; never exposed externally.
 - `stop` only kills the PID in `.pbg/dashboard/dashboard.pid`. Won't touch other
   processes.
-- Co-exists cleanly with `/viva-server` (different state dir, different port).
+- Registers in `~/.pbg/servers/*.json` so the cross-worktree switcher can find it; parallel worktrees each get their own port/state dir.
 
 ## Compatibility with parallel worktrees
 

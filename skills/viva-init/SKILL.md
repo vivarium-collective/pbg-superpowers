@@ -88,6 +88,6 @@ need a refresh — restart the conversation.
 
 - Plugin root: the directory containing `.claude-plugin/` and `skills/`.
 - Claude's per-user skill directory: `~/.claude/skills/`.
-- All other `pbg-*` skills read `.pbg/server/server-info` for the running
-  dashboard URL and POST/GET against its API — they have no other runtime
-  dependency on pbg-superpowers.
+- All other `viva-*` skills read `.pbg/server/server-info` for the running
+  workbench URL and POST/GET against its API — they have no other runtime
+  dependency on viva-superpowers.

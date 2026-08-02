@@ -6,14 +6,14 @@ This is the Claude Code plugin that drives the [vivarium-workbench](https://gith
 
 1. **Concept map: [`docs/concepts/vivarium-workbench-model.md`](docs/concepts/vivarium-workbench-model.md)** — canonical vocabulary (Workspace · Study · Baseline · Variant · Intervention · Run · Visualization), the 8-section canonical `study.yaml` (Pass 7), Decide-phase follow-up proposals (Pass 8), on-disk shapes, the dashboard API surface, and which skill controls which concept. **Read this before invoking any Study/Baseline/Variant skill.**
 2. **Conventions: [`docs/conventions/`](docs/conventions/)** — authoritative specs for composites, composite generators, discovery, distribution, visualizations, and bespoke runner scripts.
-3. **Skills catalog: [`docs/skills.md`](docs/skills.md)** — all 16 user-invocable `/viva-*` skills with one-line descriptions, plus the v0.8→v0.9 migration table.
+3. **Skills catalog: [`docs/skills.md`](docs/skills.md)** — all 15 user-invocable `/viva-*` skills with one-line descriptions, plus the v0.8→v0.9 migration table.
 4. **README: [`README.md`](README.md)** — install + quick start for humans.
 
 ## Working preconditions
 
 Every skill that touches the dashboard requires:
 1. A workspace (a directory with `workspace.yaml` + `pbg_<pkg>/`). Create via `/viva-workspace`.
-2. The dashboard server running. Start via `/viva-server start`. Skills read `.pbg/server/server-info` for the URL.
+2. The dashboard server running. Start via `/viva-workbench start`. Skills read `.pbg/server/server-info` for the URL.
 
 If either is missing, the skill should fail with a clear actionable error pointing the user at the missing precondition.
 
@@ -38,7 +38,7 @@ If either is missing, the skill should fail with a clear actionable error pointi
 | Task | Command |
 |---|---|
 | Survey the workspace | `/viva-catalog` (or `/viva-catalog list`) |
-| Open dashboard | `/viva-server start` (then visit the URL) |
+| Open dashboard | `/viva-workbench start` (then visit the URL) |
 | Create a study | `/viva-study new <composite-id>` |
 | Add a baseline composite to a study | `/viva-study baseline-add <study> --name <n> --composite <id>` |
 | Add a variant of a baseline composite | `/viva-study variant-add <study> --name <n> --base-composite <baseline-name> --params '<json>'` |
@@ -62,7 +62,6 @@ For the full set of skill commands, see [`docs/concepts/vivarium-workbench-model
 viva-superpowers/
 ├── .claude-plugin/        # plugin.json + marketplace.json (manifest format)
 ├── viva_superpowers/       # Python package (schemas, visualizations, helpers)
-├── server/                # the report-mirror server (NOT the dashboard — see /viva-server skill)
 ├── skills/                # user-invocable `/viva-*` skills + `/viva-init` (machine setup) + `/viva-suggest` (internal dashboard callback)
 ├── templates/             # Jinja templates for scaffolding workspaces + models
 ├── tests/                 # pytest suite for the Python package

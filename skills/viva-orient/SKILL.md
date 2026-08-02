@@ -25,7 +25,7 @@ Exceptions: `/viva-init` (machine setup, no workspace); `/viva-viz` and `/viva-e
 | Group | Skills |
 |---|---|
 | **Wrap & compose** | `/viva-expert` (wrap a simulator as a Process, or compose several) |
-| **Workspace lifecycle** | `/viva-workspace` (scaffold), `/viva-workbench` (start/stop the dashboard), `/viva-server` (report-mirror server), `/viva-init` (machine setup) |
+| **Workspace lifecycle** | `/viva-workspace` (scaffold), `/viva-workbench` (start/stop the dashboard), `/viva-init` (machine setup) |
 | **Studies & runs** | `/viva-study` (design→build→simulate→evaluate→decide), `/viva-run` (run a composite directly), `/viva-investigation` (orchestrate member studies), `/viva-report`, `/viva-viz` |
 | **Navigate & status** | `/viva-catalog` (browse/install modules), `/viva-navigate` (read-only linkage queries, "decisions needed"), `/viva-status`, `/viva-explore` |
 | **Evidence & rigor** | `/viva-cite-bands` (link references to acceptance bands), `/viva-biology-forward`, `/viva-harden-investigation` |

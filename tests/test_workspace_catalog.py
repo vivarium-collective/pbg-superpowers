@@ -257,7 +257,7 @@ def test_cli_add_and_list(pbg_home, workspace_dir):
 
 # -------------------------------------------------------------------- Pass C:
 # list_servers / find_duplicates_for_path / cleanup_orphans helpers used by
-# the cross-worktree dashboard switcher and /viva-server dedup.
+# the cross-worktree dashboard switcher and workbench-server dedup.
 
 
 def test_list_servers_returns_empty_when_no_dir(pbg_home):

@@ -70,7 +70,7 @@ read-only via [`/viva-workbench`](../viva-workbench/SKILL.md) (step 5).
 All sub-commands:
 
 1. Walk up from cwd to find `workspace.yaml`. Fail if not found.
-2. Read `.pbg/server/server-info` for the dashboard URL. If absent, fail with: "Run `/viva-server start` first."
+2. Read `.pbg/server/server-info` for the dashboard URL. If absent, fail with: "Run `/viva-workbench start` first."
 
 ## Tests on a Study (v4 schema)
 
@@ -1064,7 +1064,7 @@ done
 cd "$DIR"
 
 INFO=".pbg/server/server-info"
-[ -f "$INFO" ] || { echo "Run /viva-server start first." >&2; exit 1; }
+[ -f "$INFO" ] || { echo "Run /viva-workbench start first." >&2; exit 1; }
 URL="$(python3 -c "import json; print(json.load(open('$INFO'))['url'])")"
 
 # Helper: build a body dict from key=value flags + post to an endpoint.

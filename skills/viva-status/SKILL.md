@@ -64,10 +64,10 @@ If `~/.pbg/workspaces.json` is absent or empty, print `catalog: no registered wo
 
 ### 2. Dashboard server liveness
 
-Delegate to `/viva-server status` for the canonical server-info / alive
-check — do **not** re-implement TCP probing or `server-info` parsing
-here. Capture the output and prefix it with `server: ` (or print it
-inline) so the consolidated status block stays a one-screen summary.
+Probe the running **vivarium-workbench** server directly (the inline check
+below): read `<workspace_root>/.pbg/server/server-info` (written by
+`/viva-workbench start`) and TCP-probe its URL. Prefix the result with
+`server: ` so the consolidated status block stays a one-screen summary.
 
 If `<workspace_root>/.pbg/server/server-info` is absent, print
 `server:  not running` and skip the API-endpoint best-effort calls below.
@@ -119,11 +119,9 @@ If no `studies/` directory: `studies: none`.
 
 ## Implementation outline
 
-> The dashboard-server portion below duplicates what `/viva-server status`
-> already prints. Prefer shelling out to `/viva-server status` when that
-> skill is installed; the inline TCP probe is kept as a self-contained
-> fallback so `/viva-status` works even from a checkout where pbg-server
-> hasn't been wired up yet.
+> The dashboard-server portion below probes the running vivarium-workbench
+> server (started by `/viva-workbench start`) via its `.pbg/server/server-info`
+> record — a self-contained TCP probe, no separate server skill required.
 
 ```bash
 #!/usr/bin/env bash

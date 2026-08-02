@@ -437,7 +437,7 @@ In `--dry-run` mode: print the full YAML content of each file (clearly separated
 #### 6. Summary
 
 ```
-Created investigation '<name>' with N studies. Run /viva-server start then open the Investigations tab.
+Created investigation '<name>' with N studies. Run /viva-workbench start then open the Investigations tab.
 ```
 
 **Study YAML shape to emit for each phase:**
