@@ -1,4 +1,4 @@
-"""Tests for viva_superpowers.dashboard — Slice E of the mem3dg-readdy fix.
+"""Tests for viva_superpowers.workbench — Slice E of the mem3dg-readdy fix.
 
 Covers two behavior changes the friction log called out:
 
@@ -7,10 +7,12 @@ Covers two behavior changes the friction log called out:
     venv that happens to have it installed (with a different composite
     set) no longer poisons the dashboard's discovery (friction #13).
 
-  - start() refuses to launch when reports/index.html is missing or
-    still the pbg-template bootstrap placeholder. Tries auto-render
-    first; falls back to a clear refusal with the manual command
-    (friction #1).
+  - start() refuses to launch when the workspace venv has no
+    vivarium-workbench (friction #13) — no fall-through to PATH.
+
+Note: SPA pre-rendering moved to the vivarium-workbench `serve` command
+(the plugin no longer imports vivarium_workbench), so the former
+placeholder-detection / render-refusal tests were removed.
 """
 from __future__ import annotations
 
@@ -20,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from viva_superpowers import dashboard as dash_mod
+from viva_superpowers import workbench as dash_mod
 
 
 # ---------------------------------------------------------------------------
@@ -101,55 +103,8 @@ def test_resolve_ignores_path_vivarium_workbench(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Placeholder detection + refusal-to-start
+# Strict workspace-venv requirement for start()
 # ---------------------------------------------------------------------------
-
-
-def test_is_placeholder_true_when_missing(tmp_path):
-    assert dash_mod._is_placeholder_or_missing(tmp_path / "reports" / "index.html") is True
-
-
-def test_is_placeholder_true_when_bootstrap_stub(tmp_path):
-    p = tmp_path / "reports" / "index.html"
-    p.parent.mkdir(parents=True)
-    p.write_text(
-        "<!doctype html><html><body>"
-        "<p>No models registered yet. Run /pbg-add-model name to begin.</p>"
-        "</body></html>"
-    )
-    assert dash_mod._is_placeholder_or_missing(p) is True
-
-
-def test_is_placeholder_true_when_pbg_report_stub(tmp_path):
-    """`/viva-report` writes a workspace-level stub via
-    viva_superpowers.report.render_workspace_report() to the SAME path
-    the SPA uses. Body says 'No models yet' (note: shorter than the
-    pbg-template bootstrap stub's 'No models registered yet').
-    Without this marker, /viva-report silently overwrites the SPA.
-    """
-    p = tmp_path / "reports" / "index.html"
-    p.parent.mkdir(parents=True)
-    p.write_text(
-        "<!doctype html><html><body>"
-        "<header><h1>v2ecoli</h1>"
-        "<p class='subtitle'>Workspace dashboard · regenerated 2026-05-28</p></header>"
-        "<div class='panel'><h2>Models</h2>"
-        "<p>No models yet. <code>/pbg-add-model &lt;name&gt;</code></p></div>"
-        "</body></html>"
-    )
-    assert dash_mod._is_placeholder_or_missing(p) is True
-
-
-def test_is_placeholder_false_when_real_spa(tmp_path):
-    p = tmp_path / "reports" / "index.html"
-    p.parent.mkdir(parents=True)
-    p.write_text(
-        "<!doctype html><html><body>"
-        "<div id='app'><h1>Workspace dashboard</h1>"
-        "<div>3 models · 2 investigations · 6 studies</div></div>"
-        "</body></html>"
-    )
-    assert dash_mod._is_placeholder_or_missing(p) is False
 
 
 def test_start_refuses_when_no_venv_bin(tmp_path, monkeypatch):
@@ -167,50 +122,6 @@ def test_start_refuses_when_no_venv_bin(tmp_path, monkeypatch):
     # still off — only sibling git-worktree fallback (same source) is allowed.
     assert "Sibling-WORKSPACE venvs are still off-limits" in msg
     assert "friction log #13" in msg
-
-
-def _block_vivarium_workbench_imports(monkeypatch):
-    """Clear every cached vivarium_workbench.* submodule so the next
-    `from vivarium_workbench.lib.report import render_dashboard` fails
-    fresh. Setting sys.modules['vivarium_workbench'] to None alone isn't
-    enough — Python honors cached submodules even when the parent is None.
-    Cross-test pollution from earlier integration tests that DO import
-    vivarium-workbench is the reason this helper exists."""
-    import sys
-    for key in list(sys.modules):
-        if key == "vivarium_workbench" or key.startswith("vivarium_workbench."):
-            monkeypatch.delitem(sys.modules, key, raising=False)
-    monkeypatch.setitem(sys.modules, "vivarium_workbench", None)
-
-
-def test_start_refuses_when_placeholder_and_render_unavailable(tmp_path, monkeypatch):
-    """Workspace has a .venv/bin/vivarium-workbench, but reports/index.html
-    is the bootstrap placeholder AND vivarium-workbench isn't importable
-    from this Python (so auto-render can't run). start() must refuse with
-    a clear hint rather than serving the stub."""
-    ws = _make_workspace_with_venv_bin(tmp_path, has_bin=True)
-    reports = ws / "reports"
-    reports.mkdir()
-    (reports / "index.html").write_text(
-        "<html><p>No models registered yet. Run /pbg-add-model</p></html>"
-    )
-    _block_vivarium_workbench_imports(monkeypatch)
-
-    with pytest.raises(RuntimeError) as ei:
-        dash_mod.start(ws, open_browser=False)
-    msg = str(ei.value)
-    assert "placeholder" in msg
-    assert "Refusing to start" in msg
-
-
-def test_try_render_dashboard_handles_missing_import(monkeypatch, tmp_path):
-    """The fallback path (when vivarium_workbench isn't importable) must
-    return a clean (False, error_msg) tuple — not raise."""
-    _block_vivarium_workbench_imports(monkeypatch)
-    rendered, err = dash_mod._try_render_dashboard(tmp_path)
-    assert rendered is False
-    assert err is not None
-    assert "not importable" in err
 
 
 # ---------------------------------------------------------------------------
