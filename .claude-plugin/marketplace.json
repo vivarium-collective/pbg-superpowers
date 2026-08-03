@@ -9,7 +9,7 @@
     {
       "name": "viva-superpowers",
       "description": "Claude Code plugin for building process-bigraph research projects: wrap simulators as composable process-bigraph units, compose them into larger models, and organize the work into research workspaces with a dashboard and HTML reports.",
-      "version": "0.19.0",
+      "version": "0.20.0",
       "source": "./",
       "author": {
         "name": "eagmon"
