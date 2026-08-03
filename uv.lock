@@ -1302,7 +1302,7 @@ wheels = [
 
 [[package]]
 name = "process-bigraph"
-version = "1.8.1"
+version = "1.8.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bigraph-schema" },
@@ -1313,9 +1313,9 @@ dependencies = [
     { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "sympy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/83/80/8f9733833699603cf6cb85fb3e3ef572b696fc8d45388061bb7e9af669e2/process_bigraph-1.8.1.tar.gz", hash = "sha256:a582fbe6b3756cbc546d71cd81043d2627331cded667af4c050ef7ddeae985a0", size = 173697, upload-time = "2026-08-03T15:53:04.828Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/d7/3decc180d9e59aaf6798f3f6ef35646d3db523304ac9ee4087bc993e47e8/process_bigraph-1.8.2.tar.gz", hash = "sha256:70c843beadda3c4ae49e202608e61669923198d7a9ca190d1c37e5502addbd8f", size = 173786, upload-time = "2026-08-03T16:17:40.169Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/43/4d/1b2f96ebe9bba2ec8fe03471f6adc41f962f78e9acaf5d205dd77fd215ce/process_bigraph-1.8.1-py3-none-any.whl", hash = "sha256:540f810c85ba1249fe5ca2fae13411974bef59c0555a9279400c7d4882e746cd", size = 193199, upload-time = "2026-08-03T15:53:03.339Z" },
+    { url = "https://files.pythonhosted.org/packages/71/50/d07cef70b0de899d49514d75525115727c7f76852517c0cef356fc2a7b41/process_bigraph-1.8.2-py3-none-any.whl", hash = "sha256:b318a2836f265a511e5009ea5fdbde15ed479e117fedebcf38b1d8342e341b68", size = 193316, upload-time = "2026-08-03T16:17:38.612Z" },
 ]
 
 [[package]]
@@ -2246,7 +2246,7 @@ requires-dist = [
     { name = "pbg-basic-processes", marker = "extra == 'processes'", git = "https://github.com/vivarium-collective/pbg-basic-processes.git?branch=main" },
     { name = "pbg-emitters", git = "https://github.com/vivarium-collective/pbg-emitters.git?branch=main" },
     { name = "pbg-emitters", extras = ["parquet"], marker = "extra == 'evaluator'", git = "https://github.com/vivarium-collective/pbg-emitters.git?branch=main" },
-    { name = "process-bigraph", specifier = ">=1.8.1" },
+    { name = "process-bigraph", specifier = ">=1.8.2" },
     { name = "pypdf", specifier = ">=4.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1" },
