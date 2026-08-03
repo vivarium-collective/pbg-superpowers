@@ -10,7 +10,7 @@ dependencies = [
     "jinja2>=3.1",
     "click>=8.1",
     "bigraph-schema>=0.0.60",
-    "process-bigraph>=1.8.1",
+    "process-bigraph>=1.8.2",
     "pypdf>=4.0",
     # Default framework emitters available in every pbg- workspace. Base install
     # is lightweight (SQLiteEmitter, stdlib); heavy backends stay extras-gated
