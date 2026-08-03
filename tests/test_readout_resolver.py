@@ -441,6 +441,44 @@ def test_resolve_study_readouts_missing_readouts_key():
     assert resolve_study_readouts(spec) == {}
 
 
+def test_resolve_study_readouts_prose_string_readouts():
+    """Readouts authored as bare prose strings (not structured dicts) must
+    resolve to UnresolvedReadout, not raise AttributeError on ``str.get``.
+
+    Real workspaces (e.g. viva-human-atlas studies) list readouts as plain
+    strings; the study-run path calls resolve_study_readouts on them and used
+    to crash with ``'str' object has no attribute 'get'``.
+    """
+    spec = {
+        "name": "s",
+        "readouts": [
+            "atlas manifest: n_organs (50), n_modeled (14)",
+            "per-organ n_models + BioModels id/name/url list",
+        ],
+    }
+    resolved = resolve_study_readouts(spec)
+    assert set(resolved) == set(spec["readouts"])
+    for key, ro in resolved.items():
+        assert isinstance(ro, UnresolvedReadout)
+        assert ro.name == key
+        assert ro.raw == key
+
+
+def test_resolve_study_readouts_mixed_string_and_dict():
+    """A readouts list mixing prose strings and structured dicts resolves each
+    per its type without the string entries breaking the dict ones."""
+    spec = {
+        "name": "s",
+        "readouts": [
+            "some prose readout",
+            {"name": "g", "identifier": "glucose"},
+        ],
+    }
+    resolved = resolve_study_readouts(spec)
+    assert isinstance(resolved["some prose readout"], UnresolvedReadout)
+    assert isinstance(resolved["g"], ResolvedReadout)
+
+
 def test_never_guess_empty_identifier():
     """Empty identifier string → Unresolved (never fabricate a selector)."""
     ro = {"name": "x", "identifier": ""}

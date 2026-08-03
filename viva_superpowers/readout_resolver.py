@@ -400,6 +400,17 @@ def resolve_study_readouts(
     readouts: list[dict] = spec.get("readouts") or []
     result: dict[str, ResolvedReadout | UnresolvedReadout] = {}
     for i, ro in enumerate(readouts):
+        # Studies may author readouts as bare prose strings rather than
+        # structured dicts. Per the never-guess policy above, treat those as
+        # UnresolvedReadout instead of crashing on ``str.get`` — a bare string
+        # has no identifier/store_path/index_by field to resolve.
+        if isinstance(ro, str):
+            result[ro] = UnresolvedReadout(
+                name=ro,
+                raw=ro,
+                reason="prose readout authored as a string, not a structured readout dict",
+            )
+            continue
         name = ro.get("name", f"readout_{i}")
         result[name] = resolve_readout(ro)
     return result
