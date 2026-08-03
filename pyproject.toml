@@ -10,7 +10,7 @@ dependencies = [
     "jinja2>=3.1",
     "click>=8.1",
     "bigraph-schema>=0.0.60",
-    "process-bigraph>=0.0.66",
+    "process-bigraph>=1.8.1",
     "pypdf>=4.0",
     # Default framework emitters available in every pbg- workspace. Base install
     # is lightweight (SQLiteEmitter, stdlib); heavy backends stay extras-gated
@@ -53,15 +53,6 @@ viva-roll-up = "viva_superpowers.roll_up:main"
 viva-citation-gaps = "viva_superpowers.citation_gaps:main"
 viva-canonicalize-studies = "viva_superpowers.study_canonicalize:main"
 viva-canonicalize-investigations = "viva_superpowers.investigation_canonicalize:main"
-
-# Register viva_superpowers' composite-generator discovery into the
-# process_bigraph.spec_generators entry-point group. This lets
-# process_bigraph.composite_spec.discover_specs find generators via a plugin
-# entry point instead of hard-importing viva_superpowers (the old dependency
-# inversion). Takes effect on (re)install; once relied upon, the engine's legacy
-# import fallback can be removed.
-[project.entry-points."process_bigraph.spec_generators"]
-viva_superpowers = "viva_superpowers.composite_generator:discover_generators"
 
 [build-system]
 requires = ["hatchling"]
