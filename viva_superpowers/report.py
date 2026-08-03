@@ -55,18 +55,11 @@ def _env(template_dir: Path) -> Environment:
 
 
 def _copy_assets(target_assets_dir: Path) -> None:
-    """Copy static assets (style.css, render-helpers.js, optional client.js)."""
+    """Copy static assets (style.css, render-helpers.js)."""
     target_assets_dir.mkdir(parents=True, exist_ok=True)
     src = resource_dir("templates") / "_assets"
     for name in ("style.css", "render-helpers.js"):
         shutil.copy2(src / name, target_assets_dir / name)
-    # Optional: copy client.js for live mode if it exists in the plugin
-    try:
-        client_js = resource_dir("server") / "client.js"
-    except RuntimeError:
-        return
-    if client_js.exists():
-        shutil.copy2(client_js, target_assets_dir / "client.js")
 
 
 def render_workspace_report(

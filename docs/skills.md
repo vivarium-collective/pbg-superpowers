@@ -1,6 +1,6 @@
 # Skills catalog
 
-16 user-facing skills (plus `/viva-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects). v0.9 consolidated the 17-skill v0.8 catalog — see the [migration table](#migration-from-v08) below.
+15 user-facing skills (plus `/viva-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects). v0.9 consolidated the 17-skill v0.8 catalog — see the [migration table](#migration-from-v08) below.
 
 ## Wrap & compose
 
@@ -18,9 +18,8 @@
 | Skill | What it does |
 |---|---|
 | [`/viva-workspace <name>`](../skills/viva-workspace/SKILL.md) | Scaffold a fresh workspace — three modes: upstream-branch (clone an upstream model repo and create a workspace branch), standalone (clone `pbg-template`), or in-place (promote an existing checkout). |
-| [`/viva-workbench [start\|stop\|status\|open\|restart]`](../skills/viva-workbench/SKILL.md) | Start/stop/open the interactive vivarium-workbench (the side-rail-tabbed UI) and use its **session-per-tab** model — one workspace per browser tab. The server the Studies skills depend on. Distinct from `/viva-server`. (Renamed from the former `/pbg-dashboard`.) |
-| [`/viva-server [start\|stop\|status]`](../skills/viva-server/SKILL.md) | Start/stop the **report-mirror** server (serves `reports/index.html`, proxies stage-skill events). NOT the interactive workbench — that's `/viva-workbench`. |
-| [`/viva-status`](../skills/viva-status/SKILL.md) | Print workspace health: is this a workspace? server up? recent activity? Delegates the server-liveness section to `/viva-server status`. |
+| [`/viva-workbench [start\|stop\|status\|open\|restart]`](../skills/viva-workbench/SKILL.md) | Start/stop/open the interactive vivarium-workbench (the side-rail-tabbed UI) and use its **session-per-tab** model — one workspace per browser tab. The single server every Studies skill depends on; it also serves the study reports. (Renamed from the former `/pbg-dashboard`.) |
+| [`/viva-status`](../skills/viva-status/SKILL.md) | Print workspace health: is this a workspace? server up? recent activity? Probes the running workbench for server liveness. |
 
 ## Catalog & registry
 

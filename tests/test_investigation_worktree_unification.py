@@ -1,8 +1,7 @@
 """Pass C — Investigation ≡ branch ≡ worktree.
 
 SKILL.md contract tests for the new `/viva-investigation open` subcommand,
-the extended `/viva-investigation new` (branch + commit), and the new
-`/viva-server cleanup` subcommand plus its per-worktree dedup behavior.
+and the extended `/viva-investigation new` (branch + commit).
 The skills themselves are SKILL.md-driven bash, so the unit-test surface
 is the SKILL.md document and the workspace_catalog helpers it shells out
 to. End-to-end git interactions are exercised manually (see PR body).
@@ -73,42 +72,11 @@ def test_pbg_investigation_documents_branch_worktree_equivalence():
     )
 
 
-# -------------------------------------------------------------- /viva-server
-
-
-def test_pbg_server_documents_cleanup_subcommand():
-    text = _skill("viva-server")
-    assert "/viva-server cleanup" in text, (
-        "viva-server must document the cleanup subcommand (removes "
-        "orphaned ~/.pbg/servers/*.json records)."
-    )
-    assert "cleanup-servers" in text, (
-        "viva-server cleanup must shell out to "
-        "`python -m viva_superpowers.workspace_catalog cleanup-servers`."
-    )
-
-
-def test_pbg_server_start_documents_per_worktree_dedup():
-    text = _skill("viva-server")
-    assert "duplicates-for-path" in text, (
-        "viva-server start must use the workspace_catalog "
-        "duplicates-for-path helper to dedup SAME-path records only."
-    )
-    # The contract is: kill+restart ONLY records for the SAME worktree
-    # path, never records for different worktrees.
-    assert "DIFFERENT worktree paths" in text, (
-        "viva-server start must explicitly document that records for "
-        "different worktree paths are preserved (parallel agent flow)."
-    )
-
-
-def test_pbg_server_frontmatter_lists_cleanup():
-    text = _skill("viva-server")
-    head = text.split("\n---\n", 2)[0]
-    assert "cleanup" in head, (
-        "viva-server frontmatter must list cleanup in argument-hint / "
-        "description so the consolidated catalog surfaces it."
-    )
+# Note: the report-mirror server + its `/viva-server` skill were retired; the
+# per-worktree dedup + orphan-cleanup of ~/.pbg/servers/*.json is now owned by
+# the vivarium-workbench server (which registers via viva_superpowers.
+# workspace_catalog) and tested in that repo. See test_workspace_catalog.py for
+# the module-level dedup behavior that remains in this package.
 
 
 # -------------------------------------------------------------- Concept doc

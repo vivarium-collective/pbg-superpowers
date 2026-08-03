@@ -1,8 +1,8 @@
 """Start / stop / status / open the interactive vivarium-workbench server.
 
-Distinct from ``viva_superpowers.server`` (which manages the report-mirror
-server under ``.pbg/server/``). The interactive dashboard is the
-side-rail-tabbed UI served by the ``vivarium-workbench`` pip package.
+The interactive dashboard is the side-rail-tabbed UI served by the
+``vivarium-workbench`` pip package; it also serves the study reports (the
+standalone report-mirror server was retired).
 
 State lives at ``<workspace>/.pbg/dashboard/``:
 

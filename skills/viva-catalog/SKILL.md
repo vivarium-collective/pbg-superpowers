@@ -36,7 +36,7 @@ done
 cd "$DIR"
 
 INFO=".pbg/server/server-info"
-[ -f "$INFO" ] || { echo "ERROR: dashboard server not running. Run /viva-server start"; exit 1; }
+[ -f "$INFO" ] || { echo "ERROR: dashboard server not running. Run /viva-workbench start"; exit 1; }
 URL="$(python3 -c "import json; print(json.load(open('$INFO'))['url'])")"
 ```
 
@@ -131,8 +131,7 @@ Studies (2):
 Registry: processes=8 steps=3 emitters=1 visualizations=5 types=12
 
 Skills (11):
-  - pbg-catalog: Browse and mutate the workspace module catalog ...
-  - pbg-server:  Manage the local stage-skill mirror server ...
+  - viva-catalog: Browse and mutate the workspace module catalog ...
 ```
 
 ## Notes

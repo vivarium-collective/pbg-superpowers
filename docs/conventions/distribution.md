@@ -98,7 +98,7 @@ better, and the catalog Install logic uses `uv pip install --python
 <venv-py>` to install pbg-* packages from PyPI or local paths.
 
 Scaffolded workspaces' `NEXT_STEPS.md.j2` and `template-init.sh` use uv
-exclusively. Skills (`/pbg-workspace`, `/pbg-server`) follow suit.
+exclusively. Skills (`/viva-workspace`, `/viva-workbench`) follow suit.
 
 ## Verification
 

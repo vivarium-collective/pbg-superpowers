@@ -437,7 +437,7 @@ An Investigation slug is also a **git branch name** and a **worktree directory n
 - **`/pbg-investigation open <slug>`** creates (or reuses) a worktree at the standard location `<workspace>/.pbg/worktrees/<slug>/` checked out to branch `<slug>`. By default it also boots a per-worktree dashboard server. (`--no-server` skips that.) The standard location keeps worktrees discoverable next to the parent checkout and inside `.pbg/`, which is conventionally git-ignored.
 - **One dashboard server per worktree** — intentional. Each worktree has its own runtime state (`.pbg/composite-runs.db`, server log, ports). The server self-registers in `~/.pbg/servers/<name>.<hash>.json` on boot, with `path` set to the worktree (not the parent checkout).
 - **Sidebar = cross-worktree switcher.** The left-rail Investigation dropdown queries `/api/investigation-registry`, which fans out across every record under `~/.pbg/servers/*.json` (except its own) to surface their `current` Investigation. Rows for OTHER worktrees are clickable → opens that server's URL in a new tab.
-- **Dedup is per-worktree path.** `/pbg-server start` removes only records that point at the SAME worktree path (after prompting if the PID is still alive). Records at different worktree paths coexist — that's how parallel agents work. `/pbg-server cleanup` removes orphaned records (PID dead OR worktree path missing).
+- **Dedup is per-worktree path.** Starting the workbench (`/viva-workbench start`) removes only records that point at the SAME worktree path (after prompting if the PID is still alive). Records at different worktree paths coexist — that's how parallel agents work. `python -m viva_superpowers.workspace_catalog cleanup-servers` removes orphaned records (PID dead OR worktree path missing).
 
 **Known migration note (v2ecoli).** The `dnaa-replication` investigation in v2ecoli was created before this convention, on a branch named `dnaa-replication-studies` (slug-vs-branch mismatch). To bring it into compliance, run `git branch -m dnaa-replication-studies dnaa-replication` on the relevant worktree's checkout, then `/pbg-investigation open dnaa-replication` to materialize it at the standard worktree location.
 
@@ -597,10 +597,10 @@ Skills that read dashboard state do so via these HTTP endpoints:
 | Skill | Reads | Writes | Notes |
 |---|---|---|---|
 | `/pbg-init` | — | Workspace | Scaffolds new workspace. |
-| `/pbg-server` | `.pbg/server/server-info` | Starts/stops dashboard server. | Required precondition for every other dashboard-touching skill. |
+| `/viva-workbench` | `.pbg/server/server-info` | Starts/stops the dashboard (workbench) server. | Required precondition for every other dashboard-touching skill; also serves reports. |
 | `/pbg-catalog [list]` | Workspace, Composites, Studies | — | Read-only catalog. |
 | `/pbg-catalog install <pkg>` / `/pbg-catalog uninstall <pkg>` | Workspace | Workspace deps | Wraps `pip install` + workspace catalog. |
-| `/pbg-status` | Workspace state | — | Server up? recent activity? Defers server section to `/pbg-server status`. |
+| `/pbg-status` | Workspace state | — | Server up? recent activity? Probes the running workbench server directly. |
 | `/pbg-expert <tool>` | External Process | Sibling `pbg-<tool>/` repo | Wraps a simulator as a Process. Default mode creates a sibling repo + tests + README + report; `--lightweight` writes a single file into the current workspace package instead. |
 | `/pbg-expert <name> <tools…>` | Composite catalog | Sibling `pbg-<name>-composite/` repo | Composes installed wrappers. `--lightweight` writes a single composite file into the workspace package instead. |
 | (internal) `/pbg-suggest <id>` | `.pbg/agent-requests/<id>.json` | `.pbg/agent-responses/<id>.json` | Dashboard "Suggest" callback. Not user-facing. |

@@ -75,12 +75,11 @@ build-backend = "hatchling.build"
 # shim/) depends on this one so existing `pbg-superpowers` PyPI deps keep
 # resolving to the renamed package.
 packages = ["viva_superpowers", "pbg_superpowers"]
-# templates/ and server/ live outside the package but are required at runtime
-# (report renderer, scaffold helper, server scripts). Force-include them in the
-# wheel so non-editable installs still work.
+# templates/ lives outside the package but is required at runtime (report
+# renderer, scaffold helper). Force-include it in the wheel so non-editable
+# installs still work.
 [tool.hatch.build.targets.wheel.force-include]
 "templates" = "viva_superpowers/_templates"
-"server" = "viva_superpowers/_server"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
