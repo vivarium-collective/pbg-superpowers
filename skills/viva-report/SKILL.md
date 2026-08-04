@@ -42,6 +42,26 @@ eval "$(python -m viva_superpowers.paths --env --workspace "$WORKSPACE_ROOT")"
 
 This exports `$INVESTIGATIONS_DIR`, `$STUDIES_DIR`, `$REPORTS_DIR`, etc. (each = absolute path). Use these variables for the studies/investigations/references/reports paths below — do NOT hardcode `investigations/`, `studies/`, `reports/`. (The hidden `.pbg/` machine-state dir stays at the workspace root by default — use it literally.)
 
+## Resolve the workbench server URL
+
+Pass B (lint), Pass B½ (readout migration), and Render are thin clients of the
+`vivarium-workbench` dashboard API — resolve its URL with `/viva-catalog`'s
+exact preamble:
+
+```bash
+# Walk up to workspace root.
+DIR="$PWD"
+while [ "$DIR" != "/" ] && [ ! -f "$DIR/workspace.yaml" ]; do
+  DIR="$(dirname "$DIR")"
+done
+[ -f "$DIR/workspace.yaml" ] || { echo "ERROR: not inside a pbg workspace"; exit 1; }
+cd "$DIR"
+
+INFO=".pbg/server/server-info"
+[ -f "$INFO" ] || { echo "ERROR: dashboard server not running. Run /viva-workbench start"; exit 1; }
+URL="$(python3 -c "import json; print(json.load(open('$INFO'))['url'])")"
+```
+
 ## Pass A — Reviewer-readiness audit (NEW)
 
 Runs **before** the structural lint. Read-only. For each `$INVESTIGATIONS_DIR/<slug>/investigation.yaml` (resolved from `workspace.yaml` `layout:`; `investigations/<slug>/` by default), perform these checks in order. Print findings as you go; group by severity (blocking / warning / info) at the end.
@@ -180,9 +200,9 @@ Render anyway? (Pass B and render are next.)
 
 If `blocking > 0` and `--force` is NOT set, exit before Pass B with a non-zero status. Resolve, add `--force`, or address findings via a follow-up commit.
 
-## Pass B — Structural lint (UNCHANGED)
+## Pass B — Structural lint
 
-The existing pre-publication linter from `viva_superpowers.report_linter.lint_workspace_report()`. Checks every study under the workspace's studies and investigations dirs (`$STUDIES_DIR` / `$INVESTIGATIONS_DIR`, layout-resolved; the linter resolves these itself from `--ws`):
+The pre-publication linter, via `GET /api/report-lint`. Checks every study under the workspace's studies and investigations dirs (the endpoint resolves these itself from the workspace root):
 
 - **incomplete_summaries** (error) — `evaluation_status: evaluated` but `conclusion_logic` is empty.
 - **status_contradictions** (error) — gate/evaluation/sim/impl/review combinations that cannot logically co-exist.
@@ -194,70 +214,79 @@ The existing pre-publication linter from `viva_superpowers.report_linter.lint_wo
 - **reviewer_clarity_ambiguity** (warning) — anything that would read ambiguously on the per-study run/test/verdict strip: ran-but-every-test-pending (no `runs[].outcomes` recorded), or `gate_status: passed` while a test is recorded FAILED. Single-sourced from `study_status.study_clarity_summary`.
 - **readout_migration_status** (info + warning) — surfaces each study's readout migration status: `migratable` readouts (info — safe to canonicalize, see the next step) and `needs_human` readouts (warning — un-parseable prose/derived selectors that must be re-authored against `/api/observables` via `/viva-study check-observables`).
 
-Only **error**-level findings block publication.
+Only **error**-level findings (`severity: "error"`) block publication.
 
 Internally:
 
 ```bash
 # Pass B only:
-python -m viva_superpowers.report_linter --ws .
+curl -sf "$URL/api/report-lint" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+findings = d.get("findings") or []
+by_sev = {"error": 0, "warning": 0, "info": 0}
+for f in findings:
+    by_sev[f.get("severity", "info")] = by_sev.get(f.get("severity", "info"), 0) + 1
+    print(f"[{f[\"severity\"]}] {f[\"study\"]}: {f[\"check\"]} — {f[\"message\"]} ({f[\"field_path\"]})")
+print(f"\n{by_sev[\"error\"]} error / {by_sev[\"warning\"]} warning / {by_sev[\"info\"]} info")
+'
 ```
+
+`by_sev["error"] > 0` is what blocks publication (unless `--force`). `/api/report-lint` already applies `.pbg/report-lint-overrides.json` server-side (an overridden `error` finding arrives here downgraded to `warning`, message prefixed `[overridden]`) — the skill only displays `findings`, it never re-derives an override key or re-applies the override file itself.
 
 ## Pass B½ — Canonicalize readouts (auto-migrate, before render)
 
 `/viva-report` is one of the two triggers (the other is the explicit `/viva-study migrate-readouts`) that auto-canonicalize the safe `migratable` readouts. Run this after Pass B passes and **before** rendering, so the rendered report shows every study's readouts in canonical form.
 
-For each member study under `$STUDIES_DIR` / `$INVESTIGATIONS_DIR`, rewrite only the safe (resolvable) readouts and tally the un-parseable ones:
+For each member study under `$STUDIES_DIR` / `$INVESTIGATIONS_DIR`, call `POST /api/study-readout-migrate` with `write: true` and tally the un-parseable ones:
 
 ```bash
-python - <<'PY'
+python3 - "$URL" "$STUDIES_DIR" <<'PY'
+import json, sys, urllib.request
 from pathlib import Path
-from viva_superpowers.readout_migration import migrate_study_file
+
+url, studies_dir = sys.argv[1], sys.argv[2]
 needs_human_total = 0
-for sy in Path('.').glob('studies/*/study.yaml'):
-    report = migrate_study_file(sy.parent, write=True)  # ruamel round-trip; rewrites ONLY the readouts: block, leaves needs_human untouched
-    n = len(report.get('needs_human') or [])
-    # report ACTUALLY-canonicalized readouts (the changed subset), NOT
-    # len(report['migrated']) — which also counts already-canonical ones.
-    canonicalized = report.get('canonicalized') or []
+for sy in sorted(Path(studies_dir).glob('*/study.yaml')):
+    slug = sy.parent.name
+    body = json.dumps({"study": slug, "write": True}).encode()
+    req = urllib.request.Request(
+        f"{url}/api/study-readout-migrate", data=body, method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        d = json.load(resp)
+    entries = d.get("entries") or []
+    canonicalized = d.get("canonicalized") or []
+    needs_human = [e for e in entries if e.get("status") == "needs_human"]
     if canonicalized:
-        print(f"{sy.parent.name}: canonicalized {len(canonicalized)} readout(s)")
-    if n:
-        print(f"{sy.parent.name}: {n} readout(s) still need_human (re-author via /viva-study migrate-readouts)")
-        needs_human_total += n
+        print(f"{slug}: canonicalized {len(canonicalized)} readout(s)")
+    if needs_human:
+        print(f"{slug}: {len(needs_human)} readout(s) still need_human "
+              f"(re-author via /viva-study migrate-readouts)")
+        needs_human_total += len(needs_human)
 print(f"\nreadout migration: {needs_human_total} needs_human readout(s) remain across all studies")
 PY
 ```
 
-`migrate_study_file(write=True)` is meaning-preserving, comment-safe, idempotent, and leaves every `needs_human` readout untouched — it only rewrites the resolvable ones. It is a **true no-op** on an already-canonical study (the file is left byte-identical — `changed=False`/`written=False`), so re-running `/viva-report` never reflows a clean readouts block. Note: inline comments on an *individual readout entry* are not preserved across canonicalization (the readout dict is rebuilt from its resolved selector); comments on non-readout content survive. Report the total `needs_human` count as a (non-blocking) finding: these can't be auto-fixed and must be re-authored against the composite's real observables via `/viva-study migrate-readouts <slug>` (which uses `/viva-study check-observables` + `/api/observables`). The dashboard never writes — this canonicalize runs only here in the skill.
+`write: true` (or its synonym `apply: true`) is meaning-preserving, comment-safe, idempotent, and leaves every `needs_human` readout untouched — the endpoint only rewrites the resolvable ones (it wraps `viva_superpowers.readout_migration.migrate_study_file` server-side). It is a **true no-op** on an already-canonical study (the file is left byte-identical — `changed=False`/`written=False`), so re-running `/viva-report` never reflows a clean readouts block. Note: inline comments on an *individual readout entry* are not preserved across canonicalization (the readout dict is rebuilt from its resolved selector); comments on non-readout content survive. Report the total `needs_human` count as a (non-blocking) finding: these can't be auto-fixed and must be re-authored against the composite's real observables via `/viva-study migrate-readouts <slug>` (which uses `/viva-study check-observables` + `/api/observables`). The skill never writes to `study.yaml` directly — the endpoint does, server-side.
 
 ## Render
 
 After both passes succeed (or `--force`):
 
 ```bash
-# Prefer the vivarium-workbench full SPA renderer when installed
-# (produces the 110+ KB interactive SPA shell at $REPORTS_DIR/index.html;
-#  pass the workspace ROOT — the renderer resolves the layout-aware reports dir itself):
-python -c "from pathlib import Path; \
-           from vivarium_workbench.lib.report import render_workspace_report; \
-           render_workspace_report(Path('.'))"
-
-# Fall back to pbg-superpowers' slim renderer if the above is not installed:
-python -c "from pathlib import Path; \
-           from viva_superpowers.report import render_workspace_report; \
-           render_workspace_report(Path('.'))"
+# Plain render — produces the interactive SPA shell at $REPORTS_DIR/index.html:
+curl -s -X POST -H "Content-Type: application/json" -d '{}' "$URL/api/render" | python3 -m json.tool
 ```
 
 Forced render with auto-logged overrides:
 
 ```bash
-python -c "from pathlib import Path; \
-           from viva_superpowers.report import render_workspace_report; \
-           render_workspace_report(Path('.'), force=True)"
+curl -s -X POST -H "Content-Type: application/json" -d '{"force": true}' "$URL/api/render" | python3 -m json.tool
 ```
 
-The skill reads `workspace.yaml` for the workspace slug, then builds `pbg_doc` from `pbg_<slug>.document.build_document()` if available; falls back to an empty dict.
+`{"force": true}` makes `POST /api/render` log every currently-blocking (error-level, not-yet-overridden) `report-lint` finding to `.pbg/report-lint-overrides.json` server-side, then render — the skill never writes the override file itself. `{"ok": true}` at HTTP 200 on success; `{"error": "<str>"}` at HTTP 500 on a render failure (per-model rendering catches `build_core()` failures internally rather than aborting the whole render).
 
 ## Before sending to a reviewer — verify the rendered artifact
 
@@ -313,10 +342,10 @@ Schema version 2 (this revision) added the `pass:` field; pre-existing schema 1 
 
 ## Idempotency
 
-`/viva-report` produces deterministic output given the same inputs. The `--today` argument can be passed through for byte-stable CI runs:
+`/viva-report` produces deterministic output given the same inputs. The `today` body field can be passed through `POST /api/render` for byte-stable CI runs:
 
 ```bash
-python -c "..." # render_*_report(..., today='2026-05-09')
+curl -s -X POST -H "Content-Type: application/json" -d '{"today": "2026-05-09"}' "$URL/api/render" | python3 -m json.tool
 ```
 
 ## Safety
