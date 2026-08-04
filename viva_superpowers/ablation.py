@@ -17,7 +17,7 @@ The enumeration walks the same requires/provides reasoning as
 applied over a composite_state *dict* rather than live process instances: each
 ``_type == "process"`` entry's ``outputs`` wiring names the stores that process
 *provides*, and those are the stores worth ablating. Perturbation nodes are
-built with :func:`viva_superpowers.intervention.intervention_node`, so any
+built with :func:`pbg_basic_processes.intervention.intervention_node`, so any
 Intervention ``mode`` (``knockout``/``scale``/``decouple``/``invert``/…) is a
 valid ablation mode.
 
@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from .intervention import intervention_node
+from pbg_basic_processes.intervention import intervention_node
 
 
 __all__ = ["generate_ablations", "classify_ablation", "run_ablation_suite"]
