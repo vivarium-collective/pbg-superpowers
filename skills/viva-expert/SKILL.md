@@ -328,7 +328,7 @@ The completed repo must include:
 2. Appropriate bigraph-schema port and config schemas
 3. Custom type registration if needed
 4. Unit and integration tests (including one that asserts the generator
-   is in `viva_superpowers.composite_generator._REGISTRY`)
+   is in `process_bigraph.composite_generator._REGISTRY`)
 5. Offline-safe fixtures or examples
 6. **One or more `@composite_generator`-decorated functions** in
    `viva_<tool>/composites/` — these are the dashboard-visible entry points
@@ -570,7 +570,7 @@ the short version:
 
 ```python
 # viva_<tool>/composites/<topic>.py
-from viva_superpowers.composite_generator import composite_generator
+from process_bigraph.composite_generator import composite_generator
 
 
 @composite_generator(
@@ -800,7 +800,7 @@ Principles:
   tolerance per process:
 
   ```python
-  from viva_superpowers.config_helpers import normalize_config_list
+  from process_bigraph.config_helpers import normalize_config_list
 
   low, high = normalize_config_list(self.config["band"], length=2)
   ```
@@ -1051,7 +1051,7 @@ import in `composites/__init__.py`):
 
 ```python
 def test_generator_is_registered():
-    from viva_superpowers.composite_generator import _REGISTRY
+    from process_bigraph.composite_generator import _REGISTRY
     matches = [eid for eid in _REGISTRY if eid.endswith(".<tool>_baseline")]
     assert matches, f"<tool>_baseline missing; have {list(_REGISTRY)[:5]}"
 ```
@@ -1373,7 +1373,7 @@ python scripts/lint-workspace.py    # must print "workspace lint: OK"
 
 # Confirm the generator(s) are visible to the dashboard's discovery path.
 python -c "
-from viva_superpowers.composite_generator import discover_generators
+from process_bigraph.composite_generator import discover_generators
 gens = discover_generators()
 matches = [g for g in gens if 'viva_<tool>' in g]
 assert matches, 'no <tool> generators discovered'
@@ -1729,7 +1729,7 @@ Same ritual as single-tool mode's Phase 4.5 — `workspace.yaml`,
 tab can run it with parameter sweeps:
 
 ```python
-from viva_superpowers.composite_generator import composite_generator
+from process_bigraph.composite_generator import composite_generator
 from ..document import build_document
 
 @composite_generator(
