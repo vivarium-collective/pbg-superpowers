@@ -314,12 +314,14 @@ def test_skill_frontmatter_valid():
 
 
 def test_skill_references_helpers():
-    """SKILL.md body references the three key helpers by exact Python name."""
+    """SKILL.md body wires the three key ops via the workbench API (Phase
+    2.1e — thin client), not by importing the Python helpers directly."""
     skill = Path(__file__).resolve().parents[1] / "skills" / "viva-cite-bands" / "SKILL.md"
     body = skill.read_text()
-    assert "bands_missing_provenance" in body, "skill must reference bands_missing_provenance"
-    assert "search_expert_docs" in body, "skill must reference search_expert_docs"
-    assert "set_band_provenance" in body, "skill must reference set_band_provenance"
+    assert "/api/band-provenance" in body, "skill must call GET/POST /api/band-provenance"
+    assert "/api/expert-search" in body, "skill must call GET /api/expert-search"
+    assert "viva_superpowers.band_provenance" not in body, "skill must not import band_provenance directly"
+    assert "viva_superpowers.expert_search" not in body, "skill must not import expert_search directly"
 
 
 def test_skill_references_proposed_inputs_guardrail():
