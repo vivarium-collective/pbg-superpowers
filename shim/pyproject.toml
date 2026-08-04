@@ -2,10 +2,10 @@
 name = "pbg-superpowers"
 # 0.17.0 is already on PyPI under the pre-rename dist, so the shim must be a NEW
 # version. Keep it in lockstep with viva-superpowers.
-version = "0.20.0"
+version = "0.21.0"
 description = "Deprecated alias — the package was renamed to 'viva-superpowers'. This shim just depends on it so existing 'pbg-superpowers' PyPI deps keep resolving. Import 'viva_superpowers' (a 'pbg_superpowers' import shim also ships in viva-superpowers)."
 requires-python = ">=3.11"
-dependencies = ["viva-superpowers>=0.20.0"]
+dependencies = ["viva-superpowers>=0.21.0"]
 
 [build-system]
 requires = ["hatchling"]
