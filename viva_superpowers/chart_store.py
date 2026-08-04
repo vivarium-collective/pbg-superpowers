@@ -17,8 +17,8 @@ Design principles
 -----------------
 * **Deterministic, pure-Python, no AI, no network.** The dashboard and the
   framework run-completion / report paths call these directly.
-* **Tag on write.** Whatever renders a chart (``figure_refresh``,
-  ``refresh_viz``, the dashboard run path) records the producing run id.
+* **Tag on write.** Whatever renders a chart (``refresh_viz``, the dashboard
+  run path) records the producing run id.
 * **Prune is opt-in and safe.** ``prune`` defaults to ``dry_run=True`` — it only
   *lists* superseded files; deleting requires an explicit ``dry_run=False``.
 * **Untagged legacy charts are never deleted.** A chart with no resolvable

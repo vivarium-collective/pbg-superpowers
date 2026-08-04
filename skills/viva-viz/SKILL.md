@@ -36,9 +36,9 @@ by default so they don't have to:
   reading, plot the steady-state window (or per-regime average) and say so in the
   caption, instead of letting the transient dominate the scale.
 
-Prefer the framework house style `viva_superpowers.plot_style` (`PALETTE`,
-`stitch_minutes`, `gen_boundaries`, `wrap`, `style_axes`, `mark_lineages`,
-`house_layout`) over re-deriving these conventions per script.
+Use a consistent, distinguishable palette across a study's charts — pick a
+small set of colors up front and reuse them by series/condition rather than
+re-deriving conventions ad hoc per script.
 
 ## Output contract
 
