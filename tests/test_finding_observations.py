@@ -1036,22 +1036,44 @@ def test_skill_has_required_frontmatter():
     assert "description" in fm
 
 
-def test_skill_references_populate_finding_observations():
-    """SKILL.md references the populate_finding_observations helper by name."""
+def test_skill_references_populate_observations_endpoint():
+    """SKILL.md drives the fill via the workbench endpoint (Phase 2.1f thin
+    client), not the plugin function directly."""
     skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-biology-forward" / "SKILL.md"
     text = skill_path.read_text(encoding="utf-8")
-    assert "populate_finding_observations" in text
+    assert "/api/study-findings-populate-observations" in text
 
 
-def test_skill_references_search_expert_docs():
-    """SKILL.md references search_expert_docs for expert PDF search."""
+def test_skill_references_expert_search_endpoint():
+    """SKILL.md surfaces expert-PDF candidates via GET /api/expert-search."""
     skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-biology-forward" / "SKILL.md"
     text = skill_path.read_text(encoding="utf-8")
-    assert "search_expert_docs" in text
+    assert "/api/expert-search" in text
 
 
-def test_skill_referenced_symbols_importable():
-    """All Python symbols referenced by the skill are importable."""
+def test_skill_has_no_direct_viva_superpowers_compute_imports():
+    """Phase 2.1f: the skill is a thin workbench-API client — it must not
+    import finding_observations/expert_search/study_outcomes compute directly
+    (those calls belong to the workbench server backing the API). The plugin
+    modules still exist (they back the endpoints); this asserts the SKILL does
+    not reach into them."""
+    skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-biology-forward" / "SKILL.md"
+    text = skill_path.read_text(encoding="utf-8")
+    banned = [
+        "viva_superpowers.finding_observations",
+        "viva_superpowers.expert_search",
+        "viva_superpowers.study_outcomes",
+        "populate_finding_observations",
+        "search_expert_docs",
+    ]
+    for token in banned:
+        assert token not in text, f"skill still references {token} directly — should call the API instead"
+
+
+def test_backing_plugin_symbols_still_importable():
+    """The endpoints are backed by the plugin compute (module move is 2.1k),
+    so the symbols must remain importable even though the skill no longer
+    references them."""
     from viva_superpowers.finding_observations import populate_finding_observations  # noqa: F401
     from viva_superpowers.expert_search import search_expert_docs  # noqa: F401
 
