@@ -91,7 +91,7 @@ live:
 ```bash
 uv pip install -e <path-to-vivarium-workbench> --no-deps
 uv pip install -e <path-to-pbg-superpowers> --no-deps
-python -m viva_superpowers.dashboard restart
+vwb server-restart
 ```
 
 If a correct change "doesn't show up," check the install mode before debugging
