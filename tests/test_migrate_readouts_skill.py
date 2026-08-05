@@ -22,9 +22,11 @@ def test_pbg_study_documents_migrate_readouts_subcommand():
 
 def test_pbg_study_names_status_and_write_helpers():
     text = STUDY_SKILL.read_text(encoding="utf-8")
-    # the pure status classifier + the write helper that does the canonicalize
-    assert "readout_migration_status" in text
-    assert "migrate_study_file" in text
+    # Phase 2.1g thin client: the migrate-readouts subcommand drives the pure
+    # status classifier + the canonicalize write via the workbench API (the
+    # readout_migration compute stays server-side backing these endpoints).
+    assert "/api/study-readout-migration-status" in text
+    assert "/api/study-readout-migrate" in text
 
 
 def test_pbg_study_drives_needs_human_reauthoring_via_check_observables():

@@ -17,7 +17,7 @@ Studies live **nested under their investigation**:
 back-ref. The investigation's publication/report lives at `investigations/<inv>/reports/`
 (per-investigation — there is **no global repo-wide report**).
 
-- **Resolve a study dir** (nested- and flat-aware): `python -m viva_superpowers.paths --study <slug>`.
+- **Resolve a study dir** (nested- and flat-aware): studies live at `investigations/<inv>/studies/<slug>/` (nested) or legacy flat `studies/<slug>/`. The workbench endpoints resolve the slug server-side; when a subcommand needs a local file, check the nested path first, then the flat one.
 - **Create a new study** under `$INVESTIGATIONS_DIR/<inv>/studies/<slug>/` (write the `investigation:` back-ref).
 - Legacy flat `studies/<slug>/` still resolves (back-compat) until a repo is migrated with `viva-migrate-nested`.
 
@@ -198,7 +198,7 @@ When you cite a paper (`--cite`, `--source`, `cites:`, `literature_anchors[].sou
 ## Rigor pass (Evaluate → Decide): fill the required information so the scorecard goes green
 
 Every study should carry the information a skeptical reviewer asks for. The
-dashboard computes an **evidence & rigor scorecard** (`viva_superpowers.rigor`)
+dashboard computes an **evidence & rigor scorecard**
 that reports `ok`/`warn`/`gap` per dimension from declared fields, and the report
 surfaces it — a missing field is a `gap`. Before a study is "done", address each
 dimension (or say why not). Full guide + field shapes:
@@ -216,7 +216,7 @@ dimension (or say why not). Full guide + field shapes:
 In short, ensure the study declares:
 - **a model** — `baseline:` with the composite(s) + params it runs (every study runs ≥1 composite, and the composite must be REAL/registered);
 - **replication** — `robustness:` (≥3 seeds for stochastic; a `parameter_sweep: true` for deterministic);
-- **controls & calibration** — `controls:` with a NEGATIVE control (a system that should fail — build it with the **Intervention process**, `viva_superpowers.intervention`, to clamp/knockout/scale a store) AND a positive/borderline case;
+- **controls & calibration** — `controls:` with a NEGATIVE control (a system that should fail — build it with the **Intervention process** to clamp/knockout/scale a store) AND a positive/borderline case;
 - **alternative_hypotheses** — competing explanations + how the evidence (often the control) excludes them;
 - **tiered findings** — each finding `tier: observation|mechanism|interpretation`, with `mechanism_origin: engineered|emergent` on interpretation claims;
 - **falsifiability** — a `falsifiability:` note (what result would overturn the claim);
@@ -285,7 +285,7 @@ Draft the `question`, `hypothesis`, `objective`, and/or `description` fields of 
 
    - `description:` — Two to four paragraphs providing scientific context, citing source sections by their heading names. Structure: background, mechanism of interest, why this study, expected outcome.
 
-   **v4 narrative-spine fields** (drafted only when `--include-narrative` or named explicitly in `--fields`; written YAML-direct via `viva_superpowers.study_narrative` since these fields have no dedicated POST endpoints):
+   **v4 narrative-spine fields** (drafted only when `--include-narrative` or named explicitly in `--fields`; written via `POST /api/study-narrative-set` — `report`, `study_card`, and `biological_summary` are canonical narrative roots the endpoint accepts as dotted-path leaf writes):
 
    - `report:` — Object with sub-fields. `verdict` defaults to `not-yet-run` until simulations land; `confidence` defaults to `low`; `evidence_quality` defaults to `aspirational`. Draft `objective`, `main_insight`, and `caveat` from the plan's expected-outcome + caveats sections. Leave `conclusion` blank (it's a Decide-phase field). `key_metrics` is hand-authored; do not invent numbers.
 
@@ -425,7 +425,7 @@ Append one entry to `studies/<slug>/study.yaml.literature_anchors[]` — a liter
 - `--cite <bib-key>` (optional, repeatable) — bib key from the workspace bibliography. Prefer this over `--source`.
 - `--dry-run` (optional) — print the proposed diff; do not write.
 
-YAML-direct subcommand. Shells out to `python -m viva_superpowers.study_narrative add-literature-anchor ...` which loads the spec, appends the entry, and atomically writes.
+Thin client → `POST /api/study-narrative-command` with `subcommand: add-literature-anchor` — the workbench appends the entry (dedup + atomic write) server-side.
 
 #### `add-pivot <slug> --id <id> --question '<text>' [--alternatives 'A;B;C'] [--status <status>] [--requested-response '<text>'] [--notes '<text>'] [--dry-run]`
 
@@ -496,18 +496,19 @@ Spec-verify a study before running it. Catches the cross-reference errors that w
 
 **Behavior:**
 
-1. Walk up from cwd to find `workspace.yaml`.
-2. Resolve `studies/<slug>/study.yaml`. Abort if absent.
-3. Shell out to the helper:
+1. Walk up from cwd to find `workspace.yaml`; read `.pbg/server/server-info` for the URL.
+2. `POST /api/study-verify {study: <slug>}` (the workbench runs the pure checker server-side against `studies/<slug>/study.yaml`). A 404 means the study doesn't exist → exit 2.
    ```bash
-   python3 -m viva_superpowers.study_verify studies/<slug>/study.yaml
+   curl -sf -X POST -H "Content-Type: application/json" \
+     -d '{"study": "<slug>"}' "$URL/api/study-verify" | python3 -m json.tool
    ```
+   Response: `{study, study_yaml, findings, summary}` — `findings` are `{level, check, field_path, message}` mappings; `summary` carries the `{error, warning, info}` counts.
 4. Surface findings grouped by level (error / warning / info). Each finding includes a `check:` identifier, dotted `field_path`, and a one-line message.
-5. Exit 0 if clean; exit 1 if any error (or any warning with `--strict`); exit 2 if the study.yaml file doesn't exist.
+5. Exit 0 if clean; exit 1 if any error (or any warning with `--strict`); exit 2 if the study doesn't exist.
 
 **Notes:**
 
-- This is a thin wrapper around the Python helper — no dashboard API. The check set lives in `viva_superpowers/study_verify.py`; tests pin each check (`tests/test_study_verify.py`).
+- Thin client — the check set is computed server-side; the pure checker lives in `viva_superpowers/study_verify.py` (backing the endpoint) and its tests pin each check (`tests/test_study_verify.py`).
 - Run this after every Design-phase edit. The dashboard's save-time schema validator catches structural errors; `verify` catches semantic cross-reference errors that the schema can't express.
 
 #### `preview-viz <slug> [--name <viz-name>]`
@@ -567,7 +568,7 @@ Run this whenever you add or edit `readouts[]` (Design/Build phase), and always 
 
 **Notes:**
 
-- Deterministic and AI-free on the server side: the endpoints (`/api/study-observable-check` + `/api/observables`) just build the composite and run the pure validator; the re-authoring judgment lives here in the skill. Headless callers can call `viva_superpowers.readout_validation.validate_readouts(spec, available=available_observables(core, state, schema))` directly.
+- Deterministic and AI-free on the server side: the endpoints (`/api/study-observable-check` + `/api/observables`) just build the composite and run the pure readout validator; the re-authoring judgment lives here in the skill.
 - The composite build is cached (TTL), so repeated `check-observables` / `/api/observables` calls on the same baseline are fast.
 
 #### `migrate-readouts <slug>`
@@ -578,22 +579,25 @@ Run this whenever `verify` / `check-observables` / the report linter flags `read
 
 **Behavior:**
 
-1. Walk up from cwd to find `workspace.yaml`. Compute the migration status (pure, no write):
+1. Walk up from cwd to find `workspace.yaml`; read `.pbg/server/server-info` for the URL. Get the migration status (pure, no write) via `GET /api/study-readout-migration-status`:
 
-   ```python
-   from viva_superpowers.readout_migration import readout_migration_status, migrate_study_file
-   status = readout_migration_status(study_dir)   # {canonical, migratable, needs_human}
+   ```bash
+   curl -sf "$URL/api/study-readout-migration-status?study=<slug>" | python3 -m json.tool
+   # → {study, canonical, migratable, needs_human}
    ```
 
    Report the three buckets to the user: how many are already `canonical`, how many are `migratable` (safe to rewrite), and how many are `needs_human` (must be re-authored).
 
-2. **Auto-canonicalize the `migratable` set.** These are resolvable readouts whose canonical form differs from the original — a meaning-preserving, comment-safe rewrite. After confirming with the user, write them:
+2. **Auto-canonicalize the `migratable` set.** These are resolvable readouts whose canonical form differs from the original — a meaning-preserving, comment-safe rewrite. After confirming with the user, write them via `POST /api/study-readout-migrate {study, write: true}`:
 
-   ```python
-   report = migrate_study_file(study_dir, write=True)   # ruamel round-trip; rewrites ONLY the readouts: block
+   ```bash
+   curl -sf -X POST -H "Content-Type: application/json" \
+     -d '{"study": "<slug>", "write": true}' \
+     "$URL/api/study-readout-migrate" | python3 -m json.tool
+   # ruamel round-trip; rewrites ONLY the readouts: block
    ```
 
-   `migrate_study_file` is idempotent and leaves every `needs_human` readout **untouched** (it only rewrites the resolvable ones). It returns `changed`/`written` flags and a `canonicalized` list — report `len(report['canonicalized'])` (the readouts ACTUALLY rewritten this call), not `len(report['migrated'])` (which also counts already-canonical readouts). On an already-canonical study it is a **true no-op** (`changed=False`, the file is left byte-identical). Hand-authored comments and all non-readout content survive; note that inline comments on an *individual readout entry* are not preserved across canonicalization (the readout dict is rebuilt from its resolved selector).
+   The migrate write is idempotent and leaves every `needs_human` readout **untouched** (it only rewrites the resolvable ones). It returns `changed`/`written` flags and a `canonicalized` list — report `len(canonicalized)` (the readouts ACTUALLY rewritten this call), not `len(migrated)` (which also counts already-canonical readouts). On an already-canonical study it is a **true no-op** (`changed=false`, the file is left byte-identical). Hand-authored comments and all non-readout content survive; note that inline comments on an *individual readout entry* are not preserved across canonicalization (the readout dict is rebuilt from its resolved selector).
 
 3. **Re-author each `needs_human` readout.** These are prose `·`-groups, `derived` paths, or ambiguous identifiers the migration refuses to guess. For each one, drive re-authoring against the composite's *real* observables (SP2b-i):
 
@@ -601,7 +605,7 @@ Run this whenever `verify` / `check-observables` / the report linter flags `read
    - Propose a canonical selector (`store_path`, `identifier`, or `index_by`) that points at an **actual** `leaf`/`catalog` entry for the intended quantity. Confirm with the user, then write it.
    - **NEVER invent an observable.** If the intended quantity genuinely isn't emitted, that's a Build-phase gap — the composite must expose it first (`add-requirement`), not the readout pretending it does.
 
-4. Re-run `readout_migration_status` and report the residual `needs_human` count (the re-authoring queue that's left).
+4. Re-call `GET /api/study-readout-migration-status` and report the residual `needs_human` count (the re-authoring queue that's left).
 
 **Arguments:**
 
@@ -609,7 +613,7 @@ Run this whenever `verify` / `check-observables` / the report linter flags `read
 
 **Notes:**
 
-- The STATUS (`readout_migration_status`) is pure (dry-run, no write). The only WRITE is `migrate_study_file(write=True)` — invoked here after user confirmation, and by `/viva-report` before rendering. The dashboard never writes (AI-free).
+- The STATUS (`GET /api/study-readout-migration-status`) is pure (no write). The only WRITE is `POST /api/study-readout-migrate {write: true}` — invoked here after user confirmation, and by `/viva-report` before rendering. The re-authoring judgment stays in the skill (AI-free server).
 - `needs_human` readouts are never auto-guessed; re-authoring is always a confirmed, observables-grounded edit.
 
 ### Simulate subcommands
@@ -689,10 +693,11 @@ This is a pure shell-out — no dashboard endpoint involved. The script is expec
 
 After the script exits with code 0, automatically invokes `refresh-viz` for the study so registered charts regenerate against the new run. Pass `--no-refresh-viz` to skip.
 
-- After a successful run (exit 0), also run:
-      python -m viva_superpowers.study_outcomes --workspace <ws> --study <slug>
+- After a successful run (exit 0), also `POST /api/study-sync-runs {study: <slug>}`
   to record the run into study.yaml's runs[] (mechanical fields; authored
   outcomes are preserved). Skip with --no-sync-runs.
+      curl -sf -X POST -H "Content-Type: application/json" \
+        -d '{"study": "<slug>"}' "$URL/api/study-sync-runs" | python3 -m json.tool
 
 > **When NOT to use run-script.** If the study's runner can be expressed as a composite plus `parameter_overrides`, prefer `run-baseline` / `run-variant` — those go through the dashboard, surface the run in `runs.db`, and integrate with the auto-renderer. `run-script` is for runners that genuinely can't fit that mold (multi-gen division, external orchestration, custom emitter pipelines).
 
@@ -712,19 +717,15 @@ Re-render the study's `visualizations[]` charts against the **latest run** so fi
 
 **Purpose:** resolve the latest run from the study's `runs.db`, invoke each visualization entry's declared `render:` command with the run's emitter store wired in, and stamp a `<chart>.meta.json` sidecar so freshness is auditable.
 
-**Mechanism:**
+**Mechanism:** `POST /api/study-refresh-viz/<slug>` — the workbench resolves the
+study's latest run, re-renders each `visualizations[]` entry against it, and
+stamps the `<chart>.meta.json` sidecars server-side.
 
 ```bash
-python -c "from pathlib import Path; import yaml, json; \
-  from viva_superpowers.run_registry import latest_run; \
-  from viva_superpowers.refresh_viz import refresh_study_viz; \
-  sd=Path('studies/<slug>'); spec=yaml.safe_load((sd/'study.yaml').read_text()); \
-  print(json.dumps(refresh_study_viz(sd, spec, latest_run(sd/'runs.db')), indent=2))"
+curl -sf -X POST "$URL/api/study-refresh-viz/<slug>" | python3 -m json.tool
 ```
 
-Or call the helper directly: resolve the study dir with `python -m viva_superpowers.paths --study <slug>`; load `study.yaml`; compute `latest = viva_superpowers.run_registry.latest_run(<study_dir>/runs.db)`; call `viva_superpowers.refresh_viz.refresh_study_viz(<study_dir>, spec, latest)`.
-
-**Output:** the helper returns a list of per-chart result dicts, each with `{name, chart, status}` where `status` is one of:
+**Output:** the endpoint returns `results`, a list of per-chart result dicts, each with `{name, chart, status}` where `status` is one of:
 
 - `rendered` — the render command ran successfully and the chart + sidecar were restamped.
 - `error` — the render command failed; the old chart is kept in place and the error is surfaced.
@@ -894,17 +895,19 @@ sub-objects.
    - FAIL → ask the user: biological (`contradicts`) vs computational (`novel`). If `--auto`, default to biological/contradicts.
 3. **Auto-assign `id`.** Use the next free `F-NN` (skipping any used by existing findings).
 4. **Pre-fill from heuristics.** `evidence.from_run` + `evidence.from_test` + (when present) `evidence.observed`; `expected.summary` from the test's `expected_summary` or `calibration_anchor.literature_summary` when set.
-5. **Surface candidate quotes.** Call `viva_superpowers.expert_search.search_expert_docs(ws_root, terms, max_hits=3)` on a small set of keywords extracted from the test name + description. Display the top hits (doc, page, snippet) and offer them as candidate `expert_reference.quote` + `expected.cites` entries.
+5. **Surface candidate quotes.** `POST /api/study-findings` runs the expert-PDF search server-side (keywords from each test name + description) and folds candidate quotes into the drafted findings. To search interactively for a specific finding, call `GET /api/expert-search?q=<term1,term2>&max_hits=3` and offer the top hits (doc, page, snippet) as candidate `expert_reference.quote` + `expected.cites` entries.
 6. **Interactive curation (default, skipped when `--auto`).** For each draft, ask the user to fill / refine: `statement`, `expected.summary`, `expected.cites` (bib_keys), `expert_reference` (doc + quote + note), `next_action`. The user can reject the draft outright.
 7. **Append to `study.yaml.findings[]`.** Atomic write: serialize updated YAML to `study.yaml.tmp`, then `os.replace()` over the original. Preserve all other top-level keys verbatim.
 8. **Bibliography crosscheck (warn).** After the walk, compare every `expected.cites` entry against `references/papers.bib` keys; print a warning for any unknown bib_key so the user can decide whether to add it.
 9. **Report.** Print a one-line summary: appended count, skipped (already-covered) count, unknown bib_keys count.
 
-**Implementation note:** the bulk of the logic lives in
-[`viva_superpowers/study_findings.py`](../../viva_superpowers/study_findings.py).
-The skill shells out to it via `python -m viva_superpowers.study_findings <slug> [--auto] [--dry-run]`,
-in the same shape as the other YAML-direct subcommands (`propose-followup`, `seed-from-followup`).
-The interactive step (6) is performed by the host Claude instance following the prose flow above; the Python helper handles workspace discovery, draft heuristics, expert-PDF search, atomic-write, and the bib-key crosscheck.
+**Implementation note:** the deterministic draft-walk lives server-side in
+[`viva_superpowers/study_findings.py`](../../viva_superpowers/study_findings.py),
+invoked via `POST /api/study-findings {study, auto?, dry_run?}`. The endpoint
+handles workspace discovery, draft heuristics, expert-PDF search, atomic-write,
+and the bib-key crosscheck, returning a `{proposed, appended, skipped_existing,
+cited_bib_keys, unknown_bib_keys, wrote}` summary. The interactive step (6) is
+performed by the host Claude instance following the prose flow above.
 
 #### `propose-followup <parent-slug> --id <id> --title '<t>' --motivation '<m>' [--mechanism '<hyp>'] [--seed-from-file <path>] [--dry-run]`
 
@@ -944,54 +947,35 @@ Lift a parent's `followup_proposals[id == <proposal-id>]` entry into a brand-new
 
 **Behavior (steps Claude follows):**
 
-1. **Resolve parent.** Read `studies/<parent-slug>/study.yaml`. Find `followup_proposals[id == <proposal-id>]`. Abort if missing or if `status not in {proposed, accepted}`.
-2. **Resolve new slug.** `new_slug = --new-slug or proposal.id`. Abort if `studies/<new_slug>/` exists.
-3. **(Pass 10B) Resolve `--from-finding`, if passed.** Shell out to the helper:
+The whole seed — resolving the proposal (or finding, Pass 10B), building the
+child `study.yaml` with the `purpose` / `key_assumptions` / `seeded_from` /
+`pipeline_gate` / `behavior_tests` / `model_change` skeleton and the finding→child
+merge, flipping the parent proposal to `status: seeded` + `linked_finding`, and
+the atomic writes — is done **server-side** by `POST /api/study-seed-followup`.
+The skill drives it:
+
+1. **Resolve parent + proposal.** Read `studies/<parent-slug>/study.yaml`, find `followup_proposals[id == <proposal-id>]`. Abort if missing or if `status not in {proposed, accepted}`. (This is a read for the confirm preview; the endpoint re-validates.)
+2. **Confirm with the user** what will be seeded (proposal title/motivation; the `--from-finding` id when passed). On `no`, abort.
+3. **Seed via the endpoint:**
    ```bash
-   python3 -m viva_superpowers.seed_from_followup \
-     studies/<parent-slug>/study.yaml <proposal-id> <finding-id> \
-     --new-slug <new_slug>
+   curl -sf -X POST -H "Content-Type: application/json" \
+     -d '{"parent": "<parent-slug>", "proposal_id": "<proposal-id>"}' \
+     "$URL/api/study-seed-followup" | python3 -m json.tool
    ```
-   This prints a YAML preview of (a) the child seed (`purpose` + `key_assumptions` + `seeded_from` + `pipeline_gate` + `behavior_tests` + `model_change`) and (b) the updated parent-proposal entry. If the helper exits 2, the finding id is unknown — abort with the printed error. The helper never writes; the prose flow does.
-4. **Build child `study.yaml` dict** with this skeleton:
-   ```yaml
-   schema_version: 3
-   name: <new_slug>
-   phase: Design
-   purpose: <proposal.seed.purpose or {question: <derived from title+motivation>, mechanism: '', expected_outcome: ''}>
-   pipeline_gate:
-     prerequisites: [<parent-slug>, ...any from proposal.seed.pipeline_gate.prerequisites]
-     # plus enables / proceed_condition / blocks_until_resolved if present in proposal.seed.pipeline_gate
-   key_assumptions: <proposal.seed.key_assumptions or []>
-   model_change: <proposal.seed.model_change or proposal.hypothesized_mechanism or ''>
-   simulation_set: <proposal.seed.simulation_set or []>
-   seeded_from:
-     study: <parent-slug>
-     proposal_id: <proposal-id>
-     finding: <finding-id>            # ONLY when --from-finding is passed
+   For **Pass 10B** (seed from a specific finding), send `finding_id` instead of / alongside `proposal_id` — `finding_id` wins:
+   ```bash
+   curl -sf -X POST -H "Content-Type: application/json" \
+     -d '{"parent": "<parent-slug>", "proposal_id": "<proposal-id>", "finding_id": "<finding-id>"}' \
+     "$URL/api/study-seed-followup" | python3 -m json.tool
    ```
-   The purpose-fallback question is `"<proposal.title> — <proposal.motivation>"` (single line, truncated tastefully) when `proposal.seed.purpose` is absent.
+   The endpoint routes through the unified followup field families (finding wins), does the finding→child merge (purpose/key_assumptions/seeded_from.evidence/pipeline_gate.proceed_condition/behavior_tests carry-over/model_change), writes the child + flips the parent proposal, and returns `{new_study_name, new_slug}`. 404 → parent not found; 400 → bad args.
+4. **Report.** Print: `Seeded <new_slug> from <parent-slug>.followup_proposals[<proposal-id>]. Parent proposal marked seeded.` Append `Linked finding: <finding-id>.` when `--from-finding` was passed.
 
-   **Pass 10B finding-to-child merge** (when `--from-finding` is passed): merge the helper's `ChildSeed` over the skeleton above with **existing keys winning** — the propose-followup seed.purpose still has priority, the finding only fills empty slots. The mapping:
-   - `purpose.question` ← derived from the finding's `next_action` (e.g. "Calibrate X to match Y" → "How do we calibrate X to match Y?"). Falls back to "Investigate <statement>?" when `next_action` is absent.
-   - `purpose.mechanism` ← the finding's `explanation` verbatim (when set).
-   - `purpose.expected_outcome` ← the trailing clause of `next_action` if it contains target cues ("to match", "within", "in range", numeric thresholds); else empty.
-   - `key_assumptions[]` ← appended with the finding's `evidence.smoking_gun` string (when present and not already in the list).
-   - `seeded_from.finding` ← `<finding-id>`.
-   - `seeded_from.evidence` ← a copy of the finding's `evidence` block, so the child's lineage is self-contained.
-   - `pipeline_gate.proceed_condition` ← the finding's `next_action` verbatim (when set), as a starting point. Existing `proceed_condition` wins.
-   - `behavior_tests[]` ← appended with the parent's behavior_test named by `evidence.from_test` (or each in `evidence.from_tests[]`), reclassified as `classification: primary` — it's the test the follow-up exists to make pass. Dedup'd by name; an existing same-named entry wins.
-   - `model_change.notes` ← `"TBD — see purpose.mechanism for the hypothesized mechanism."` when the finding has an `explanation`. Skipped if the child's `model_change` is already a string (terse summary) — promote manually if you want enrichment.
-
-5. **Build parent diff.** Flip the proposal entry: set `status: seeded` and `seeded_study: <new_slug>`. When `--from-finding` was passed AND the proposal doesn't already have a `linked_finding:` key, also set `linked_finding: <finding-id>`.
-6. **Preview both diffs.** Show (a) the new `studies/<new_slug>/study.yaml` content, (b) the parent's `followup_proposals[<i>]` before/after.
-7. **Confirm.** `yes` → write both; `no` → abort. Skip step 8 if `--dry-run`.
-8. **Atomic writes (two).** Write the new child via tmp+rename (creating `studies/<new_slug>/` first). Write the parent via tmp+rename. If the parent write fails after the child write succeeded, `rm -rf studies/<new_slug>/` to avoid an orphaned child, then re-raise.
-9. **Report.** Print: `Seeded studies/<new_slug>/study.yaml from <parent-slug>.followup_proposals[<proposal-id>]. Parent proposal marked seeded.` Append `Linked finding: <finding-id>.` when `--from-finding` was passed.
+> **Endpoint limitations (server derives the slug).** `POST /api/study-seed-followup` derives `new_slug` from the proposal id server-side and writes immediately, so `--new-slug` and `--dry-run` are **not yet honored** by this path (tracked as a follow-up endpoint enhancement). To preview without writing, inspect the proposal's `seed:` block first; to rename, rename the created study dir afterward.
 
 **Notes:**
 
-- This is a YAML-direct subcommand; no dashboard API endpoint exists yet (mirrors `/viva-investigation`'s YAML-direct write pattern).
+- Thin client → `POST /api/study-seed-followup` (the seed is computed + written server-side; `seed_from_followup` lives in the plugin backing the endpoint).
 - After seeding, the child appears in the dashboard's Studies tab on the next workspace refresh; the parent's proposal entry's `seeded_study:` makes the lineage visible in the Decide panel.
 
 #### `feedback-respond <slug> [--apply] [--dry-run]`
@@ -1004,19 +988,20 @@ yaml's `actions:` block (parallel to `responses:`), keyed by a deterministic
 `feedback_item_id`. This is the persisted form of the "map each point to an
 action" step in [`docs/conventions/handling-investigation-feedback.md`](../../docs/conventions/handling-investigation-feedback.md).
 
-**AI-free split.** The *aggregation* (`study_feedback_actions`), the *recording*
-helper (`record_feedback_action`), and the *apply* primitive
-(`apply_feedback_action`) are deterministic Python in
-[`viva_superpowers/feedback_actions.py`](../../viva_superpowers/feedback_actions.py).
-The **judgment** — which action `kind` best addresses a feedback item and what
-its `proposed_text` should be — is the agent's, performed here in the skill.
-The skill never silently mutates design: it proposes + records, and applies
-only the explicit target of an action.
+**AI-free split.** The *aggregation* (open-item read), the *recording*
+(`POST /api/feedback-record-action`), and the *apply*
+(`POST /api/feedback-apply-action`) are deterministic and computed server-side —
+the primitives live in
+[`viva_superpowers/feedback_actions.py`](../../viva_superpowers/feedback_actions.py)
+backing those endpoints. The **judgment** — which action `kind` best addresses a
+feedback item and what its `proposed_text` should be — is the agent's, performed
+here in the skill. The skill never silently mutates design: it proposes +
+records, and applies only the explicit target of an action.
 
 **Arguments:**
 
 - `<slug>` (required) — study under `studies/<slug>/`. Abort if `study.yaml` is missing.
-- `--apply` (optional) — after recording each action, immediately call `apply_feedback_action` for it. Without `--apply`, the actions are recorded as `open` and left for the user (or the dashboard's Apply button) to apply.
+- `--apply` (optional) — after recording each action, immediately `POST /api/feedback-apply-action {item_id}` for it. Without `--apply`, the actions are recorded as `open` and left for the user (or the dashboard's Apply button) to apply.
 - `--dry-run` (optional) — print the proposed `kind` + `proposed_text` per open item; record nothing.
 
 **The four action kinds (the agent picks one per item):**
@@ -1028,10 +1013,10 @@ only the explicit target of an action.
 
 **Behavior (steps the host Claude follows):**
 
-1. **Read open items.** Call `study_feedback_actions(ws_root, slug)` and take the items with `status == "open"` (no action recorded yet). If none, report "No open feedback items for `<slug>`." and stop.
+1. **Read open items.** `GET /api/study/<slug>` and take the feedback actions with `status == "open"` (no action recorded yet — the study-detail payload surfaces them). If none, report "No open feedback items for `<slug>`." and stop.
 2. **Propose per item (the judgment).** For each open item, read the feedback `text` and the study's `findings[]` and decide the best `kind` + `proposed_text` (+ `target_finding` for `next_action`, or seed selectors for `study-seed`). Show the proposal. Under `--dry-run`, stop after printing.
-3. **Record.** Call the deterministic helper `record_feedback_action(ws_root, item_id, kind=..., target_study=slug, proposed_text=..., target_finding=...)` to write the `actions[item_id]` entry (status `open`) into the feedback yaml (comment-preserving ruamel write). Invoke via `python -c` or the module, in the same YAML-direct shape as the other subcommands.
-4. **Optionally apply.** When `--apply` is passed, call `apply_feedback_action(ws_root, item_id)` per recorded action. For a `next_action` action this writes `findings[<target_finding>].next_action`; the action flips to `applied` (by/at). Apply is idempotent (re-apply → `already_applied`).
+3. **Record.** `POST /api/feedback-record-action {item_id, kind, target_study: <slug>, proposed_text, target_finding?}` to write the `actions[item_id]` entry (status `open`) into the feedback yaml (comment-preserving ruamel write, server-side).
+4. **Optionally apply.** When `--apply` is passed, `POST /api/feedback-apply-action {item_id}` per recorded action. For a `next_action` action this writes `findings[<target_finding>].next_action`; the action flips to `applied` (by/at). Apply is idempotent (re-apply → `already_applied`).
 5. **Report.** Print per item: `item_id`, chosen `kind`, `proposed_text`, and `recorded` / `applied`. Note any that need a human design-edit.
 
 **Notes:**
@@ -1331,53 +1316,138 @@ print(json.dumps({'route': f'/studies/{os.environ[\"NAME\"]}'}))")
     ;;
 
   findings)
-    # Pass 10A. YAML-direct subcommand; the Python helper does workspace
-    # discovery, draft heuristics, atomic write, and bib-key crosscheck.
-    # Interactive curation (step 6 in SKILL.md) is performed by Claude.
+    # Pass 10A. Thin client → POST /api/study-findings. The workbench runs the
+    # deterministic draft-walk + expert-PDF search + atomic write server-side;
+    # interactive curation (step 6 in SKILL.md) is performed by Claude.
     SLUG="${1:-}"
     [ -n "$SLUG" ] || { echo "ERROR: findings requires a study slug." >&2; exit 1; }
     shift
-    EXTRA_FLAGS=()
+    AUTO=0; DRY=0
     while [ $# -gt 0 ]; do
       case "$1" in
-        --auto|--dry-run) EXTRA_FLAGS+=("$1"); shift ;;
+        --auto)    AUTO=1; shift ;;
+        --dry-run) DRY=1;  shift ;;
         *) echo "unknown flag: $1" >&2; exit 1 ;;
       esac
     done
-    python3 -m viva_superpowers.study_findings "$SLUG" --ws "$DIR" "${EXTRA_FLAGS[@]}"
+    BODY=$(SLUG="$SLUG" AUTO="$AUTO" DRY="$DRY" python3 -c "
+import json, os
+b = {'study': os.environ['SLUG']}
+if os.environ['AUTO'] == '1': b['auto'] = True
+if os.environ['DRY'] == '1': b['dry_run'] = True
+print(json.dumps(b))")
+    post "/api/study-findings" "$BODY"
     ;;
 
   set-verdicts|add-literature-anchor|add-pivot|add-requirement)
-    # v4 narrative-spine subcommands. YAML-direct via viva_superpowers.
-    # study_narrative — the helper handles workspace discovery, schema-side
-    # validation, dedup checks, and atomic write. All flags after the slug
-    # are forwarded verbatim, so this dispatcher stays trivial.
+    # v4 narrative-spine subcommands → POST /api/study-narrative-command. The
+    # workbench dispatches to the study_narrative subcommand (append / dedup /
+    # id-uniqueness / enum-validation / atomic write all server-side). This arm
+    # parses the subcommand's flags into the `args` dict the endpoint expects
+    # (keyed by the target dataclass's field names).
     SLUG="${1:-}"
     [ -n "$SLUG" ] || { echo "ERROR: $sub requires a study slug." >&2; exit 1; }
     shift
-    python3 -m viva_superpowers.study_narrative --ws "$DIR" "$sub" "$SLUG" "$@"
+    BODY=$(SUB="$sub" SLUG="$SLUG" python3 - "$@" <<'PY'
+import json, os, sys
+sub = os.environ['SUB']; slug = os.environ['SLUG']
+argv = sys.argv[1:]
+def take(flag):
+    return argv[argv.index(flag) + 1] if flag in argv and argv.index(flag) + 1 < len(argv) else None
+def take_all(flag):
+    out, i = [], 0
+    while i < len(argv):
+        if argv[i] == flag and i + 1 < len(argv):
+            out.append(argv[i + 1]); i += 2
+        else:
+            i += 1
+    return out
+dry = '--dry-run' in argv
+args = {}
+if sub == 'set-verdicts':
+    for track, rflag, bflag in [('regression', '--regression', '--basis-regression'),
+                                ('biological', '--biological', '--basis-biological'),
+                                ('explanatory', '--explanatory', '--basis-explanatory')]:
+        r, b = take(rflag), take(bflag)
+        if r is not None or b is not None:
+            t = {}
+            if r is not None: t['result'] = r
+            if b is not None: t['basis'] = b
+            args[track] = t
+elif sub == 'add-literature-anchor':
+    for k, flag in [('expectation', '--expectation'), ('model_observable', '--model-observable'),
+                    ('source', '--source'), ('status_in_workspace', '--status')]:
+        v = take(flag)
+        if v is not None: args[k] = v
+    cites = take_all('--cite')
+    if cites: args['cites'] = cites
+elif sub == 'add-pivot':
+    for k, flag in [('id', '--id'), ('question', '--question'), ('status', '--status'),
+                    ('requested_response', '--requested-response'), ('notes', '--notes')]:
+        v = take(flag)
+        if v is not None: args[k] = v
+    alts = take('--alternatives')
+    if alts is not None:
+        args['alternatives'] = [a.strip() for a in alts.split(';') if a.strip()]
+elif sub == 'add-requirement':
+    for k, flag in [('id', '--id'), ('title', '--title'), ('kind', '--kind'), ('effort', '--effort'),
+                    ('status', '--status'), ('description', '--description'), ('defer_until', '--defer-until')]:
+        v = take(flag)
+        if v is not None: args[k] = v
+    steps = take_all('--step')
+    if steps: args['steps'] = steps
+    unblocks = take('--unblocks')
+    if unblocks is not None:
+        args['unblocks'] = [u.strip() for u in unblocks.split(',') if u.strip()]
+body = {'study': slug, 'subcommand': sub, 'args': args}
+if dry: body['dry_run'] = True
+print(json.dumps(body))
+PY
+)
+    post "/api/study-narrative-command" "$BODY"
     ;;
 
   verify)
-    # Design→Build gate. Pure spec check; no API call. The Python helper
-    # walks workspace.yaml + studies/<slug>/study.yaml and surfaces
-    # cross-reference errors before any sim runs.
+    # Design→Build gate → POST /api/study-verify. The workbench runs the pure
+    # cross-reference checker server-side; --strict/--json/--quiet are
+    # presentation flags handled here over the returned {findings, summary}.
     SLUG="${1:-}"
     [ -n "$SLUG" ] || { echo "ERROR: verify requires a study slug." >&2; exit 1; }
     shift
-    EXTRA_FLAGS=()
+    STRICT=0; JSON=0; QUIET=0
     while [ $# -gt 0 ]; do
       case "$1" in
-        --strict|--json|--quiet) EXTRA_FLAGS+=("$1"); shift ;;
+        --strict) STRICT=1; shift ;;
+        --json)   JSON=1;   shift ;;
+        --quiet)  QUIET=1;  shift ;;
         *) echo "unknown flag: $1" >&2; exit 1 ;;
       esac
     done
-    STUDY_YAML="$DIR/studies/$SLUG/study.yaml"
-    if [ ! -f "$STUDY_YAML" ]; then
-      echo "ERROR: $STUDY_YAML not found." >&2
-      exit 2
+    BODY=$(SLUG="$SLUG" python3 -c "import json,os; print(json.dumps({'study': os.environ['SLUG']}))")
+    RESP=$(curl -s -w $'\n%{http_code}' -X POST -H "Content-Type: application/json" \
+      -d "$BODY" "$URL/api/study-verify" || true)
+    CODE=$(printf '%s' "$RESP" | tail -n1)
+    RAW=$(printf '%s' "$RESP" | sed '$d')
+    if [ "$CODE" = "404" ]; then echo "ERROR: study '$SLUG' not found." >&2; exit 2; fi
+    if [ "$CODE" != "200" ]; then
+      echo "ERROR: /api/study-verify failed (HTTP $CODE): $RAW" >&2; exit 1
     fi
-    python3 -m viva_superpowers.study_verify "$STUDY_YAML" "${EXTRA_FLAGS[@]}"
+    RAW="$RAW" STRICT="$STRICT" JSON="$JSON" QUIET="$QUIET" python3 -c "
+import json, os, sys
+data = json.loads(os.environ['RAW'])
+findings = data.get('findings') or []
+summary = data.get('summary') or {}
+if os.environ['JSON'] == '1':
+    print(json.dumps({'study_yaml': data.get('study_yaml'), 'findings': findings, 'summary': summary}, indent=2))
+else:
+    if not (os.environ['QUIET'] == '1' and not findings):
+        for f in findings:
+            print('[%s] %s: %s — %s' % (f.get('level','?'), f.get('check',''), f.get('field_path',''), f.get('message','')))
+        if not findings and os.environ['QUIET'] != '1':
+            print('verify: %s clean.' % data.get('study',''))
+errors = summary.get('error', 0); warnings = summary.get('warning', 0)
+sys.exit(1 if errors or (os.environ['STRICT'] == '1' and warnings) else 0)
+"
     ;;
 
   preview-viz)
