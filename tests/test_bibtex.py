@@ -8,8 +8,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from viva_superpowers import bibtex
-from viva_superpowers.study_findings import load_bib_keys
-from viva_superpowers.study_verify import _load_bib_keys
 
 
 def _ws(tmp_path: Path) -> Path:
@@ -46,20 +44,7 @@ def test_falls_back_to_references_bib(tmp_path: Path):
     assert bibtex.bib_keys(ws) == {"fb"}
 
 
-def test_verify_and_findings_agree_on_same_file(tmp_path: Path):
-    """The regression this fix prevents: verify and lint/findings reading
-    different files. Both must now see the same keys from papers.bib."""
-    ws = _ws(tmp_path)
-    (ws / "references" / "papers.bib").write_text("@article{shared2024,\n}\n")
-    findings_keys = load_bib_keys(ws)          # findings + linter path
-    verify_keys = _load_bib_keys(ws)           # verify path
-    assert findings_keys == {"shared2024"}
-    assert verify_keys == {"shared2024"}
-
-
-def test_verify_soft_skips_when_no_bib_but_findings_returns_empty(tmp_path: Path):
-    """Contract difference preserved: verify -> None (soft skip), the
-    findings/linter path -> empty set (every cite unknown)."""
-    ws = _ws(tmp_path)
-    assert _load_bib_keys(ws) is None
-    assert load_bib_keys(ws) == set()
+# NOTE: the cross-module "verify and findings agree on the same bib file" tests
+# moved to the workbench in Phase 2.1k (batch 1) alongside study_verify /
+# study_findings — see vivarium_workbench/tests/test_study_{verify,findings}.py.
+# This file now covers only viva_superpowers.bibtex itself (a STAY core module).

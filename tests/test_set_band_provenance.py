@@ -335,4 +335,5 @@ def test_helpers_importable():
     """All helpers referenced by the skill are importable."""
     from viva_superpowers.band_provenance import bands_missing_provenance  # noqa: F401
     from viva_superpowers.band_provenance import set_band_provenance  # noqa: F401
-    from viva_superpowers.expert_search import search_expert_docs  # noqa: F401
+    # expert_search moved into the workbench in Phase 2.1k (batch 1) — it is no
+    # longer a plugin module, so it is not asserted importable here.
