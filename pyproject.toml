@@ -1,6 +1,6 @@
 [project]
 name = "viva-superpowers"
-version = "0.21.0"
+version = "0.22.0"
 description = "Plugin Python helpers for the viva-superpowers skills (was pbg-superpowers)"
 requires-python = ">=3.11"
 dependencies = [
