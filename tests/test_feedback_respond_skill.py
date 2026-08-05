@@ -11,9 +11,12 @@ SKILL = Path(__file__).resolve().parents[1] / "skills" / "viva-study" / "SKILL.m
 def test_skill_names_feedback_respond_and_primitives():
     text = SKILL.read_text()
     assert "feedback-respond" in text, "subcommand not documented"
-    assert "study_feedback_actions" in text, "aggregator primitive not referenced"
-    assert "apply_feedback_action" in text, "apply primitive not referenced"
-    assert "record_feedback_action" in text, "record helper not referenced"
+    # Phase 2.1g thin client: the record/apply primitives are called via the
+    # workbench API (the feedback_actions compute stays server-side backing
+    # these endpoints); open items are read from the study-detail payload.
+    assert "/api/feedback-record-action" in text, "record endpoint not referenced"
+    assert "/api/feedback-apply-action" in text, "apply endpoint not referenced"
+    assert "/api/study/" in text, "open-item read endpoint not referenced"
 
 
 def test_skill_argument_hint_lists_feedback_respond():
