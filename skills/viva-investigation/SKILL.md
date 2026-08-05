@@ -22,8 +22,8 @@ each member study is then managed via [`/viva-study`](../viva-study/SKILL.md)
 (step 3); individual composites can be smoke-tested directly via
 [`/viva-run`](../viva-run/SKILL.md) (step 4); and the workspace is exposed as an
 interactive UI — and built into a **published read-only** snapshot
-(`viva_superpowers.publish_assets.emit(...)` + `vivarium-workbench-publish` →
-gh-pages) — via [`/viva-workbench`](../viva-workbench/SKILL.md) (step 5).
+(via `vivarium-workbench-publish` → gh-pages) — via
+[`/viva-workbench`](../viva-workbench/SKILL.md) (step 5).
 
 ## Layout (investigation-centric, nested)
 
@@ -32,7 +32,7 @@ Studies live **nested under their investigation**:
 back-ref. The investigation's publication/report lives at `investigations/<inv>/reports/`
 (per-investigation — there is **no global repo-wide report**).
 
-- **Resolve a study dir** (nested- and flat-aware): `python -m viva_superpowers.paths --study <slug>`.
+- **Resolve a study dir** (nested- and flat-aware): studies live at `$INVESTIGATIONS_DIR/<inv>/studies/<slug>/` (nested) or legacy flat `$STUDIES_DIR/<slug>/`; check the nested path first, then the flat one.
 - **Create a new study** under `$INVESTIGATIONS_DIR/<inv>/studies/<slug>/` (write the `investigation:` back-ref).
 - Legacy flat `studies/<slug>/` still resolves (back-compat) until a repo is migrated with `viva-migrate-nested`.
 
@@ -48,7 +48,7 @@ inputs:
   expert_docs: []
 ```
 
-Repo-wide source packages and shared/unused inputs stay global (repo-level `datasets/`, `references/papers.bib`). To migrate existing repo-level datasets, run `viva-migrate-inputs` (`python -m viva_superpowers.migrate_inputs --workspace <ws> [--apply]`): it assigns a dataset to an investigation only when exactly ONE investigation's studies reference it (by filename in `study.yaml`); multi-investigation and unused datasets are reported and left global. Default prints the plan; `--apply` performs the `git mv` and updates `investigation.yaml`.
+Repo-wide source packages and shared/unused inputs stay global (repo-level `datasets/`, `references/papers.bib`). To migrate existing repo-level datasets, run the `viva-migrate-inputs` console script (`--workspace <ws> [--apply]`): it assigns a dataset to an investigation only when exactly ONE investigation's studies reference it (by filename in `study.yaml`); multi-investigation and unused datasets are reported and left global. Default prints the plan; `--apply` performs the `git mv` and updates `investigation.yaml`.
 
 **NEVER silently add an input the expert did not provide.** `inputs.references`, `inputs.datasets`, and `expert_docs` are the *provided* inputs — things the expert supplied or explicitly approved. If, while working, you find yourself wanting to cite a paper, invoke a mechanism, or lean on a parameter the expert did **not** give you, do **not** add it to `inputs.` and do **not** weave it into the prose as fact. Instead record it under `proposed_inputs:` with `status: pending`, plus the `provenance` (which commit / why it came up) and the `rationale` (what you used it for). The expert then Accepts or Declines each item in the report; on Accept the dashboard promotes a `kind: reference` item into `inputs.references` (a `kind: mechanism` is marked accepted for a human to integrate), on Decline it is marked declined and left out. This keeps the agent from quietly importing outside claims as if they were expert-sanctioned.
 
@@ -134,10 +134,18 @@ All sub-commands:
 
 1. Walk up from cwd to find `workspace.yaml`. Fail with a clear message if not found.
 2. Set `WORKSPACE_ROOT` to that directory.
-3. Resolve workspace directories (honors `workspace.yaml` `layout:` — works for flat or nested workspaces):
+3. Resolve workspace directories from `workspace.yaml`'s optional `layout:` map (honors flat or nested workspaces; conventional names when absent) — a plain config read, no server needed:
 
    ```bash
-   eval "$(python -m viva_superpowers.paths --env --workspace "$WORKSPACE_ROOT")"
+   eval "$(WS="$WORKSPACE_ROOT" python3 -c "
+   import os, yaml
+   ws = os.environ['WS']
+   layout = (yaml.safe_load(open(os.path.join(ws, 'workspace.yaml'))) or {}).get('layout') or {}
+   defaults = {'studies': 'studies', 'investigations': 'investigations',
+               'references': 'references', 'reports': 'reports', 'datasets': 'datasets'}
+   for key, dflt in defaults.items():
+       print('export %s_DIR=%s' % (key.upper(), os.path.join(ws, layout.get(key, dflt))))
+   ")"
    ```
 
    This exports `$INVESTIGATIONS_DIR`, `$STUDIES_DIR`, `$REPORTS_DIR`, etc. (each = absolute path). Use these variables for the studies/investigations/references/reports paths below — do NOT hardcode `investigations/`, `studies/`, `reports/`. (The hidden `.pbg/` machine-state dir stays at the workspace root by default — use it literally.)
@@ -225,10 +233,10 @@ All v2 narrative-spine fields are optional per `investigation.schema.json`, so t
 **Atomic write pattern:**
 
 ```python
-import os, yaml, tempfile
-from viva_superpowers.paths import workspace_dir
+import os, yaml
 
-path = str(workspace_dir("investigations", root=workspace_root) / slug / "investigation.yaml")
+# $INVESTIGATIONS_DIR was exported by the prelude (step 3).
+path = os.path.join(os.environ["INVESTIGATIONS_DIR"], slug, "investigation.yaml")
 os.makedirs(os.path.dirname(path), exist_ok=True)
 tmp = path + ".tmp"
 with open(tmp, "w") as f:
@@ -593,17 +601,29 @@ Close an investigation: render the workspace report, copy it into `$INVESTIGATIO
 
 **User edits are preserved.** If you've previously curated `roles` or `notes` on a contributor entry, re-running close keeps those — only `commits` and `sessions` are refreshed.
 
-**Steps (mechanic-driven, executed by `python -m viva_superpowers.investigation_close`):**
+**Steps (server-side, via `POST /api/iset-close`):**
 
-1. Resolve workspace + investigation YAML; verify branch exists.
-2. Derive contributors (above).
-3. Render workspace report via `viva_superpowers.report.render_workspace_report` (unless `--skip-report`).
-4. Copy `$REPORTS_DIR/index.html` → `$INVESTIGATIONS_DIR/<slug>/report.html` (currently the reports dir is git-ignored; the copied path lives under the investigations dir which is tracked).
-5. Update `investigation.yaml`: `status: closed`, `closed_at: <ISO-8601>`, `report_url: report.html`, `contributors: <merged>`.
-6. `git add "$INVESTIGATIONS_DIR/<slug>/investigation.yaml" "$INVESTIGATIONS_DIR/<slug>/report.html"` + `git commit -m "close(investigation): <slug>"` on the investigation branch.
-7. `gh pr view <branch>` → if PR exists, refresh body via `gh pr edit`; else `git push -u origin <branch>` + `gh pr create --base <main> --head <branch>`. **Never `--auto`.**
+The whole close mechanic — resolve workspace + investigation YAML, verify the
+branch, derive contributors, render the workspace report (unless
+`--skip-report`), copy it to `$INVESTIGATIONS_DIR/<slug>/report.html`, stamp
+`investigation.yaml` (`status: closed`, `closed_at`, `report_url`,
+`contributors`), commit on the investigation branch, and (unless `--no-pr`)
+open/refresh a PR (**never `--auto`**) — runs server-side in the workspace:
 
-Returns a `CloseResult` (printed plain or JSON) listing every action taken, the contributor list, and the PR URL.
+```bash
+curl -sf -X POST -H "Content-Type: application/json" \
+  -d '{"slug": "<slug>", "dry_run": <bool>, "no_pr": <bool>, "skip_report": <bool>}' \
+  "$URL/api/iset-close" | python3 -m json.tool
+```
+
+Map the flags: `--dry-run`→`dry_run:true`, `--no-pr`→`no_pr:true`,
+`--skip-report`→`skip_report:true`. A 404 means the investigation or its branch
+doesn't exist (per the Investigation ≡ branch convention).
+
+The response is a `CloseResult` (`{slug, branch, contributors, actions, pr_url,
+dry_run}`) listing every action taken (or proposed, in dry-run), the contributor
+list, and the PR URL. With `--json`, print it verbatim; otherwise summarize the
+actions + contributors + PR URL for the user.
 
 **Example:**
 
@@ -621,7 +641,7 @@ Returns a `CloseResult` (printed plain or JSON) listing every action taken, the 
 /viva-investigation close dnaa-replication --no-pr
 ```
 
-The close mechanic is YAML-direct (it does NOT call a dashboard endpoint); the dashboard "Close investigation" button is a follow-up that will call the same `viva_superpowers.investigation_close.close_investigation` function via a new POST `/api/iset-close` handler.
+The close mechanic runs server-side via `POST /api/iset-close` (the workbench backs it with the same `close_investigation` compute); the dashboard's "Close investigation" button posts to the same endpoint, so the skill and the UI share one path. Because close renders the report + reads `git log`, the dashboard server must be running (`/viva-workbench start`).
 
 ---
 
