@@ -1071,11 +1071,11 @@ def test_skill_has_no_direct_viva_superpowers_compute_imports():
 
 
 def test_backing_plugin_symbols_still_importable():
-    """The endpoints are backed by the plugin compute (module move is 2.1k),
-    so the symbols must remain importable even though the skill no longer
-    references them."""
+    """finding_observations stays in the plugin (it is transitively required by
+    workbench-free STAY modules), so its symbol must remain importable even
+    though the skill no longer references it. expert_search moved into the
+    workbench in Phase 2.1k (batch 1) — it is no longer a plugin module."""
     from viva_superpowers.finding_observations import populate_finding_observations  # noqa: F401
-    from viva_superpowers.expert_search import search_expert_docs  # noqa: F401
 
 
 def test_skill_registered_in_docs_skills_md():

@@ -81,7 +81,7 @@ def test_workspace_root_auto_detects_caller_file(tmp_path: Path, monkeypatch) ->
 
 def test_back_compat_find_workspace_root(tmp_path: Path) -> None:
     """The old API still works (delegates to workspace_root)."""
-    from viva_superpowers.study_findings import find_workspace_root
+    from viva_superpowers.paths import find_workspace_root
 
     ws = _make_ws(tmp_path)
     assert find_workspace_root(ws / "studies" / "demo") == ws
