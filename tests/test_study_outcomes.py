@@ -167,30 +167,11 @@ def test_record_omits_provenance_status_when_db_lacks_it(tmp_path: Path):
     assert "env_id" not in by["r1"]
 
 
-def test_env_stale_synced_run_surfaces_needs_attention(tmp_path: Path):
-    """End-to-end proof (the load-bearing gap this fix closes): a DB row
-    stamped env_stale, synced via record_runs into study.yaml, is picked up
-    by needs_attention.scan_investigation as an env_stale item."""
-    from viva_superpowers import needs_attention
-
-    root = tmp_path / "ws"
-    root.mkdir()
-    study_io.save_yaml_atomic(root / "workspace.yaml", {"name": "ws", "package_path": "pbg_ws"})
-    inv_yaml = root / "investigations" / "inv" / "investigation.yaml"
-    inv_yaml.parent.mkdir(parents=True, exist_ok=True)
-    study_io.save_yaml_atomic(inv_yaml, {"name": "inv", "studies": ["s1"]})
-    d = root / "studies" / "s1"
-    d.mkdir(parents=True)
-    study_io.save_yaml_atomic(d / "study.yaml", {"name": "s1", "runs": []})
-    db = d / "runs.db"
-    run_registry.register_run(db, "r1", spec_id="s1", status="completed",
-                              started_at="2026-01-01T00:00:00Z", completed_at="2026-01-01T00:01:00Z")
-    _add_provenance_columns(db, "r1", provenance_status="env_stale", env_id="env-b-hash")
-
-    so.record_runs(d)
-    res = needs_attention.scan_investigation(root, "inv")
-    stale = [i for i in res["items"] if i["kind"] == "env_stale"]
-    assert stale and stale[0]["study"] == "s1" and stale[0]["ref"] == "r1"
+# NOTE: test_env_stale_synced_run_surfaces_needs_attention moved to the workbench
+# in Phase 2.1k batch 2 (needs_attention → vivarium_workbench/lib) — see
+# vivarium_workbench/tests/test_needs_attention_env_stale_sync.py. It exercised
+# needs_attention.scan_investigation (now a workbench module); study_outcomes
+# stays here.
 
 
 def test_record_preserves_comments(tmp_path: Path):
