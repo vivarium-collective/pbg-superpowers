@@ -5,7 +5,7 @@ Motivation (v2ecoli dnaa-replication expert friction #7, 2026-06-22): the
 reviewer repeatedly had to ask *"indicate exactly which parameters were used —
 v, kd's, hydrolysis rate"*. The framework already has two adjacent pieces:
 
-* ``enforced_params`` (see :mod:`viva_superpowers.param_enforcement`) — the
+* ``enforced_params`` (see :mod:`vivarium_workbench.lib.param_enforcement`) — the
   *declared subset* a study commits to enforcing, plus a gate that verifies
   they were applied; and
 * ``runs[].params`` — a *sparse* mechanical mirror of a run's recorded
@@ -276,7 +276,7 @@ def render_run_params_rows(source: dict, *, enforced: Iterable | dict | None = N
             whole ``runs[]`` record (its ``provenance.params`` is used).
         enforced: optional param names (dict or iterable) that the study
             *enforces* (e.g. ``enforced_params`` keys via
-            :func:`viva_superpowers.param_enforcement.load_enforced_params`);
+            :func:`vivarium_workbench.lib.param_enforcement.load_enforced_params`);
             matching rows get ``enforced=True``.
 
     Returns:
