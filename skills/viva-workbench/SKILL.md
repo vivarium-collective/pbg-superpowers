@@ -30,7 +30,7 @@ member studies are managed via [`/viva-investigation`](../viva-investigation/SKI
 (step 2) and [`/viva-study`](../viva-study/SKILL.md) (step 3), with individual
 composites smoke-testable via [`/viva-run`](../viva-run/SKILL.md) (step 4). This
 skill drives the *interactive* workbench, and the same workspace also builds the
-**published read-only** flow: `viva_superpowers.publish_assets.emit(...)` writes
+**published read-only** flow: the publish scaffolder writes
 `scripts/publish_dashboard.sh` + `.github/workflows/publish-dashboard.yml`, then
 `vivarium-workbench-publish` renders a static snapshot deployed to gh-pages.
 
@@ -72,124 +72,122 @@ for this — one server fans them out per tab.
 
 ## What this skill actually does
 
-Wraps the `vivarium-workbench serve` CLI so the workbench runs detached, survives
-terminal exits, has its state tracked at `<workspace>/.pbg/dashboard/`, and (with
-`--browser`) opens in your browser. This launches the **default-workspace** server
-for a workspace/worktree; session-per-tab multiplexing of *other* workspaces then
-happens in the browser via the switcher (above).
+Drives the `vwb` (vivarium-workbench) CLI's server-lifecycle verbs so the
+workbench runs detached, survives terminal exits, has its state tracked at
+`<workspace>/.pbg/server/`, and (with `--browser`) opens in your browser. This
+launches the **default-workspace** server for a workspace/worktree; session-per-tab
+multiplexing of *other* workspaces then happens in the browser via the switcher
+(above).
 
-State files (dir name kept as `dashboard/` for back-compat):
+State files (written by `vwb serve`, read by every dashboard-touching skill):
 
-  `.pbg/dashboard/dashboard-info`  JSON: `{port, host, url, pid, workspace, started_at, log_file}`
-  `.pbg/dashboard/dashboard.pid`   text: PID of the running server
-  `.pbg/dashboard/dashboard.log`   text: stdout/stderr of the server
+  `.pbg/server/server-info`  JSON: `{port, host, url, pid, ...}`
+  `.pbg/server/server.pid`   text: PID of the running server
+  `.pbg/server/server.log`   text: stdout/stderr of the detached server
 
 ## Subcommands
 
-- **`/viva-workbench start`** — pick a free port (prefer 8765), launch
-  `vivarium-workbench serve --workspace . --port <P>` detached, write
-  info+pid+log, wait for the HTTP probe, and (with `--browser`) open the URL.
-  Import crashes are surfaced via the log tail. If already alive, just opens the
-  browser.
-- **`/viva-workbench stop`** — read the PID file, SIGTERM, wait up to 5 s, escalate
-  to SIGKILL if needed, clear state files.
-- **`/viva-workbench status`** — `alive` / `stale` / `not-running`. Probes both the
-  PID (`kill -0`) and the HTTP endpoint to distinguish a wedged process from a
-  healthy one.
-- **`/viva-workbench open [--investigation SLUG]`** — open the workbench URL in the
-  browser. Auto-starts first if needed. With `--investigation SLUG` (or the slug
-  inferred from the current branch), focus/open the tab AND switch the SPA to that
-  investigation's detail via injected JS.
-- **`/viva-workbench restart`** — `stop` then `start`. Useful after a code change in
-  an editable `vivarium-workbench` install (Python reload isn't automatic).
+- **`/viva-workbench start`** → `vwb serve --detach` — picks a free port, launches
+  the server detached, writes `.pbg/server/{server-info,server.pid,server.log}`,
+  waits for the HTTP probe, and (with `--browser` → `--open`) opens the URL.
+  Import crashes surface via the log tail. If already alive, adopts it.
+- **`/viva-workbench stop`** → `vwb server-stop` — SIGTERM the recorded PID, wait,
+  clear state files.
+- **`/viva-workbench status`** → `vwb server-status` — `running` / `stale` /
+  `stopped`. Probes both the PID (`kill -0`) and the HTTP endpoint to distinguish
+  a wedged process from a healthy one.
+- **`/viva-workbench open [--investigation SLUG]`** → `vwb server-open
+  [--investigation SLUG]` — open the workbench URL in the browser (auto-start via
+  `vwb serve --detach` first if not running). `--investigation SLUG` opens the
+  dashboard at that investigation's route.
+- **`/viva-workbench restart`** → `vwb server-restart` — `stop` then `serve
+  --detach`. Useful after a code change in an editable `vivarium-workbench`
+  install (Python reload isn't automatic).
 
-Each subcommand prints a single JSON object describing the outcome.
+Each verb prints a single line / JSON object describing the outcome.
 
 ## How to invoke
 
 ```bash
-# default: prefers port 8765, leaves the browser alone (the URL is printed)
-python -m viva_superpowers.workbench start
+# default: pick a free port, leave the browser alone (the URL is printed)
+vwb serve --detach
 
 # open the browser too AND auto-pick the investigation matching this branch
-python -m viva_superpowers.workbench start --browser
+vwb serve --detach --open
 
-# force a specific investigation (implies --browser)
-python -m viva_superpowers.workbench start --investigation dnaa-replication
+# force a specific investigation
+vwb serve --detach --open --investigation dnaa-replication
 
-# specific port (e.g. when 8765 is taken by another workspace)
-python -m viva_superpowers.workbench start --port 9001
+# specific port
+vwb serve --detach --port 9001
 
 # probe state
-python -m viva_superpowers.workbench status
+vwb server-status
 
 # graceful shutdown
-python -m viva_superpowers.workbench stop
+vwb server-stop
 
 # reopen the existing one (or auto-start if dead)
-python -m viva_superpowers.workbench open
+vwb server-open
 ```
 
-The `--workspace <path>` flag is also available (default: cwd) for invoking from
-outside the workspace root. (`python -m viva_superpowers.dashboard …` remains a
-working back-compat alias for the same CLI.)
+The `--workspace <path>` flag is available on every verb (default: cwd) for
+invoking from outside the workspace root. Prefer the workspace's own
+`.venv/bin/vwb` so composites resolve from its site-packages.
 
 ## What "alive" means
 
 A workbench is alive when all three hold:
 
-1. `.pbg/dashboard/dashboard.pid` exists and the PID is running (`kill -0 $PID`), AND
-2. `.pbg/dashboard/dashboard-info` exists, AND
+1. `.pbg/server/server.pid` exists and the PID is running (`kill -0 $PID`), AND
+2. `.pbg/server/server-info` exists, AND
 3. `GET <url>/` returns 200.
 
-If 1+2 hold but 3 doesn't, status reports `stale` — the process may be wedged on
-import or in a slow startup. Inspect `.pbg/dashboard/dashboard.log` (the tail
-explains it). `start` self-heals stale state by clearing dead files and retrying.
+If 1+2 hold but 3 doesn't, `vwb server-status` reports `stale` — the process may be
+wedged on import or in a slow startup. Inspect `.pbg/server/server.log` (the tail
+explains it). `vwb serve --detach` self-heals stale state by clearing dead files
+and retrying.
 
 ## Resolving the workbench binary
 
-Order of resolution:
+Run `vwb` from the workspace's own environment:
 
-1. `<workspace>/.venv/bin/vivarium-workbench` — the canonical, preferred path.
-   Composites resolve from the workspace's own site-packages.
-2. **Parent git-worktree's `.venv/bin/vivarium-workbench`** — used when the current
-   workspace is a secondary git worktree (its `.git` is a file pointing at
+1. `<workspace>/.venv/bin/vwb` — the canonical, preferred path. Composites resolve
+   from the workspace's own site-packages.
+2. **Parent git-worktree's `.venv/bin/vwb`** — used when the current workspace is a
+   secondary git worktree (its `.git` is a file pointing at
    `<main>/.git/worktrees/<name>`) and the local `.venv` is missing/incomplete.
    Safe because worktrees share source; the workbench's per-request workspace
    routing + sys.path handling guarantees the **local** workspace's source wins
    for composite discovery. Avoids forcing a per-worktree `uv sync` (~5 min).
 
-If neither resolves, `start` raises and prints the install command.
+If neither resolves, install `vivarium-workbench` into the workspace `.venv`.
 **Sibling-WORKSPACE venvs (different repos) are still off-limits** — those would
 silently load the wrong composites (mem3dg-readdy friction #13).
 
 ## Investigation auto-pick (one-branch-per-investigation convention)
 
 The SPA auto-picks the alphabetically-first investigation when the current branch
-doesn't match `investigation/<slug>`. This skill works around that by:
-
-1. **Explicit `--investigation <slug>`** — wins. Implies `--browser`.
-2. **Inferred from the current git branch** (when `--browser` is set/implied):
-   exact `branch == slug`, then `investigation/<slug>` prefix, then token-overlap
-   scoring (`feat/dnaa-biology` → `dnaa-replication`), then single-investigation
-   workspace.
-3. **Falls back to alphabetical** if nothing infers.
-
-When a slug is provided/inferred, the skill calls `_openInvestigationDetail(slug)`
-in the focused tab via AppleScript JS injection (Chrome + Safari families on
-macOS), polling up to 8 s for the function to be defined.
+doesn't match `investigation/<slug>`. To land on a specific one, pass
+`--investigation <slug>` to `vwb serve --detach --open` or `vwb server-open` — the
+browser opens the dashboard directly at that investigation's route
+(`/investigations/<slug>`). When no slug is given, the SPA falls back to
+alphabetical. (To infer the slug from the current git branch — exact `branch ==
+slug`, then an `investigation/<slug>` prefix, then token-overlap scoring like
+`feat/dnaa-biology` → `dnaa-replication` — resolve it in the skill first, then
+pass it explicitly.)
 
 ## Safety
 
 - Never modifies `workspace.yaml`, study yamls, or persistent state — read-mostly.
 - Binds to `127.0.0.1` only; never exposed externally.
-- `stop` only kills the PID in `.pbg/dashboard/dashboard.pid`. Won't touch other
-  processes.
-- Registers in `~/.pbg/servers/*.json` so the cross-worktree switcher can find it; parallel worktrees each get their own port/state dir.
+- `vwb server-stop` only kills the PID in `.pbg/server/server.pid`. Won't touch
+  other processes.
+- `vwb serve` registers in `~/.pbg/servers/*.json` so the cross-worktree switcher can find it; parallel worktrees each get their own port/state dir.
 
 ## Compatibility with parallel worktrees
 
-Each worktree gets its own `.pbg/dashboard/` state dir → its own port → its own
+Each worktree gets its own `.pbg/server/` state dir → its own port → its own
 server. Running `/viva-workbench start` from two worktrees concurrently is
 intentional and supported; the workspace switcher finds the others (and lets you
 open each in a new tab). With session-per-tab you can also open several worktrees'

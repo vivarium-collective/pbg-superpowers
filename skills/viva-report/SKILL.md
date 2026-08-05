@@ -307,7 +307,7 @@ The per-investigation report a reviewer downloads is built **client-side**
    ```bash
    uv pip install -e <path-to-vivarium-workbench> --no-deps
    uv pip install -e <path-to-pbg-superpowers> --no-deps
-   python -m viva_superpowers.workbench restart
+   vwb server-restart
    ```
 
 The full reviewer-feedback workflow (parse → map → classify → verify-rendered →

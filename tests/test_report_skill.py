@@ -83,8 +83,9 @@ def test_server_preflight_documented(skill_text):
 
 
 def test_bootstrap_call_sites_untouched(skill_text):
-    # paths --env and workbench restart are deliberately OUT of scope for
-    # this rewire (bootstrap/deferred, not part of the report-lint /
-    # readout-migrate / render compute triangle).
+    # paths --env stays OUT of scope for the report rewire (bootstrap/deferred).
     assert "python -m viva_superpowers.paths --env" in skill_text
-    assert "python -m viva_superpowers.workbench restart" in skill_text
+    # Phase 2.1j rewired the dashboard-restart site to the vwb CLI (the plugin's
+    # server manager viva_superpowers.workbench was deleted).
+    assert "vwb server-restart" in skill_text
+    assert "python -m viva_superpowers.workbench" not in skill_text
