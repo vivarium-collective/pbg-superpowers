@@ -1068,11 +1068,9 @@ vivarium-workbench's workspace switcher and Composites tab. This is
 # local checkout directory is still named pbg-superpowers even though the
 # GitHub repo and PyPI project were renamed to viva-superpowers/pbg-superpowers
 # respectively — adjust the fallback path if your machine differs.
-VIVA_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv/bin/python)"
-
 # Scaffold in place. Default would create a `<repo>-workspace` branch; for a
 # fresh single-developer wrapper, stay on main by passing --branch main.
-"$VIVA_PYTHON" -m viva_superpowers.scaffold workspace \
+vwb scaffold-workspace \
     --in-place \
     --name <tool> \
     --target . \
@@ -1080,7 +1078,7 @@ VIVA_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv
     --branch main
 
 # Register the new workspace so the dashboard's switcher sees it.
-"$VIVA_PYTHON" -m viva_superpowers.workspace_catalog add \
+vwb catalog-add \
     --path "$(pwd)" --name <tool> --package viva_<tool>
 
 # Sanity-check the resulting layout.
@@ -1123,7 +1121,7 @@ One-liner, driven by the composite generators already implemented in
 Phase 3 (`viva_<tool>/composites/*.py`):
 
 ```bash
-python -m viva_superpowers.scaffold investigation-from-wrapper \
+vwb scaffold-investigation \
     --name <tool> \
     --studies viva_<tool>.composites.<topic1>.<gen1>,viva_<tool>.composites.<topic2>.<gen2>
 ```
@@ -1261,11 +1259,9 @@ print(len(fold_runs_jsonl(pathlib.Path('.'))), 'runs')
 #### 4. Emit publish assets and build the read-only bundle
 
 ```bash
-python -c "
-from viva_superpowers.publish_assets import emit
-emit('.', 'viva-<tool>', base_path='/viva-<tool>/dashboard',
-     interactive_url='https://github.com/vivarium-collective/viva-<tool>')
-"
+vwb add-dashboard --workspace . \
+    --base-path /viva-<tool>/dashboard \
+    --interactive-url https://github.com/vivarium-collective/viva-<tool>
 vivarium-workbench-publish --workspace . --out reports/published/dashboard \
     --base-path /viva-<tool>/dashboard
 ```
@@ -1748,11 +1744,10 @@ def <name>(core=None, *, interval=1.0):
 Run the scaffolder + catalog add:
 
 ```bash
-VIVA_PYTHON="$(command -v python || echo /Users/$USER/code/pbg-superpowers/.venv/bin/python)"
-"$VIVA_PYTHON" -m viva_superpowers.scaffold workspace \
+vwb scaffold-workspace \
     --in-place --name <name>-composite --target . \
     --package viva_<name>_composite --branch main
-"$VIVA_PYTHON" -m viva_superpowers.workspace_catalog add \
+vwb catalog-add \
     --path "$(pwd)" --name <name>-composite --package viva_<name>_composite
 python scripts/lint-workspace.py
 ```
