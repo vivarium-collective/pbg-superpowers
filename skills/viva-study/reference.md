@@ -762,6 +762,16 @@ yaml's `actions:` block (parallel to `responses:`), keyed by a deterministic
 `feedback_item_id`. This is the persisted form of the "map each point to an
 action" step in [`docs/conventions/handling-investigation-feedback.md`](../../docs/conventions/handling-investigation-feedback.md).
 
+**REQUIRED BACKGROUND:** `superpowers:receiving-code-review` — expert feedback
+on a study is code review for the model, so treat it with the same rigor: verify
+before you act. Concretely, before recording a `next_action` (or any action)
+that references a numeric claim, check it against `computed_outcomes` in
+`study.yaml` rather than taking the expert's framing on faith. If the requested
+band contradicts the run data, respond with the chart and push back — never
+silently re-fit the model to agree just to close the item (this is the same
+discipline as the PROVIDED-MECHANISMS-ONLY house rule: don't fabricate a fix to
+force a match).
+
 **AI-free split.** The *aggregation* (open-item read), the *recording*
 (`POST /api/feedback-record-action`), and the *apply*
 (`POST /api/feedback-apply-action`) are deterministic and computed server-side —

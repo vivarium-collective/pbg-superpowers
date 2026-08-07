@@ -448,6 +448,17 @@ In `--dry-run` mode: print the full YAML content of each file (clearly separated
 Created investigation '<name>' with N studies. Run /viva-workbench start then open the Investigations tab.
 ```
 
+#### 7. Name the execution vehicle
+
+Scaffolding writes specs, not implementations — the member studies still need to
+be built out. Name the execution vehicle rather than leaving the user to
+improvise one: offer to build the members out via
+**`superpowers:subagent-driven-development`** (recommended when the member
+studies are independent — check the `parent_studies` DAG just written; studies
+with no dependency edge between them are parallelizable) or sequentially by
+hand, one study at a time, when the chain is linear or the studies are tightly
+coupled.
+
 **Study YAML shape to emit for each phase:**
 
 ```yaml

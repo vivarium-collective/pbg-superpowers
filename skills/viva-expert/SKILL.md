@@ -75,6 +75,26 @@ behavior under a real label — the exact failure the gate above exists to preve
 | "My NumPy port matches the paper's equations." | A paraphrase of the math is not the tool. The default deliverable drives the genuine installed simulator. |
 | "The real bridge only raises 'requires CUDA' here — close enough to skip it." | Ship the guarded real bridge **and** a labeled `--reproduce` fallback; don't quietly replace the headline class. |
 
+### Real-bridge escalation ladder
+
+Each rung below is a genuine attempt to bridge the real tool. The ladder only
+terminates in `--reproduce` / `--mock` through the ask-the-user decision node
+— never as a direct fallback from a failed build step.
+
+```mermaid
+flowchart TD
+    A[Try PyPI install] -->|fails| B[GitHub source build]
+    B -->|fails| C[Pinned older release]
+    C -->|fails| D["Tool's own Docker/conda recipe for hints"]
+    D -->|fails| E{"Surface the blocker,<br/>ask the user"}
+    A -->|succeeds| Z[Real bridge: wrap it]
+    B -->|succeeds| Z
+    C -->|succeeds| Z
+    D -->|succeeds| Z
+    E -->|user picks| F[--reproduce]
+    E -->|user picks| G[--mock]
+```
+
 ## Detailed reference
 
 **[reference.md](reference.md)** (same directory) holds everything procedural:
@@ -656,6 +676,27 @@ Emitter results are keyed by emitter path tuple:
 ```
 
 ## Workflow
+
+Heavy mode is viva's longest workflow — clone → build → wrap → test → promote
+→ investigation → publish — often spanning hours with flaky builds. Phases:
+
+1. Phase 1: Study the Tool
+2. Phase 2: Design the Wrapper
+3. Phase 3: Implement
+4. Phase 4: Test
+5. Phase 4.5: Promote to a discoverable pbg-workspace
+6. Phase 5: Showcase Investigation + Published Read-only Workbench
+
+Create a todo per phase and complete them in order.
+
+**Ledger.** Heavy mode maintains `viva-<tool>/.build-progress.md`, recording
+which phases are complete, venv/pin decisions made along the way, and any
+build workarounds discovered. Conversation memory does not survive
+compaction: after a compaction, the ledger and `git log` outrank
+recollection — never re-run a completed phase from memory just because you
+can't recall doing it. The workarounds section isn't pure overhead: it
+doubles as the seed for the README's install notes (see **README
+Requirements** in reference.md).
 
 ### Phase 1: Study the Tool
 

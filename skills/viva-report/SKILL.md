@@ -74,6 +74,8 @@ python3 -m viva_superpowers.server_preflight --url "$URL" || true  # version-ske
 
 Runs **before** the structural lint. Read-only. For each `$INVESTIGATIONS_DIR/<slug>/investigation.yaml` (resolved from `workspace.yaml` `layout:`; `investigations/<slug>/` by default), perform these checks in order. Print findings as you go; group by severity (blocking / warning / info) at the end.
 
+**Multi-investigation option — dispatch per investigation, in parallel.** Running A1–A8 inline against every investigation means the coordinating agent reads every `investigation.yaml`, every chart `meta.json`, and the full git log itself — on a multi-investigation workspace that burns the coordinator's context for no benefit, since only the findings matter downstream (obra's `requesting-code-review` lesson: "reviewing the diff inline burns the context window — dispatch a reviewer subagent; only the findings come back"). For a workspace with **2+ investigations**, the coordinator MAY instead dispatch one fresh-eyes reviewer subagent per investigation, in parallel, via `superpowers:dispatching-parallel-agents`, each filled from `skills/viva-report/audit-reviewer-prompt.md`. Each reviewer runs the same A1–A8 checklist scoped to its one investigation and returns findings only (A7 format) — the investigation YAML, charts, and git state it inspected stay in its own context. The coordinator concatenates the returned findings blocks before proceeding to Pass B. For a **single-investigation** workspace, running inline as below is simpler and just as cheap — treat dispatch as an optional, not forced, path.
+
 ### A1. Branch state
 
 ```bash

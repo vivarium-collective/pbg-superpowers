@@ -126,3 +126,35 @@ def test_h1_matches_name_and_has_no_pbg(skill_path):
         assert re.match(rf"^#\s+/?{re.escape(name)}\b", h1), (
             f"{name}: H1 {h1!r} must start with '# /{name}' (command form)"
         )
+
+
+# ---- token budget for the always-loaded surface ----
+# Frontmatter (incl. argument-hint) loads into every session's skill listing, and
+# viva-orient's whole body is injected each session by hooks/session-start. These
+# ratchets stop the always-loaded cost from creeping back up.
+ARGUMENT_HINT_MAX = 150
+ORIENT_BODY_MAX_WORDS = 600
+
+
+def test_argument_hint_within_budget(skill_path):
+    fm, _ = _split(skill_path.read_text())
+    hint = fm.get("argument-hint")
+    if hint is None:
+        pytest.skip("no argument-hint")
+    hint = str(hint)
+    assert len(hint) <= ARGUMENT_HINT_MAX, (
+        f"{skill_path.parent.name}: argument-hint is {len(hint)} chars "
+        f"(budget {ARGUMENT_HINT_MAX}). It loads into every session's skill "
+        f"listing — point at the SKILL.md subcommand index instead of enumerating "
+        f"every subcommand."
+    )
+
+
+def test_orient_body_within_budget():
+    root = Path(__file__).resolve().parents[1]
+    _, body = _split((root / "skills" / "viva-orient" / "SKILL.md").read_text())
+    words = len(body.split())
+    assert words <= ORIENT_BODY_MAX_WORDS, (
+        f"viva-orient body is {words} words (budget {ORIENT_BODY_MAX_WORDS}). It is "
+        f"injected into EVERY session by hooks/session-start — keep the gateway lean."
+    )

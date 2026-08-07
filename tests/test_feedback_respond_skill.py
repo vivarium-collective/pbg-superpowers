@@ -29,13 +29,14 @@ def test_skill_names_feedback_respond_and_primitives():
     assert "/api/study/" in text, "open-item read endpoint not referenced"
 
 
-def test_skill_argument_hint_lists_feedback_respond():
-    text = _doc(SKILL)
-    # The front-matter argument-hint should advertise the new subcommand.
-    hint_line = next(
-        (ln for ln in text.splitlines() if ln.startswith("argument-hint:")), ""
+def test_skill_index_lists_feedback_respond():
+    # argument-hints are now compact pointers (token budget — see
+    # test_skill_conventions.test_argument_hint_within_budget); the SKILL.md
+    # subcommand index is where subcommands are advertised.
+    skill_text = SKILL.read_text()
+    assert "feedback-respond" in skill_text, (
+        "feedback-respond missing from viva-study SKILL.md subcommand index"
     )
-    assert "feedback-respond" in hint_line, "feedback-respond missing from argument-hint"
 
 
 def test_skill_documents_ai_free_split_and_no_silent_mutation():

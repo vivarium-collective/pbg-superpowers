@@ -488,6 +488,9 @@ CHECKS = (
     "status_claims_done_no_runs_recorded",
     # Future-proofing: study has runs but none persisted via an emitter
     "runs_without_emitter",
+    # A passed study that hedges its conclusion ("should"/"likely"/"seems") —
+    # the wording symptom of a claim resting on something other than evidence.
+    "hedged_verdict_when_passed",
     # Reviewer-facing clarity strip ambiguities (single-sourced from
     # study_status.study_clarity_summary): ran-but-tests-pending, gate↔test drift
     "reviewer_clarity_ambiguity",
@@ -2658,6 +2661,55 @@ def _check_visualization_files(ctx: _LintContext) -> None:
 # ---------------------------------------------------------------------------
 
 
+_HEDGE_WORDS = re.compile(
+    r"\b(should|probably|likely|presumably|seems?|appears? to|"
+    r"expected to|ought to|might)\b",
+    re.IGNORECASE,
+)
+
+
+def _iter_strings(obj):
+    if isinstance(obj, str):
+        yield obj
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            yield from _iter_strings(v)
+    elif isinstance(obj, (list, tuple)):
+        for v in obj:
+            yield from _iter_strings(v)
+
+
+def _check_hedged_verdict_when_passed(ctx: _LintContext) -> None:
+    """A study whose authored ``gate_status`` is ``passed`` should state its
+    conclusion in the indicative, not the conditional. Hedge words ("should",
+    "likely", "seems", "expected to") in the conclusion of a PASSED study are the
+    wording symptom obra's verification-before-completion skill flags — a pass
+    resting on "should" is a claim, not a result. Warning-level; the fix is to
+    state the result plainly or downgrade the verdict.
+    """
+    if str(ctx.spec.get("gate_status") or "").strip().lower() != "passed":
+        return
+    for fieldname in ("conclusion_logic", "executive"):
+        block = ctx.spec.get(fieldname)
+        if not block:
+            continue
+        for text in _iter_strings(block):
+            m = _HEDGE_WORDS.search(text)
+            if m:
+                ctx.add(
+                    level="warning",
+                    field_path=fieldname,
+                    message=(
+                        f"passed study hedges its conclusion with {m.group(0)!r} — "
+                        "state the result in the indicative or downgrade the "
+                        "verdict; a pass resting on hedged language is a claim, "
+                        "not evidence."
+                    ),
+                    check="hedged_verdict_when_passed",
+                )
+                break  # one finding per field is enough
+
+
 _CHECK_FUNCTIONS = (
     _check_incomplete_summaries,
     _check_status_contradictions,
@@ -2701,6 +2753,8 @@ _CHECK_FUNCTIONS = (
     _check_workflow_typing,
     # Wave 3b: claim_scope / generality / lifecycle_state enums + floor
     _check_finding_scope_generality_lifecycle,
+    # Hedged verdict: a passed study whose conclusion hedges ("should"/"likely")
+    _check_hedged_verdict_when_passed,
 )
 
 
