@@ -111,6 +111,51 @@ class TestRollUpVerdictNeedsCalibration:
         assert roll_up_verdict(spec)["result"] == "needs_calibration"
 
 
+class TestRollUpVerdictCounts:
+    """The verdict carries the per-test counts it was derived from, so a reader
+    can distinguish states the conservative gate deliberately collapses
+    (workbench#758)."""
+
+    def test_counts_shape_and_values(self):
+        spec = _spec(
+            _named("t1", "t2", "t3"),
+            {"t1": {"result": "PASS"}, "t2": {"result": "PASS"},
+             "t3": {"result": "skip"}},
+        )
+        v = roll_up_verdict(spec)
+        assert v["counts"] == {"total": 3, "pass": 2, "fail": 0, "skip": 1,
+                               "pending": 0}
+
+    def test_counts_distinguish_progress_within_needs_calibration(self):
+        # Both are needs_calibration, but the counts tell them apart — the whole
+        # point: 4 passed + 1 skipped is not the same state as 0 passed + 1 skipped.
+        rich = _spec(
+            _named("t1", "t2", "t3", "t4", "t5"),
+            {"t1": {"result": "PASS"}, "t2": {"result": "PASS"},
+             "t3": {"result": "PASS"}, "t4": {"result": "PASS"},
+             "t5": {"result": "skip"}},
+        )
+        bare = _spec(_named("t5"), {"t5": {"result": "skip"}})
+        rv, bv = roll_up_verdict(rich), roll_up_verdict(bare)
+        assert rv["result"] == bv["result"] == "needs_calibration"
+        assert rv["counts"]["pass"] == 4 and rv["counts"]["skip"] == 1
+        assert bv["counts"]["pass"] == 0 and bv["counts"]["skip"] == 1
+
+    def test_counts_match_count_test_outcomes(self):
+        # Same numbers as the standalone counter (both source bucket_tests).
+        from viva_superpowers import study_status
+        spec = _spec(
+            _named("t1", "t2", "t3"),
+            {"t1": {"result": "PASS"}, "t2": {"result": "FAIL"}},  # t3 pending
+        )
+        assert (roll_up_verdict(spec)["counts"]
+                == study_status.count_test_outcomes(spec, spec.get("runs")))
+
+    def test_empty_spec_counts_are_zero(self):
+        assert roll_up_verdict({})["counts"] == {
+            "total": 0, "pass": 0, "fail": 0, "skip": 0, "pending": 0}
+
+
 class TestRollUpVerdictNotStarted:
     def test_no_runs_returns_not_started(self):
         spec = _spec(_named("t1"), has_runs=False)

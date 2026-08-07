@@ -106,9 +106,25 @@ def roll_up_verdict(spec: dict) -> dict:
         result = _RESULT_BLOCKED
         blocked_by = pending_names
 
+    # Surface the per-test counts the verdict was derived from, so a consumer
+    # can distinguish "4 passed, 1 skipped" from "0 passed, 1 skipped" — both
+    # yield needs_calibration by the conservative gate above (skip short-circuits
+    # before the pass check, intentionally), but they are very different states
+    # for a reader. The result stays the single gate signal; counts carry the
+    # progress. Same {total,pass,fail,skip,pending} shape as
+    # study_status.count_test_outcomes, from the same bucket_tests source.
+    counts = {
+        "total": len(tests),
+        "pass": len(pass_names),
+        "fail": len(fail_names),
+        "skip": len(skip_names),
+        "pending": len(pending_names),
+    }
+
     return {
         "result": result,
         "blocked_by": blocked_by,
+        "counts": counts,
         "evaluated_by": "code",
     }
 
