@@ -57,7 +57,7 @@ reporting are owned by `/viva-study` (see its "bias to execute" house rule).
    - List of emitted observable paths (truncated to first 20)
    - `viz_html` paths bundled with the run (if any)
 5. Suggest follow-ups:
-   - `/viva-explore <composite-id>` to inspect in the dashboard
+   - `/viva-workbench open --composite <composite-id>` to inspect in the dashboard
    - `/viva-catalog list` if the composite ID was wrong
 
 ## Implementation outline
@@ -117,7 +117,7 @@ if viz:
     for v in viz: print(f"  - {v}")
 '
 echo
-echo "Next: /viva-explore $CID  to inspect in the dashboard"
+echo "Next: /viva-workbench open --composite $CID  to inspect in the dashboard"
 ```
 
 ## Example
@@ -138,5 +138,5 @@ observables (3):
 viz_html (1):
   - reports/runs/sim-...html
 
-Next: /viva-explore pbg_chromosome_rep1.composites.dnaa-binding  to inspect in the dashboard
+Next: /viva-workbench open --composite pbg_chromosome_rep1.composites.dnaa-binding  to inspect in the dashboard
 ```

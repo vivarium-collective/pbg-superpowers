@@ -97,7 +97,9 @@ State files (written by `vwb serve`, read by every dashboard-touching skill):
 - **`/viva-workbench open [--investigation SLUG]`** → `vwb server-open
   [--investigation SLUG]` — open the workbench URL in the browser (auto-start via
   `vwb serve --detach` first if not running). `--investigation SLUG` opens the
-  dashboard at that investigation's route.
+  dashboard at that investigation's route. `--composite <spec-id>` opens the
+  dashboard's **Composite Explorer** focused on that spec — `<dashboard-url>?focus=composite-explore&id=<spec-id>`
+  (starting the server first if needed). Folds the former `/viva-explore`.
 - **`/viva-workbench restart`** → `vwb server-restart` — `stop` then `serve
   --detach`. Useful after a code change in an editable `vivarium-workbench`
   install (Python reload isn't automatic).

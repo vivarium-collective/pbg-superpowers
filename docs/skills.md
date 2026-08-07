@@ -1,6 +1,6 @@
 # Skills catalog
 
-15 user-facing skills (plus `/viva-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects). v0.9 consolidated the 17-skill v0.8 catalog — see the [migration table](#migration-from-v08) below.
+14 user-facing skills (plus `/viva-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects).
 
 ## Wrap & compose
 
@@ -45,7 +45,6 @@ from a pbg-superpowers checkout. (Replaces the v0.8 `/pbg-package` skill.)
 | Skill | What it does |
 |---|---|
 | [`/viva-run <composite-id> [--steps N]`](../skills/viva-run/SKILL.md) | Run a composite directly (no Study attached). |
-| [`/viva-explore <spec-id>`](../skills/viva-explore/SKILL.md) | Open the dashboard's Composite Explorer focused on one composite. |
 | [`/viva-study <subcmd> …`](../skills/viva-study/SKILL.md) | Full CRUD for **Studies** — baseline composites, variants, interventions, runs, behavior tests, follow-up proposals. Organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). |
 | [`/viva-investigation <subcmd> …`](../skills/viva-investigation/SKILL.md) | Manage **Investigations** — named collections of Studies grouped under a shared research question, with a cross-study dependency DAG. |
 | [`/viva-harden-investigation [slug]`](../skills/viva-harden-investigation/SKILL.md) | Make an existing **Investigation** rigorous — verify canonical source first, triage to the single load-bearing claim↔evidence gap, classify the hardening mode, root-cause failing report-card gates, and resolve open decisions. |
@@ -56,18 +55,3 @@ from a pbg-superpowers checkout. (Replaces the v0.8 `/pbg-package` skill.)
 For the read/write surface each skill touches (which API endpoints, which on-disk files), see the [Skill ↔ concept map](concepts/vivarium-workbench-model.md#skill--concept-map).
 
 > Also shipped: `/viva-init`, a one-shot machine-setup installer that symlinks the skills into `~/.claude/skills/`. Not part of the workflow surface above. And `/viva-suggest <id>`, an internal callback the dashboard's "Suggest" button asks the user to paste — kept registered so the callback works, but not part of the user-facing catalog.
-
-## Migration from v0.8
-
-The v0.8 catalog had 17 user-invocable skills. v0.9 cuts that to 12
-without losing any capability — repetitive trios are merged behind one
-front door, and prototyping flags fold into the canonical commands.
-
-| v0.8 skill | v0.9 equivalent |
-|---|---|
-| `/pbg-wrapper <tool>` | `/viva-expert --lightweight <tool>` |
-| `/pbg-composer <name> <tools…>` | `/viva-expert --lightweight <name> <tools…>` |
-| `/pbg-list` | `/viva-catalog list` (or just `/viva-catalog`) |
-| `/pbg-install <pkg>` | `/viva-catalog install <pkg>` |
-| `/pbg-uninstall <pkg>` | `/viva-catalog uninstall <pkg>` |
-| `/pbg-package <repo>` | `python scripts/audit-pbg-repo.py <repo>` (maintainer-only) |
