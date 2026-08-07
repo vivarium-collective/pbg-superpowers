@@ -35,7 +35,7 @@ viva-superpowers builds **process-bigraph research workspaces** — wrapping sim
 | **Wrap & compose** | `/viva-expert` (wrap a simulator as a Process, or compose several) |
 | **Workspace lifecycle** | `/viva-workspace` (scaffold), `/viva-workbench` (dashboard server), `/viva-init` (machine setup) |
 | **Studies & runs** | `/viva-study` (design→build→simulate→evaluate→decide), `/viva-run`, `/viva-investigation`, `/viva-report`, `/viva-viz` |
-| **Navigate & status** | `/viva-catalog`, `/viva-navigate` (read-only graph queries + "decisions needed"), `/viva-status`, `/viva-explore` |
+| **Navigate & status** | `/viva-catalog`, `/viva-navigate` (read-only graph queries + "decisions needed"), `/viva-status` |
 | **Evidence & rigor** | `/viva-cite-bands`, `/viva-biology-forward`, `/viva-harden-investigation` |
 
 Vocabulary and on-disk shapes: `docs/concepts/vivarium-workbench-model.md`. For any skill, use the **Skill** tool.

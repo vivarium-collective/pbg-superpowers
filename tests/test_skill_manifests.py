@@ -25,7 +25,7 @@ import yaml
 # Keep in sync with docs/skills.md + README/CLAUDE counts — the test below fails on drift.
 _VIVA_CORE = {
     "viva-biology-forward", "viva-catalog", "viva-cite-bands", "viva-expert",
-    "viva-explore", "viva-init", "viva-investigation", "viva-navigate",
+    "viva-init", "viva-investigation", "viva-navigate",
     "viva-report", "viva-run", "viva-status", "viva-study",
     "viva-viz", "viva-workbench", "viva-workspace",
 }

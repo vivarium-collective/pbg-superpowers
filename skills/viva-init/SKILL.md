@@ -8,6 +8,12 @@ argument-hint: (no args)
 
 # /viva-init
 
+> **Legacy fallback.** The supported install path is `/plugin install
+> viva-superpowers` via the marketplace (see the README). This manual
+> installer exists for local plugin development — editing skills in a
+> working tree and symlinking them into `~/.claude/skills/` without a
+> marketplace round-trip.
+
 One-shot installer that makes every `viva-*` skill in this plugin available
 to Claude in any conversation, regardless of cwd.
 
