@@ -15,13 +15,24 @@ STUDY_SKILL = Path(__file__).resolve().parent.parent / "skills" / "viva-study" /
 REPORT_SKILL = Path(__file__).resolve().parent.parent / "skills" / "viva-report" / "SKILL.md"
 
 
+def _doc(skill_md: Path) -> str:
+    # A skill's documented contract is SKILL.md + its optional reference.md
+    # (heavy detail is split into reference.md per the obra "supporting file"
+    # pattern). Read both so content-presence checks survive the split.
+    text = skill_md.read_text(encoding="utf-8")
+    ref = skill_md.parent / "reference.md"
+    if ref.exists():
+        text += "\n" + ref.read_text(encoding="utf-8")
+    return text
+
+
 def test_pbg_study_documents_migrate_readouts_subcommand():
-    text = STUDY_SKILL.read_text(encoding="utf-8")
+    text = _doc(STUDY_SKILL)
     assert "migrate-readouts" in text
 
 
 def test_pbg_study_names_status_and_write_helpers():
-    text = STUDY_SKILL.read_text(encoding="utf-8")
+    text = _doc(STUDY_SKILL)
     # Phase 2.1g thin client: the migrate-readouts subcommand drives the pure
     # status classifier + the canonicalize write via the workbench API (the
     # readout_migration compute stays server-side backing these endpoints).
@@ -30,7 +41,7 @@ def test_pbg_study_names_status_and_write_helpers():
 
 
 def test_pbg_study_drives_needs_human_reauthoring_via_check_observables():
-    text = STUDY_SKILL.read_text(encoding="utf-8")
+    text = _doc(STUDY_SKILL)
     # re-authoring the needs_human queue uses SP2b-i's check-observables +
     # the real emittable set from /api/observables — never guess a selector.
     assert "check-observables" in text

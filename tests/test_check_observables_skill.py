@@ -11,17 +11,27 @@ from pathlib import Path
 SKILL = Path(__file__).resolve().parent.parent / "skills" / "viva-study" / "SKILL.md"
 
 
+def _doc(skill_md: Path) -> str:
+    # SKILL.md + optional reference.md (heavy detail is split out per the obra
+    # "supporting file" pattern) — read both so content checks survive the split.
+    text = skill_md.read_text(encoding="utf-8")
+    ref = skill_md.parent / "reference.md"
+    if ref.exists():
+        text += "\n" + ref.read_text(encoding="utf-8")
+    return text
+
+
 def test_skill_documents_check_observables_subcommand():
-    text = SKILL.read_text(encoding="utf-8")
+    text = _doc(SKILL)
     assert "check-observables" in text
 
 
 def test_skill_mentions_validation_endpoints():
-    text = SKILL.read_text(encoding="utf-8")
+    text = _doc(SKILL)
     assert "study-observable-check" in text
     assert "/api/observables" in text
 
 
 def test_skill_mentions_never_fabricate_status():
-    text = SKILL.read_text(encoding="utf-8")
+    text = _doc(SKILL)
     assert "not_in_structure" in text

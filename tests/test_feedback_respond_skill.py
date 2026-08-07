@@ -8,8 +8,18 @@ from pathlib import Path
 SKILL = Path(__file__).resolve().parents[1] / "skills" / "viva-study" / "SKILL.md"
 
 
+def _doc(skill_md: Path) -> str:
+    # SKILL.md + optional reference.md (heavy detail is split out per the obra
+    # "supporting file" pattern) — read both so content checks survive the split.
+    text = skill_md.read_text()
+    ref = skill_md.parent / "reference.md"
+    if ref.exists():
+        text += "\n" + ref.read_text()
+    return text
+
+
 def test_skill_names_feedback_respond_and_primitives():
-    text = SKILL.read_text()
+    text = _doc(SKILL)
     assert "feedback-respond" in text, "subcommand not documented"
     # Phase 2.1g thin client: the record/apply primitives are called via the
     # workbench API (the feedback_actions compute stays server-side backing
@@ -20,7 +30,7 @@ def test_skill_names_feedback_respond_and_primitives():
 
 
 def test_skill_argument_hint_lists_feedback_respond():
-    text = SKILL.read_text()
+    text = _doc(SKILL)
     # The front-matter argument-hint should advertise the new subcommand.
     hint_line = next(
         (ln for ln in text.splitlines() if ln.startswith("argument-hint:")), ""
@@ -29,7 +39,7 @@ def test_skill_argument_hint_lists_feedback_respond():
 
 
 def test_skill_documents_ai_free_split_and_no_silent_mutation():
-    text = SKILL.read_text()
+    text = _doc(SKILL)
     # The judgment is the agent's; the primitives are deterministic.
     assert "AI-free" in text or "AI-free split" in text
     # design-edit must never silently mutate design.
