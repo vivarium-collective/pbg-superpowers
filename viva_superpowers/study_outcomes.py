@@ -7,37 +7,11 @@ from pathlib import Path
 
 from . import study_io, run_registry
 
-_COMPLETE = {"complete", "completed", "ran", "done"}
-
-
-def _runs_of(spec_or_runs) -> list[dict]:
-    if isinstance(spec_or_runs, list):
-        runs = spec_or_runs
-    else:
-        runs = (spec_or_runs or {}).get("runs") or []
-    return [r for r in runs if isinstance(r, dict)]
-
-
-def canonical_run(spec_or_runs) -> dict | None:
-    """The run whose outcomes are authoritative: an explicit `canonical: true`
-    (last one wins), else the newest completed run by `timestamp`, else the last
-    run, else None."""
-    runs = _runs_of(spec_or_runs)
-    if not runs:
-        return None
-    flagged = [r for r in runs if r.get("canonical") is True]
-    if flagged:
-        return flagged[-1]
-    completed = [r for r in runs if str(r.get("status", "")).lower() in _COMPLETE]
-    if completed:
-        return max(completed, key=lambda r: r.get("timestamp") or "")
-    return runs[-1]
-
-
-def canonical_outcomes(spec_or_runs) -> dict:
-    """The canonical run's `outcomes` dict (empty if none)."""
-    run = canonical_run(spec_or_runs)
-    return (run or {}).get("outcomes") or {}
+# Canonical-run outcome selection was the SOURCE this package's copy was ported
+# from into viva-workspace; re-export it from the shared package so there is one
+# implementation. ``finding_observations``/``chart_store`` import ``canonical_run``
+# via this module, so the name must stay exposed here.
+from viva_workspace.outcomes import canonical_outcomes, canonical_run  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +215,7 @@ def main(argv=None) -> int:
     if args.all:
         dirs = list(paths.iter_study_dirs())
     else:
-        dirs = [paths.study_dir(args.study)]
+        dirs = [paths.study_dir(args.study, must_exist=True)]
 
     total = {"added": 0, "updated": 0}
     for d in dirs:

@@ -1,9 +1,9 @@
-"""Tests for the vendored workspace-layout resolver + a drift guard.
+"""Tests for the workspace-layout resolver re-exported by the compat shim.
 
-``viva_superpowers/workspace_paths.py`` is a vendored copy of the canonical
-resolver that lives in ``vivarium-workbench`` (pbg-superpowers does not depend
-on it). The drift guard below pins ``LAYOUT_DEFAULTS`` to the canonical map so
-the two copies can't silently diverge.
+``viva_superpowers/workspace_paths.py`` is now a thin shim over the shared
+``viva-workspace`` package (the former hand-vendored copy is gone). The checks
+below pin the re-exported ``LAYOUT_DEFAULTS`` and the canonical ``viva_<slug>``
+package naming so the shim keeps exposing the expected public surface.
 """
 from viva_superpowers.workspace_paths import (
     WorkspacePaths, LAYOUT_DEFAULTS, package_slug,
@@ -46,7 +46,7 @@ def test_flat_defaults(tmp_path):
     wp = WorkspacePaths.from_config(tmp_path, {"name": "ws"})
     assert wp.studies == tmp_path / "studies"
     assert wp.pbg / "schemas" == tmp_path / ".pbg" / "schemas"
-    assert wp.package == tmp_path / "pbg_ws"
+    assert wp.package == tmp_path / "viva_ws"
 
 
 def test_layout_overrides(tmp_path):
@@ -55,7 +55,7 @@ def test_layout_overrides(tmp_path):
     )
     assert wp.studies == tmp_path / "workspace" / "studies"
     assert wp.investigations == tmp_path / "investigations"  # unspecified -> flat
-    assert package_slug("a-b") == "pbg_a_b"
+    assert package_slug("a-b") == "viva_a_b"
 
 
 def test_workspace_dir_cli(tmp_path, capsys):

@@ -12,6 +12,11 @@ dependencies = [
     "bigraph-schema>=0.0.60",
     "process-bigraph>=1.8.2",
     "pypdf>=4.0",
+    # Shared source of truth for workspace-layout logic (WorkspacePaths, the
+    # layout map, find_workspace_root, study_dir, canonical-run outcome
+    # selection, package naming). Replaces the hand-vendored
+    # workspace_paths.py copy + the duplicated canonical_outcomes bodies.
+    "viva-workspace",
     # Default framework emitters available in every pbg- workspace. Base install
     # is lightweight (SQLiteEmitter, stdlib); heavy backends stay extras-gated
     # via pbg-emitters[parquet] / [xarray] (see the `evaluator` extra).
@@ -33,6 +38,7 @@ processes = ["pbg-basic-processes"]
 events = ["investigation-contracts"]
 
 [tool.uv.sources]
+viva-workspace = { git = "https://github.com/vivarium-collective/viva-workspace.git", branch = "main" }
 pbg-emitters = { git = "https://github.com/vivarium-collective/pbg-emitters.git", branch = "main" }
 pbg-basic-processes = { git = "https://github.com/vivarium-collective/pbg-basic-processes.git", branch = "main" }
 investigation-contracts = { git = "https://github.com/vivarium-collective/investigation-contracts.git", branch = "main" }
