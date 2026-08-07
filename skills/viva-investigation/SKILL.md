@@ -1,6 +1,6 @@
 ---
 name: viva-investigation
-description: "Use when grouping multiple Studies under a shared research question — creating an Investigation, listing or adding/removing member studies, orchestrating a run across all of them, or closing an Investigation out with a report and PR."
+description: "Use when grouping multiple Studies under a shared research question — creating, opening, listing, or closing an Investigation, or adding/removing member studies and orchestrating a run across all of them."
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: <subcmd> [args...]

@@ -89,7 +89,7 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
          cwd=ws, env=venv_env)
 
     # 5. Register FakeProcess in core.py (simulates /pbg-pull-processes)
-    (model / "pbg_m" / "core.py").write_text(textwrap.dedent("""\
+    (model / "viva_m" / "core.py").write_text(textwrap.dedent("""\
         from pbg_fake_tool import FakeProcess
 
 
@@ -110,7 +110,7 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
     # 6. Persist registry snapshot (simulates /pbg-baseline step 5)
     venv_python = str(ws / ".venv" / "bin" / "python")
     _run([venv_python, "-c",
-          "import json; from pbg_m.core import build_core; "
+          "import json; from viva_m.core import build_core; "
           "from viva_superpowers.core_introspection import registry_snapshot; "
           "open('tests/registry-snapshot.json','w').write(json.dumps(registry_snapshot(build_core())))"],
          cwd=model)
@@ -122,7 +122,7 @@ def test_full_flow_scaffold_to_reports(tmp_path, plugin_root, fixtures_dir):
           "from pathlib import Path; "
           "from viva_superpowers.report import render_workspace_report, render_model_report; "
           "from viva_superpowers.core_introspection import registry_snapshot; "
-          "from pbg_m.core import build_core; "
+          "from viva_m.core import build_core; "
           "render_workspace_report(Path('.'), today='2026-05-09'); "
           "render_model_report(Path('.'), 'm', registry_snapshot(build_core()), today='2026-05-09')"],
          cwd=ws)
