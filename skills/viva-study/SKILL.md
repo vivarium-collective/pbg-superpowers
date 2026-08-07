@@ -3,7 +3,7 @@ name: viva-study
 description: Use when managing a Study through its lifecycle (Design → Build → Simulate → Evaluate → Decide) in the workbench — creating or editing baseline composites, variants, interventions, runs, findings, and conclusions on a study.yaml.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
-argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|run-script|refresh-viz|clean|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|feedback-respond <slug> [--apply]|open [args]
+argument-hint: "<subcommand> [args] — full subcommand index in SKILL.md"
 ---
 
 # /viva-study
@@ -51,12 +51,13 @@ read-only via [`/viva-workbench`](../viva-workbench/SKILL.md) (step 5).
    an un-provided literature value, or an extra cap/sink/term added solely to hit a
    number.) See the **Reference / mechanism discipline** section below for how to
    record an un-provided input as a `pending` proposal instead of silently using it.
-3. **FRESHNESS on every re-run.** When a new canonical run lands, replace/**DELETE**
-   superseded charts and findings — don't accumulate stale output. But **PRESERVE
-   valuable rich views**: distinguish "stale old-run output" (drop it) from "good
-   presentation" (keep it, re-render against the new run). To actually drop a chart
-   you must **delete the file** — charts auto-discover from the dir, so an orphaned
-   file reappears.
+3. **FRESHNESS on every re-run.** When a new canonical run lands, check each chart
+   against `viva_superpowers.chart_store.classify_charts(study_dir)`:
+   - If it's classified `superseded` → `git rm` the file in the same edit as the
+     new run. Charts auto-discover from the dir, so an orphaned file reappears.
+   - If a `visualizations[]` entry's presentation is one you want to keep →
+     re-render it against the canonical run via `refresh-viz` (this re-points it
+     at fresh data without deleting the view).
 4. **SELF-SERVE the standard asks** — don't make the reviewer request them every
    study. Default to: steady-state framing where early transients distort a metric
    (use the steady-state window/average, not the warm-up); axis labels with units;
@@ -331,6 +332,8 @@ retroactively; applying it here means you rarely need it.
 | `propose-followup <parent-slug> --id <id> --title '<t>' --motivation '<m>' [--mechanism '<hyp>'] [--seed-from-file <path>] [--dry-run]` | Append a "we should also study X" entry to `followup_proposals[]`. |
 | `seed-from-followup <parent-slug> <proposal-id> [--new-slug <slug>] [--from-finding <finding-id>] [--dry-run]` | Lift a followup proposal (or a finding, Pass 10B) into a new sibling study, linked back via `pipeline_gate.prerequisites`. |
 | `feedback-respond <slug> [--apply] [--dry-run]` | Map open expert-feedback items to tracked actions (`next_action` / `finding` / `design-edit` / `study-seed`) and optionally apply them. |
+
+**The terminal state of a study is `/viva-report` (no flags).** `set-verdicts` / `set-conclusion` are not the end — a verdict nobody has audited against the charts is not reviewer-ready.
 
 ### Utility
 

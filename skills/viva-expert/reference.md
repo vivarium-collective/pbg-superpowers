@@ -620,6 +620,10 @@ verbatim into the published workbench), **not** in `demo/report.html` —
 there is no `demo/` directory and no standalone report in heavy mode's
 final deliverable.
 
+**The terminal state of heavy mode is `/viva-report` (no flags) on the
+showcase investigation.** A verdict nobody has audited against the charts is
+not reviewer-ready.
+
 ## README Requirements
 
 Include:
