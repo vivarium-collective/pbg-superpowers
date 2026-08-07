@@ -6,7 +6,7 @@ allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: <workspace-name> [target-dir] [--upstream <repo>] [--branch <name>] [--in-place]
 ---
 
-# pbg-workspace
+# viva-workspace
 
 Bootstrap stage. Operates on a brand-new workspace directory.
 

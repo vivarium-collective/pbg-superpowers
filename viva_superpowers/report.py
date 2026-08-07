@@ -12,7 +12,6 @@ import shutil
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
-from typing import Any
 
 from viva_superpowers.text_utils import first_sentence
 from viva_superpowers.workspace_paths import WorkspacePaths
@@ -23,7 +22,6 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from ._resources import resource_dir
 from .report_linter import (
     LintFinding,
-    apply_overrides,
     format_findings,
     has_blocking_errors,
     lint_workspace_report,
@@ -278,8 +276,6 @@ def render_model_report(
 ) -> Path:
     """Build models/<model>/reports/index.html from workspace.yaml entry + registry + doc."""
     today = today or date.today().isoformat()
-    ws = yaml.safe_load((ws_root / "workspace.yaml").read_text(encoding="utf-8"))
-    model = ws["models"][model_name]
     env = _env(resource_dir("templates") / "model" / "reports")
     tpl = env.get_template("index.html.j2")
     out = ws_root / "models" / model_name / "reports" / "index.html"

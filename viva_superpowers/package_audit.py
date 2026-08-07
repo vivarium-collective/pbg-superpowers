@@ -57,8 +57,8 @@ def _check_pypi(name: str) -> tuple[str, str]:
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return "WARN", (
-                f"NOT published on PyPI — recommend publishing; "
-                f"see docs/conventions/distribution.md"
+                "NOT published on PyPI — recommend publishing; "
+                "see docs/conventions/distribution.md"
             )
         return "WARN", f"PyPI check failed: HTTP {e.code}"
     except Exception as e:

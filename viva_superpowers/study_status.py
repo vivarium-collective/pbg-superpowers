@@ -29,7 +29,6 @@ param-enforcement banner surfaces declared-vs-applied drift.
 """
 from __future__ import annotations
 
-from typing import Any
 from .study_outcomes import canonical_run
 
 

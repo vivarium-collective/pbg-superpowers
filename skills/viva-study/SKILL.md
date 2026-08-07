@@ -6,7 +6,7 @@ allowed-tools: Bash(*) Read Write
 argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|run-script|refresh-viz|clean|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|feedback-respond <slug> [--apply]|open [args]
 ---
 
-# pbg-study
+# viva-study
 
 The end-to-end interface for **Studies** in the vivarium-workbench, organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide; see [`docs/concepts/vivarium-workbench-model.md`](../../docs/concepts/vivarium-workbench-model.md#study-lifecycle)).
 
@@ -304,7 +304,7 @@ Draft the `question`, `hypothesis`, `objective`, and/or `description` fields of 
    - `no` — abort without writing; print "No changes made."
    - `edit <field> <new-prompt>` — re-draft only that field using the new prompt, then repeat the preview for it before asking again. Loop until the user says `yes` or `no`.
 
-7. **Write via API.** POST `/api/study-set-overview` with only the fields being written:
+7. **Write via API.** POST `/api/study-set-description` with only the fields being written:
 
    ```json
    {"study": "<slug>", "question": "...", "hypothesis": "...", "objective": "...", "description": "..."}
@@ -319,7 +319,7 @@ Draft the `question`, `hypothesis`, `objective`, and/or `description` fields of 
 - Be conservative with hypothesis thresholds. Only state numbers that appear explicitly in the source docs. Prefer "approximately" phrasing over invented precision.
 - A `question:` field longer than four sentences is too long — revise.
 - If a field already has user-authored content that is substantively different from the draft, present both side-by-side and let the user decide before overwriting.
-- `/api/study-set-overview` is the canonical endpoint. The legacy alias `/api/investigation-set-overview` exists for backwards compatibility but should not be used in new code.
+- `/api/study-set-description` is the canonical study-* endpoint (registered in the workbench as an alias of the underlying `/api/investigation-set-overview`). Prefer the study-* name in new skill code; the `/api/investigation-set-overview` form is the v2 alias kept for backwards compatibility. There is no `/api/study-set-overview` route.
 
 #### `set-objective <study-name> '<text>'`
 

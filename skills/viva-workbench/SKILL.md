@@ -6,7 +6,7 @@ allowed-tools: Bash(*) Read Write
 argument-hint: start|stop|status|open|restart [--port N] [--browser] [--investigation SLUG]
 ---
 
-# pbg-workbench
+# viva-workbench
 
 Transversal skill (no stage). Manages the interactive **vivarium-workbench**
 server: the UI you actually look at to drive a workspace — Investigations,
