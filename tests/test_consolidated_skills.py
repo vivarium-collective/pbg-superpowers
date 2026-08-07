@@ -15,7 +15,15 @@ SKILLS = REPO_ROOT / "skills"
 
 
 def _read(skill: str) -> str:
-    return (SKILLS / skill / "SKILL.md").read_text()
+    # A skill's documented contract is SKILL.md + its optional reference.md
+    # (heavy detail is split into reference.md per the obra "supporting file"
+    # pattern). Read both so content-presence checks survive the split.
+    d = SKILLS / skill
+    text = (d / "SKILL.md").read_text()
+    ref = d / "reference.md"
+    if ref.exists():
+        text += "\n" + ref.read_text()
+    return text
 
 
 # ---------------------------------------------------------------- catalog merge
