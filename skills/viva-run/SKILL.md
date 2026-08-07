@@ -43,19 +43,8 @@ reporting are owned by `/viva-study` (see its "bias to execute" house rule).
 
 1. Walk up from cwd to find `workspace.yaml`.
 2. Read `.pbg/server/server-info` for the dashboard URL.
-3. POST to `<url>/api/composite-test-run`:
-   ```json
-   {
-     "id":      "<composite-id>",
-     "steps":   <N>,
-     "emit_paths": ["stores/fields", ...]   // optional
-   }
-   ```
-4. Parse the response. Print:
-   - `simulation_id`
-   - Number of steps run
-   - List of emitted observable paths (truncated to first 20)
-   - `viz_html` paths bundled with the run (if any)
+3. POST to `<url>/api/composite-test-run` with `{"id": "<composite-id>", "steps": <N>, "emit_paths": [...]}` (`emit_paths` optional). **The run is DETACHED** — the POST returns `202 {"run_id": "...", "status": "running"}`, NOT the observables. Do **not** try to read `simulation_id`/`observables` off this response (it doesn't have them; doing so silently reports "0 observables").
+4. **Poll** `GET <url>/api/composite-run/<run_id>/status` until `status` is `completed` (or `failed`). Then read the emitted observables from the run directory `.pbg/runs/<run_id>/observables.json` (shape `{"fields": {<observable>: <value>, ...}}`), plus any `report.html` / `viz.json` there. Print the run_id, final status, and the observables (first 20).
 5. Suggest follow-ups:
    - `/viva-workbench open --composite <composite-id>` to inspect in the dashboard
    - `/viva-catalog list` if the composite ID was wrong
@@ -98,25 +87,36 @@ if emit != 'null':
 print(json.dumps(b))
 " "$CID" "$STEPS" "$EMIT_JSON")
 
-RESP=$(curl -s -X POST -H "Content-Type: application/json" -d "$BODY" "$URL/api/composite-test-run")
-echo "$RESP" | python3 -c '
-import json, sys
-r = json.load(sys.stdin)
-if "error" in r:
-    print(f"ERROR: {r[\"error\"]}")
-    sys.exit(1)
-print(f"simulation_id: {r.get(\"simulation_id\",\"?\")}")
-print(f"steps:         {r.get(\"steps\",\"?\")}")
-obs = r.get("emitted_paths") or r.get("observables") or []
-print(f"observables ({len(obs)}):")
-for o in obs[:20]:
-    print(f"  - {o}")
-if len(obs) > 20: print(f"  ... +{len(obs)-20} more")
-viz = r.get("viz_html") or []
-if viz:
-    print(f"viz_html ({len(viz)}):")
-    for v in viz: print(f"  - {v}")
-'
+# composite-test-run is DETACHED: POST returns 202 {run_id, status:"running"}.
+RUN_ID=$(curl -s -X POST -H "Content-Type: application/json" -d "$BODY" "$URL/api/composite-test-run" \
+  | python3 -c "import json,sys; r=json.load(sys.stdin); (sys.stderr.write('ERROR: '+r['error']+'\n'), sys.exit(1)) if 'error' in r else print(r.get('run_id',''))")
+[ -n "$RUN_ID" ] || { echo "no run_id returned from composite-test-run" >&2; exit 1; }
+echo "run_id: $RUN_ID  (detached; polling status…)"
+
+# Poll the detached run to completion.
+ST="running"
+for _ in $(seq 1 120); do
+  ST=$(curl -s "$URL/api/composite-run/$RUN_ID/status" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','?'))")
+  [ "$ST" = "completed" ] && break
+  [ "$ST" = "failed" ] && { echo "run failed — see .pbg/runs/$RUN_ID/" >&2; exit 1; }
+  sleep 2
+done
+
+# The detached runner writes results into the run dir; read observables from there.
+python3 -c "
+import json, os, sys
+run_id, status = sys.argv[1], sys.argv[2]
+path = os.path.join('.pbg', 'runs', run_id, 'observables.json')
+print('status: ' + status)
+if not os.path.exists(path):
+    print('(no observables.json at ' + path + ' — check the run dir)'); sys.exit(0)
+fields = (json.load(open(path)) or {}).get('fields', {})
+print('observables (' + str(len(fields)) + '):')
+for k, v in list(fields.items())[:20]:
+    print('  - ' + str(k) + ' = ' + str(v))
+if len(fields) > 20:
+    print('  ... +' + str(len(fields) - 20) + ' more')
+" "$RUN_ID" "$ST"
 echo
 echo "Next: /viva-workbench open --composite $CID  to inspect in the dashboard"
 ```
@@ -130,14 +130,12 @@ echo "Next: /viva-workbench open --composite $CID  to inspect in the dashboard"
 Output:
 
 ```text
-simulation_id: sim-2026-05-13T12:34:56Z
-steps:         10
+run_id: pbg_chromosome_rep1.composites.dnaa-binding__1786129177__354faf  (detached; polling status…)
+status: completed
 observables (3):
-  - stores/dnaa
-  - stores/dnaa/free
-  - stores/dnaa/bound
-viz_html (1):
-  - reports/runs/sim-...html
+  - glucose = 9.595111
+  - biomass = 0.147911
+  - acetate = 0.075864
 
 Next: /viva-workbench open --composite pbg_chromosome_rep1.composites.dnaa-binding  to inspect in the dashboard
 ```

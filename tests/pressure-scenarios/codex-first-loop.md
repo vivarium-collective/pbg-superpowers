@@ -32,11 +32,33 @@ pytest.
 
 ## Record the result here (fill in when run)
 
-- Date / Codex version:
-- Did it honor the gateway (workspace-first, no bare script)? y/n + notes:
-- Which SKILL.md files did it open, and did the idiom map suffice? notes:
-- Where did it stumble (gateway not auto-loaded? idiom gap? dispatch phrasing?):
-- Outcome: **PASS / FAIL**, and the one fix the spike surfaced:
+### 2026-08-07 — PROXY run (NOT real Codex)
+
+Run by a Claude subagent constrained to Codex-like conditions (only `AGENTS.md` +
+reading `SKILL.md` files + shell; no Skill tool / slash commands / superpowers).
+This checks whether the docs are **self-sufficient**; it does not substitute for a
+real Codex session (still TODO).
+
+- **Gateway honored?** ✅ Yes. `AGENTS.md`'s routing table forced workspace-first
+  (no bare script). Opened `viva-workspace`, `viva-workbench`, `viva-catalog`,
+  `viva-run` SKILL.md in order.
+- **Idiom map sufficient?** ✅ For what it hit (ignored `allowed-tools`, read files
+  instead of a Skill tool). The dispatch/`superpowers:` mappings weren't exercised
+  (none of those 4 skills use them).
+- **Loop outcome:** ✅ full loop reached — workspace scaffolded + committed,
+  dashboard served, `spatio-flux` installed, composite ran 5 steps and emitted real
+  observables (`{glucose, biomass, acetate}`).
+- **Stalls it had to route around by reading source (→ now fixed in this PR):**
+  1. `viva-run` + `viva-catalog` one-liners had `\"` inside f-strings → hard
+     `SyntaxError` on copy-paste (all harnesses). **Fixed.**
+  2. `viva-run` documented `/api/composite-test-run` as synchronous; it's
+     **detached** (`202 {run_id}` → poll `/api/composite-run/<id>/status` → read
+     `.pbg/runs/<id>/observables.json`). Following the old doc → silent "0
+     observables". **Fixed.**
+  3. Fresh scaffold ships zero composites, and after `catalog-install` the manifest
+     needs a **server restart** before composites appear. **Noted in viva-catalog.**
+- **Outcome:** **PASS** (docs self-sufficient once the 2 real bugs above are fixed).
+  Real-Codex run still pending.
 
 ## Failure modes to watch (from the scope's risks)
 

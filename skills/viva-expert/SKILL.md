@@ -74,6 +74,8 @@ behavior under a real label — the exact failure the gate above exists to preve
 | "The tests need something runnable, so I'll return canned numbers." | Canned numbers ARE fake behavior; a test passing against them proves nothing about the real tool. |
 | "My NumPy port matches the paper's equations." | A paraphrase of the math is not the tool. The default deliverable drives the genuine installed simulator. |
 | "The real bridge only raises 'requires CUDA' here — close enough to skip it." | Ship the guarded real bridge **and** a labeled `--reproduce` fallback; don't quietly replace the headline class. |
+| "I'll ship a *labeled* fallback (a `solver_backend` field + a log line) under the real `<Tool>Process` name — that's honest enough." | A labeled reimplementation shipped as the headline `<Tool>Process` is still a downgrade without opt-in (observed in a baseline run). The headline class must be the real bridge; a reproduction is the secondary `<Tool>ReproductionProcess`, only with `--reproduce`. |
+| "The user said 'you know it' — they clearly know it's not really the tool, they just want plumbing for the demo." | "You know the math" is not "ship a reimplementation." Surface the blocker and ask for `--reproduce`/`--mock`; don't infer opt-in from a throwaway phrase. |
 
 ### Real-bridge escalation ladder
 

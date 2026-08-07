@@ -49,25 +49,25 @@ curl -sf "$URL/api/workspace-manifest" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 w = d.get("workspace", {})
-print(f"Workspace: {w.get(\"name\",\"?\")}  (branch {w.get(\"branch\",\"?\")}, {d.get(\"health\",{}).get(\"dirty_count\",0)} dirty files)")
-print(f"  package_path: {w.get(\"package_path\",\"\")}")
-print(f"  has_origin:   {\"yes\" if w.get(\"has_origin\") else \"no\"}")
+print(f"Workspace: {w.get('name','?')}  (branch {w.get('branch','?')}, {d.get('health',{}).get('dirty_count',0)} dirty files)")
+print(f"  package_path: {w.get('package_path','')}")
+print(f"  has_origin:   {'yes' if w.get('has_origin') else 'no'}")
 comps = d.get("composites") or []
 print(f"\nComposites ({len(comps)}):")
 for c in comps[:20]:
-    print(f"  - {c[\"id\"]}  {c.get(\"kind\",\"spec\")}  viz_steps={c.get(\"viz_step_count\",0)}   {(c.get(\"description\") or \"\")[:60]}")
+    print(f"  - {c['id']}  {c.get('kind','spec')}  viz_steps={c.get('viz_step_count',0)}   {(c.get('description') or '')[:60]}")
 if len(comps) > 20: print(f"  ... +{len(comps)-20} more")
 studies = d.get("studies") or []
 print(f"\nStudies ({len(studies)}):")
 for s in studies:
-    print(f"  - {s[\"name\"]} [{s.get(\"status\",\"?\")}] variants={s.get(\"n_variants\",0)} runs={s.get(\"n_runs\",0)}")
-    if s.get("topic"): print(f"    topic: {s[\"topic\"]}")
+    print(f"  - {s['name']} [{s.get('status','?')}] variants={s.get('n_variants',0)} runs={s.get('n_runs',0)}")
+    if s.get("topic"): print(f"    topic: {s['topic']}")
 r = d.get("registry") or {}
-print(f"\nRegistry: processes={r.get(\"process_count\",0)} steps={r.get(\"step_count\",0)} emitters={r.get(\"emitter_count\",0)} visualizations={r.get(\"visualization_count\",0)} types={r.get(\"type_count\",0)}")
+print(f"\nRegistry: processes={r.get('process_count',0)} steps={r.get('step_count',0)} emitters={r.get('emitter_count',0)} visualizations={r.get('visualization_count',0)} types={r.get('type_count',0)}")
 sk = d.get("skills") or []
 print(f"\nSkills ({len(sk)}):")
 for s in sk:
-    print(f"  - {s[\"name\"]}: {(s.get(\"description\") or \"\")[:80]}")
+    print(f"  - {s['name']}: {(s.get('description') or '')[:80]}")
 '
 ```
 
@@ -86,6 +86,11 @@ curl -s -X POST -H "Content-Type: application/json" -d "$BODY" \
 
 The endpoint commits via `_active_branch_action` — if no workstream is
 active it will fail; ask the user to start one first.
+
+**After install, the newly-installed module's composites do not appear in
+`/api/workspace-manifest` until the server reloads.** Restart it
+(`/viva-workbench restart`) before `/viva-catalog list` or `/viva-run` will
+see them — otherwise the manifest still shows the old (often empty) set.
 
 The catalog itself lives at `scripts/_catalog/modules.json` inside the
 workspace. Browse names with `jq '.[].name' scripts/_catalog/modules.json`
