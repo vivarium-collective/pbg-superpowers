@@ -172,7 +172,16 @@ def _workspace_packages(wp: WorkspacePaths) -> list[str]:
     its ``.composites`` subpackage in the discovery import set."""
     out: list[str] = []
     try:
-        name = wp.package.name
+        pkg = wp.package
+        name = pkg.name
+        # Migration window: wp.package now computes the canonical viva_<slug>,
+        # but a not-yet-migrated workspace may still ship pbg_<slug>/ on disk.
+        # Prefer the directory that actually exists so discovery imports the
+        # real package (an explicit package_path override is left untouched).
+        if name.startswith("viva_") and not pkg.is_dir():
+            legacy = wp.root / ("pbg_" + name[len("viva_"):])
+            if legacy.is_dir():
+                name = legacy.name
         if name:
             out.append(name)
             out.append(f"{name}.composites")

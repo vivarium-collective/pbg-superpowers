@@ -409,7 +409,7 @@ def main(argv=None) -> int:
     if args.all:
         dirs = list(paths.iter_study_dirs())
     else:
-        dirs = [paths.study_dir(args.study)]
+        dirs = [paths.study_dir(args.study, must_exist=True)]
 
     total = {"filled": 0, "skipped": 0}
     for d in dirs:

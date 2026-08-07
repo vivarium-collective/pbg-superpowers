@@ -66,20 +66,25 @@ def clear_workspace_evaluator_cache() -> None:
 
 
 def _workspace_package_slug(ws_root: Any) -> str:
-    """pbg_<name> for the workspace, mirroring build_core()'s home.
+    """Importable package name for the workspace, mirroring build_core()'s home.
 
-    NOTE: deliberately uses the pbg_<name> convention (where build_core lives),
-    NOT workspace.yaml `package_path` (which points at the simulation package,
-    e.g. v2ecoli). dashes -> underscores.
+    Canonical is ``viva_<name>`` (post-rebrand), but a not-yet-migrated workspace
+    may still ship ``pbg_<name>/`` on disk. ``resolve_package_dir`` returns
+    whichever exists (viva_ preferred, pbg_ recognized during the migration
+    window), so the evaluators hook imports the real package. Uses the workspace
+    ``name`` (where build_core lives), NOT workspace.yaml `package_path` (which
+    points at the simulation package, e.g. v2ecoli). dashes -> underscores.
     """
     import yaml
     from pathlib import Path
+
+    from viva_workspace import resolve_package_dir
     name = "workspace"
     wy = Path(ws_root) / "workspace.yaml"
     if wy.is_file():
         data = yaml.safe_load(wy.read_text(encoding="utf-8")) or {}
         name = data.get("name") or name
-    return "pbg_" + str(name).replace("-", "_")
+    return resolve_package_dir(ws_root, name).name
 
 
 def load_workspace_evaluators(ws_root: Any) -> dict[str, Callable]:

@@ -2206,7 +2206,7 @@ wheels = [
 
 [[package]]
 name = "viva-superpowers"
-version = "0.21.0"
+version = "0.22.0"
 source = { editable = "." }
 dependencies = [
     { name = "bigraph-schema" },
@@ -2218,6 +2218,7 @@ dependencies = [
     { name = "pypdf" },
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
+    { name = "viva-workspace" },
 ]
 
 [package.optional-dependencies]
@@ -2253,8 +2254,17 @@ requires-dist = [
     { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruamel-yaml", specifier = ">=0.18" },
+    { name = "viva-workspace", git = "https://github.com/vivarium-collective/viva-workspace.git?branch=main" },
 ]
 provides-extras = ["dev", "evaluator", "processes", "events"]
+
+[[package]]
+name = "viva-workspace"
+version = "0.1.0"
+source = { git = "https://github.com/vivarium-collective/viva-workspace.git?branch=main#1375b01910eb29aef3ab95f18a67d09d037276f3" }
+dependencies = [
+    { name = "pyyaml" },
+]
 
 [[package]]
 name = "webcolors"

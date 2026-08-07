@@ -125,7 +125,7 @@ def _main(argv=None) -> int:
     root = Path(args.workspace).resolve() if args.workspace else find_workspace_root(Path.cwd())
     wp = WorkspacePaths.load(root)
     if args.study:
-        print(wp.study_dir(args.study))
+        print(wp.study_dir(args.study, must_exist=True))
         return 0
     if args.env:
         for key in list(LAYOUT_DEFAULTS) + ["package"]:
