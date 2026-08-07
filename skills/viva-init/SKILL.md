@@ -1,12 +1,12 @@
 ---
 name: viva-init
-description: Install viva-* skills into ~/.claude/skills/ so Claude can invoke /viva-catalog, /viva-run, /viva-study, and the other dashboard-driving skills. One-shot setup per machine.
+description: Use when setting up a machine so Claude can invoke the /viva-* skills — a one-shot per-machine install of the skills into ~/.claude/skills/.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
 argument-hint: (no args)
 ---
 
-# viva-init
+# /viva-init
 
 One-shot installer that makes every `viva-*` skill in this plugin available
 to Claude in any conversation, regardless of cwd.

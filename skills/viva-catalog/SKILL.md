@@ -1,15 +1,14 @@
 ---
 name: viva-catalog
-description: Browse and mutate the workspace module catalog — list installed/available modules, install one, or uninstall one. Subcommands list (default), install <pkg>, uninstall <pkg>. Wraps /api/workspace-manifest, /api/catalog-install, /api/catalog-uninstall.
+description: Use when the user wants to browse the workspace module catalog, or install or uninstall a workspace module — checking what's installed/available, adding a curated package to a workspace, or removing one.
 user-invocable: true
 allowed-tools: Bash(*) Read
 argument-hint: "[list | install <pkg> | uninstall <pkg>]"
 ---
 
-# viva-catalog
+# /viva-catalog
 
-Single front door for the workspace catalog. Replaces the trio
-`/pbg-list`, `/pbg-install`, `/pbg-uninstall` from v0.8.x.
+Single front door for the workspace catalog.
 
 ## Subcommands
 
@@ -136,7 +135,5 @@ Skills (11):
 
 ## Notes
 
-- Replaces the v0.8.x trio `/pbg-list`, `/pbg-install`, `/pbg-uninstall`.
 - For an external `pbg-*` repo audit (NOT a workspace module), use the
-  maintainer script `python scripts/audit-pbg-repo.py <repo>` (formerly
-  the `/pbg-package` skill).
+  maintainer script `python scripts/audit-pbg-repo.py <repo>`.

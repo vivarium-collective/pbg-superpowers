@@ -21,13 +21,13 @@ def test_scaffold_creates_expected_files(tmp_path, plugin_root):
     _scaffold_model(target, plugin_root)
     must_exist = [
         "pyproject.toml", "README.md", ".gitignore",
-        "pbg_ecoli_replication/__init__.py",
-        "pbg_ecoli_replication/core.py",
-        "pbg_ecoli_replication/wiring.py",
-        "pbg_ecoli_replication/adapters.py",
-        "pbg_ecoli_replication/stubs.py",
-        "pbg_ecoli_replication/document.py",
-        "pbg_ecoli_replication/types.py",
+        "viva_ecoli_replication/__init__.py",
+        "viva_ecoli_replication/core.py",
+        "viva_ecoli_replication/wiring.py",
+        "viva_ecoli_replication/adapters.py",
+        "viva_ecoli_replication/stubs.py",
+        "viva_ecoli_replication/document.py",
+        "viva_ecoli_replication/types.py",
         "tests/__init__.py",
         "tests/test_assembly.py",
         "tests/test_adapters.py",
@@ -42,16 +42,16 @@ def test_scaffold_creates_expected_files(tmp_path, plugin_root):
     # No .j2 files left
     assert not list(target.rglob("*.j2"))
     # Placeholder dir has been renamed
-    assert not (target / "pbg_<model>").exists()
+    assert not (target / "viva_<model>").exists()
 
 
 def test_placeholder_substitution(tmp_path, plugin_root):
     target = tmp_path / "m"
     _scaffold_model(target, plugin_root, name="ecoli-replication", slug="ecoli_replication")
     pyproj = (target / "pyproject.toml").read_text()
-    assert "name = \"pbg_ecoli_replication\"" in pyproj
+    assert "name = \"viva_ecoli_replication\"" in pyproj
     assert "ecoli-replication" in pyproj  # description uses model_name
-    core = (target / "pbg_ecoli_replication" / "core.py").read_text()
+    core = (target / "viva_ecoli_replication" / "core.py").read_text()
     # Placeholders gone
     assert "{{" not in core and "}}" not in core
 

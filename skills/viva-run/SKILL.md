@@ -1,12 +1,12 @@
 ---
 name: viva-run
-description: Run a composite from the workspace catalog for N steps and report emitted observables. POSTs /api/composite-test-run.
+description: Use when the user wants to smoke-test a composite from the workspace catalog directly — run it for N steps and see what observables it emits — without creating or touching a Study.
 user-invocable: true
 allowed-tools: Bash(*) Read
 argument-hint: <composite-id> [--steps N] [--emit p1,p2,...]
 ---
 
-# viva-run
+# /viva-run
 
 Run a composite (spec or generator) for `N` steps and print a summary of
 the emitted observables. Wraps `/api/composite-test-run`.

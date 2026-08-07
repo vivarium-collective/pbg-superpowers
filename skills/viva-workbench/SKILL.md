@@ -1,20 +1,18 @@
 ---
 name: viva-workbench
-description: Start / stop / open the interactive vivarium-workbench server (the side-rail-tabbed UI — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB) and use its session-per-tab model — one workspace per browser tab, opened from the workspace switcher. This is the server every dashboard-touching skill depends on, and it also serves the study reports. Subcommands start, stop, status, open, restart. (Formerly /pbg-dashboard.)
+description: Use when the interactive vivarium-workbench dashboard server needs to be started, stopped, checked, opened in a browser, or restarted — the server every dashboard-touching skill and the study reports depend on.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
 argument-hint: start|stop|status|open|restart [--port N] [--browser] [--investigation SLUG]
 ---
 
-# viva-workbench
+# /viva-workbench
 
 Transversal skill (no stage). Manages the interactive **vivarium-workbench**
 server: the UI you actually look at to drive a workspace — Investigations,
-Studies, Simulations DB, Visualizations, Composites, GitHub Branches.
-
-> **Renamed from `/pbg-dashboard`.** The product is the **workbench**
-> (`vivarium-workbench` pip package); "dashboard" is the legacy name. The old
-> `/pbg-dashboard` alias has been removed — use `/viva-workbench`.
+Studies, Simulations DB, Visualizations, Composites, GitHub Branches. Also
+handles its session-per-tab model — one workspace per browser tab, opened
+from the workspace switcher.
 
 > **Serves reports too.** The workbench also serves the static
 > `reports/index.html` (and mirrors stage-skill guidance into it). The old

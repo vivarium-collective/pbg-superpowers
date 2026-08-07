@@ -1,14 +1,18 @@
 ---
 name: viva-workspace
-description: "Scaffold a process-bigraph research workspace. Three modes: (1) upstream-branch — clone a repo and create a workspace branch on top; (2) standalone — clone pbg-template directly; (3) in-place — promote an existing git checkout into a workspace branch without cloning."
+description: "Use when starting new process-bigraph modeling work and no workspace exists yet — bootstrapping a fresh research workspace by branching off an upstream model repo, cloning the template standalone, or promoting an existing git checkout in place."
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: <workspace-name> [target-dir] [--upstream <repo>] [--branch <name>] [--in-place]
 ---
 
-# viva-workspace
+# /viva-workspace
 
 Bootstrap stage. Operates on a brand-new workspace directory.
+
+Three modes: (1) upstream-branch — clone a repo and create a workspace branch
+on top; (2) standalone — clone `pbg-template` directly; (3) in-place — promote
+an existing git checkout into a workspace branch without cloning.
 
 ## Which mode? (decision tree)
 
@@ -18,9 +22,9 @@ shapes.
 
 | Starting state | Mode | Command |
 |---|---|---|
-| **No directory yet, no upstream model repo** | standalone | `pbg-workspace <name>` |
-| **No directory yet, want to branch off existing repo** | upstream-branch | `pbg-workspace <name> --upstream owner/repo` |
-| **Already inside a git checkout you want to promote** | in-place | `pbg-workspace <name> --target . --in-place` |
+| **No directory yet, no upstream model repo** | standalone | `/viva-workspace <name>` |
+| **No directory yet, want to branch off existing repo** | upstream-branch | `/viva-workspace <name> --upstream owner/repo` |
+| **Already inside a git checkout you want to promote** | in-place | `/viva-workspace <name> --target . --in-place` |
 
 The in-place mode is the right answer for composite-only repos (`pbg-mem3dg`,
 `pbg-membrane-actin-composite`, etc.) that already have their own README,

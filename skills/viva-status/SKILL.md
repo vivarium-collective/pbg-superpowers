@@ -1,12 +1,12 @@
 ---
 name: viva-status
-description: Quick "is this a pbg workspace?" status check. Detects workspace.yaml in cwd or ancestor dirs, reports dashboard-server liveness, study count, active branch, and git status. Use when starting work in a directory or troubleshooting workspace detection.
+description: Use when starting work in a directory and needing to know whether it's a viva workspace, or when troubleshooting workspace detection or dashboard-server status — reports workspace.yaml presence, dashboard-server liveness, study count, active branch, and git status.
 user-invocable: true
 allowed-tools: Bash(*) Read
 argument-hint: (no args)
 ---
 
-# viva-status
+# /viva-status
 
 Read-only diagnostic skill. Detects the nearest pbg workspace, checks the
 dashboard server, reports study counts, and prints git state.  Works even
@@ -53,7 +53,7 @@ Then check `~/.pbg/workspaces.json` for registered workspaces and print them:
 catalog (~/.pbg/workspaces.json): 3 registered workspaces:
   - v2ecoli-workspace  /Users/you/code/v2ecoli-workspace  (last_opened: 2026-05-15)
   - viva-munk          /Users/you/code/viva-munk          (last_opened: 2026-05-15)
-  - pbg-biomodels      /Users/you/code/pbg-biomodels
+  - viva-biomodels     /Users/you/code/viva-biomodels
 next:
   /viva-workspace <name> --upstream <repo>   # scaffold a sibling workspace
   /viva-workspace <name> --in-place          # turn this existing checkout into a workspace
@@ -295,7 +295,7 @@ studies: 6 total  (draft: 6)
 catalog (~/.pbg/workspaces.json): 3 registered workspaces:
   - v2ecoli-workspace      /Users/you/code/v2ecoli-workspace  (last_opened: 2026-05-15)
   - viva-munk              /Users/you/code/viva-munk          (last_opened: 2026-05-15)
-  - pbg-biomodels          /Users/you/code/pbg-biomodels
+  - viva-biomodels         /Users/you/code/viva-biomodels
 next:
   /viva-workspace <name> --upstream <repo>   # scaffold a sibling workspace
   /viva-workspace <name> --in-place          # promote this checkout into a workspace

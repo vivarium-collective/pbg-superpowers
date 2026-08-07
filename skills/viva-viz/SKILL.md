@@ -1,6 +1,6 @@
 ---
 name: viva-viz
-description: Generate a v2 Visualization (decorated function) into the workspace package from a natural-language description. Push for the most creative, interactive, and informative figure the data supports — not a default line chart. Take the initiative to build a visualization whenever one would make a finding clearer.
+description: Use when a study finding, run result, or composite state would be clearer as a figure — or when a study has runs but no attached Visualization.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit
 argument-hint: <visualization-name>
@@ -10,6 +10,11 @@ argument-hint: <visualization-name>
 
 This skill turns a natural-language visualization request into a committed
 Visualization v2 class inside the workspace's Python package.
+
+**Push for the most creative, interactive, and informative figure the data
+supports — not a default line chart.** Take the initiative to build a
+visualization whenever one would make a finding clearer, rather than waiting
+to be asked.
 
 **The bar is high.** A visualization exists to make a finding *obvious* to a
 reviewer who has not lived inside the simulation. A bare line of one observable

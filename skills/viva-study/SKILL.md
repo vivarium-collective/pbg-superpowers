@@ -1,12 +1,12 @@
 ---
 name: viva-study
-description: Manage Studies in the dashboard — organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). Full CRUD for baseline composites, variants, interventions, runs, and conclusions. Wraps the v3 /api/study-* endpoints.
+description: Use when managing a Study through its lifecycle (Design → Build → Simulate → Evaluate → Decide) in the workbench — creating or editing baseline composites, variants, interventions, runs, findings, and conclusions on a study.yaml.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
 argument-hint: new <name> <composite>|fill-overview|set-objective|baseline-add|baseline-remove|variant-add|variant-set-params|variant-delete|intervention-add|intervention-update|intervention-delete|verify|preview-viz|run-baseline|run-variant|run-script|refresh-viz|clean|set-conclusion|set-verdicts|add-literature-anchor|add-pivot|add-requirement|findings|propose-followup|seed-from-followup [--from-finding F-NN]|feedback-respond <slug> [--apply]|open [args]
 ---
 
-# viva-study
+# /viva-study
 
 The end-to-end interface for **Studies** in the vivarium-workbench, organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide; see [`docs/concepts/vivarium-workbench-model.md`](../../docs/concepts/vivarium-workbench-model.md#study-lifecycle)).
 

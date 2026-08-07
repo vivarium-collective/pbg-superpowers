@@ -1,6 +1,6 @@
 ---
 name: viva-cite-bands
-description: Guided band-provenance extraction — surface candidate evidence from expert PDFs for uncited acceptance bands and write structured cites/calibration_anchor provenance into study.yaml (spine stage #3b). The agent reads and judges; the workbench API does the reading, writing and validation.
+description: Use when a study's acceptance bands lack provenance — uncited numeric thresholds a reviewer would question, or expert PDFs whose values should back the bands.
 user-invocable: true
 allowed-tools: Bash(*) Read Edit
 argument-hint: "<study-slug>"
@@ -8,13 +8,13 @@ argument-hint: "<study-slug>"
 
 # /viva-cite-bands
 
-Guides the agent through sourcing the acceptance bands in a study's
-`behavior_tests[]` / `tests[]` that lack a `cites` bib_key.  The AI does
-the reading and judgment; the vivarium-workbench API surfaces candidates,
-writes the provenance, and validates.
+Guided band-provenance extraction: guides the agent through sourcing the
+acceptance bands in a study's `behavior_tests[]` / `tests[]` that lack a
+`cites` bib_key.  The AI does the reading and judgment; the vivarium-workbench
+API surfaces candidates, writes the provenance, and validates.
 
 **Dashboard-AI-free rule:** the AI reasoning stays entirely in this skill
-(pbg-superpowers).  The workbench only serves deterministic reads/writes —
+(viva-superpowers).  The workbench only serves deterministic reads/writes —
 no judgment happens server-side.  All writes go through `POST
 /api/band-provenance` (never hand-edited YAML, never a client-side
 reimplementation of the write).

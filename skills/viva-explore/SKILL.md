@@ -1,6 +1,6 @@
 ---
 name: viva-explore
-description: Launch the dashboard's Composite Explorer for a specific composite spec id. Ensures the dashboard server is up, opens the explorer URL in focus mode. Usage `/viva-explore <spec-id>`.
+description: Use when the user wants to visually inspect a specific composite spec id in the dashboard's Composite Explorer — e.g. after running or authoring a composite and wanting to see its wiring in focus mode.
 user-invocable: true
 allowed-tools: Bash(*) Read
 argument-hint: <spec-id>
