@@ -67,6 +67,7 @@ cd "$DIR"
 INFO=".pbg/server/server-info"
 [ -f "$INFO" ] || { echo "ERROR: dashboard server not running. Run /viva-workbench start"; exit 1; }
 URL="$(python3 -c "import json; print(json.load(open('$INFO'))['url'])")"
+python3 -m viva_superpowers.server_preflight --url "$URL" || true  # version-skew preflight (warns; never fails)
 ```
 
 ## Pass A — Reviewer-readiness audit (NEW)
