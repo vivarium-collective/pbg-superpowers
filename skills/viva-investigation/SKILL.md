@@ -1,12 +1,12 @@
 ---
 name: viva-investigation
-description: "Manage Investigations — named collections of Studies grouped under a shared research question. Subcommands: new, open, list, add-study, remove-study, set-overview, set-status, scaffold-from-plan, run, close."
+description: "Use when grouping multiple Studies under a shared research question — creating an Investigation, listing or adding/removing member studies, orchestrating a run across all of them, or closing an Investigation out with a report and PR."
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: <subcmd> [args...]
 ---
 
-# viva-investigation
+# /viva-investigation
 
 The interface for **Investigations** in the vivarium-workbench: named collections of studies that together answer a higher-level research question.
 

@@ -1,12 +1,19 @@
 ---
 name: viva-report
-description: Regenerate the workspace dashboard + per-investigation reports. Runs a reviewer-readiness audit FIRST (Pass A — verdict ↔ chart drift, stale framings, demoted-chart citations, uncommitted state, suggested follow-ups, AND required proposals for new visualizations a reviewer should consider), THEN the structural lint (Pass B — schema correctness, status contradictions, placeholders), then renders. Use BEFORE sending the report to an external reviewer. Idempotent.
+description: Use when the dashboard or a per-investigation report needs to be regenerated after new results, or before sending a report to an external reviewer — runs a reviewer-readiness audit and a structural lint first, then renders.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: [model-name | --all | --audit | --lint | --force | --skip-audit]
 ---
 
-# viva-report
+# /viva-report
+
+Regenerates the workspace dashboard + per-investigation reports. Runs a
+reviewer-readiness audit FIRST (Pass A — verdict ↔ chart drift, stale
+framings, demoted-chart citations, uncommitted state, suggested follow-ups,
+AND required proposals for new visualizations a reviewer should consider),
+THEN the structural lint (Pass B — schema correctness, status
+contradictions, placeholders), then renders. Idempotent.
 
 Transversal skill (no stage). Run **before sending the report to an external reviewer** (e.g. Chris on a PR) OR at end-of-stage to refresh the dashboards.
 

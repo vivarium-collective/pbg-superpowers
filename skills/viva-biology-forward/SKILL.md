@@ -1,6 +1,6 @@
 ---
 name: viva-biology-forward
-description: Author the mechanism prose for study findings — fills the quantitative slots (evidence.observed, expected.range, divergence_factor) via the workbench API then guides the agent to write the biological interpretation (statement/summary/explanation/status) over that scaffold (spine stage #5).
+description: Use when a study has computed outcomes but its findings lack biological interpretation — empty or placeholder statement/summary/explanation fields, numbers without mechanism, or a reviewer asking "what does this mean biologically?"
 user-invocable: true
 allowed-tools: Bash(*) Read Edit
 argument-hint: "<study-slug>"
@@ -10,7 +10,10 @@ argument-hint: "<study-slug>"
 
 Brings the quantitative biology forward into the structured finding slots the
 report renderer already draws, then guides the agent to author the mechanism
-prose using the auto-filled numbers as a scaffold.
+prose using the auto-filled numbers as a scaffold. Fills the quantitative
+slots (`evidence.observed`, `expected.range`, `divergence_factor`) via the
+workbench API, then guides the agent to write the biological interpretation
+(statement/summary/explanation/status) over that scaffold.
 
 **Architecture:**
 - **Deterministic part** (code-owned, never hand-edit): the workbench's

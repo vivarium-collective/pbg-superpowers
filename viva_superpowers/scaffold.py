@@ -1,7 +1,7 @@
-"""Scaffold a workspace by copying pbg-template's payload and rendering it.
+"""Scaffold a workspace by copying viva-template's payload and rendering it.
 
-pbg-template nests its scaffold payload under a `template/` subdir; the repo
-root holds only pbg-template's own dev infra and the GitHub "Use this template"
+viva-template nests its scaffold payload under a `template/` subdir; the repo
+root holds only viva-template's own dev infra and the GitHub "Use this template"
 entry point. The plugin scaffolder copies `template/`'s contents directly.
 
 Two modes:
@@ -22,10 +22,10 @@ from pathlib import Path
 import click
 
 
-# Requires pbg-template at the payload-boundary restructure (commit on or
+# Requires viva-template at the payload-boundary restructure (commit on or
 # after 2026-05-12) or later — earlier versions lack the template/ subdir
 # and will fail because that subdir is absent.
-DEFAULT_REMOTE = "https://github.com/vivarium-collective/pbg-template.git"
+DEFAULT_REMOTE = "https://github.com/vivarium-collective/viva-template.git"
 
 
 def _looks_like_path(s: str) -> bool:
@@ -46,7 +46,7 @@ def _resolve_source(source: str | None) -> str:
 
 
 def _acquire(source: str, target: Path) -> None:
-    """Land the contents of pbg-template's `template/` subdir into `target`."""
+    """Land the contents of viva-template's `template/` subdir into `target`."""
     if _looks_like_path(source):
         src = Path(os.path.expanduser(source)).resolve()
         if not src.is_dir():
@@ -60,7 +60,7 @@ def _acquire(source: str, target: Path) -> None:
                         ignore=shutil.ignore_patterns(".git"))
     else:
         with tempfile.TemporaryDirectory() as tmp:
-            clone_dir = Path(tmp) / "pbg-template"
+            clone_dir = Path(tmp) / "viva-template"
             try:
                 subprocess.run(
                     ["git", "clone", "--depth", "1", source, str(clone_dir)],
@@ -110,7 +110,7 @@ def scaffold_workspace(target: Path, workspace_name: str, source: str | None = N
 # In-place workspace promotion (Slice A of the mem3dg-readdy onboarding fix)
 # ---------------------------------------------------------------------------
 
-# Files in pbg-template's `template/` tree that MUST NOT be copied into an
+# Files in viva-template's `template/` tree that MUST NOT be copied into an
 # existing repo — they would clobber the repo's own README, pyproject, etc.
 # Encoded here rather than in prose so the conflict set is a single source of
 # truth; the friction log §5 lists these with rationales.
@@ -340,10 +340,10 @@ def scaffold_workspace_in_place(
             f"git checkout -B {branch} failed: {e.stderr.decode(errors='replace')}"
         )
 
-    # Acquire pbg-template into a temp dir; we copy from there selectively.
+    # Acquire viva-template into a temp dir; we copy from there selectively.
     src = _resolve_source(template_source)
     with tempfile.TemporaryDirectory() as tmp:
-        staging = Path(tmp) / "pbg-template-staging"
+        staging = Path(tmp) / "viva-template-staging"
         _acquire(src, staging)
 
         # Copy every file in template/ EXCEPT the conflict set + template-init.sh.
@@ -412,7 +412,7 @@ def scaffold_workspace_in_place(
             ["git", "-C", str(workspace_root), "commit",
              "-m", f"feat: workspace bootstrap (pbg-superpowers --in-place)\n\n"
                    f"Promoted to workspace via scaffold_workspace_in_place "
-                   f"from pbg-template. Branch: {branch}. Package: {pkg_slug}."],
+                   f"from viva-template. Branch: {branch}. Package: {pkg_slug}."],
             check=True, capture_output=True,
         )
     except subprocess.CalledProcessError as e:
@@ -483,7 +483,7 @@ def _normalize_workspace_name(raw: str) -> str:
 @cli.command()
 @click.option("--name", required=True, help="Workspace name (without pbg- prefix; the python package will be pbg_<name>)")
 @click.option("--target", required=True, type=click.Path(path_type=Path), help="Target directory (must not exist or be empty)")
-@click.option("--template-source", default=None, help="Path or git URL of pbg-template (default: $VIVA_TEMPLATE (or $PBG_TEMPLATE) or upstream)")
+@click.option("--template-source", default=None, help="Path or git URL of viva-template (default: $VIVA_TEMPLATE (or $PBG_TEMPLATE) or upstream)")
 @click.option("--in-place", "in_place", is_flag=True, default=False,
               help="Promote an existing git checkout into a workspace branch (see /viva-workspace --in-place docs).")
 @click.option("--branch", default=None, help="Branch name for --in-place mode (default: <repo-name>-workspace).")
@@ -535,10 +535,10 @@ def _render_template_tree(src: Path, dst: Path, substitutions: dict) -> None:
 
 
 def _rename_placeholder_pkg(target: Path, slug: str) -> None:
-    """Rename the literal `pbg_<model>` dir to `pbg_<slug>`."""
-    placeholder = target / "pbg_<model>"
+    """Rename the literal `viva_<model>` dir to `viva_<slug>`."""
+    placeholder = target / "viva_<model>"
     if placeholder.exists():
-        placeholder.rename(target / f"pbg_{slug}")
+        placeholder.rename(target / f"viva_{slug}")
 
 
 @cli.command()

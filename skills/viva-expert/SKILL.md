@@ -1,20 +1,10 @@
 ---
 name: viva-expert
 description: >
-  Process-bigraph API expert for wrapping simulation tools as process-bigraph Steps or Processes,
-  OR composing multiple wrapped simulators. By DEFAULT it wraps the ACTUAL upstream simulator —
-  clone it, build/install it, and bridge to the real binary/library — and keeps trying even when
-  that is difficult. It does NOT fall back to a mock/stub on its own; producing fake behavior is
-  always an explicit opt-in. Only reimplement the science yourself when explicitly told to
-  (--reproduce), and only emit a non-functional placeholder when explicitly told to (--mock).
-  Heavy mode (default) creates a sibling viva-<name>/ repo with tests, README, a showcase
-  investigation with studies and interactive viz, and a published read-only workbench, plus a
-  local commit. Lightweight mode (--lightweight, alias --in-workspace) writes a single file inside
-  the current workspace's viva_<slug>/ package and a test, with no sibling repo, no publish, no
-  commit — and still bridges the real tool by default. Reproduce mode (--reproduce, alias
-  --reimplement) builds a clearly-labeled clean-room <Tool>ReproductionProcess instead of bridging
-  the real tool. Mock mode (--mock, alias --stub) builds an explicitly-labeled non-functional
-  <Tool>MockProcess placeholder for scaffolding/wiring only — never the default.
+  Use when wrapping any simulation tool (ODE/FBA/particle/spatial solver, binary, or library) as a
+  process-bigraph Step/Process, or composing wrapped simulators into a Composite — including when
+  the build looks hard or you are tempted to reimplement or mock it instead of bridging the real
+  tool. Modes and fidelity rules are in the skill body.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit Glob Grep Agent WebFetch WebSearch
 effort: high
@@ -1064,10 +1054,6 @@ vivarium-workbench's workspace switcher and Composites tab. This is
 **not optional** — viva-* repos are workspace-shaped by convention.
 
 ```bash
-# Resolve a Python that has pbg-superpowers (often a sibling venv). The
-# local checkout directory is still named pbg-superpowers even though the
-# GitHub repo and PyPI project were renamed to viva-superpowers/pbg-superpowers
-# respectively — adjust the fallback path if your machine differs.
 # Scaffold in place. Default would create a `<repo>-workspace` branch; for a
 # fresh single-developer wrapper, stay on main by passing --branch main.
 vwb scaffold-workspace \
@@ -1818,8 +1804,6 @@ investigation + publish, sibling repo, commit), not the fidelity of the
 wrapper. Emit a placeholder
 only under `--mock` (see below).
 
-(Replaces the v0.8.x skills `/pbg-wrapper` and `/pbg-composer`.)
-
 ### Common preconditions
 
 1. Walk up from cwd to find `workspace.yaml`. Fail with a clear message if absent.
@@ -1830,7 +1814,7 @@ only under `--mock` (see below).
 
 ### Lightweight single-tool form
 
-`/viva-expert --lightweight <tool>` (replaces `/pbg-wrapper <tool>`)
+`/viva-expert --lightweight <tool>`
 
 Default (real bridge) steps:
 
@@ -1893,7 +1877,7 @@ explicitly asks for a scaffold.
 
 ### Lightweight composite form
 
-`/viva-expert --lightweight <name> <tool1> <tool2> [...]` (replaces `/pbg-composer <name> <tools…>`)
+`/viva-expert --lightweight <name> <tool1> <tool2> [...]`
 
 Two or more `<tool>` args after `<name>`. Each `<tool>` must be an already-installed importable package (e.g. `viva_tellurium`). If any is missing, abort and direct the user at `/viva-catalog install <pkg>` or the Registry tab.
 

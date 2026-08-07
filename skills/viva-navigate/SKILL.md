@@ -1,12 +1,12 @@
 ---
 name: viva-navigate
-description: Read-only navigation of the workspace knowledge graph (the SP4a linkage index) plus the SP5 "decisions needed" scan. Lead with `decisions <inv>` — the ranked list of what needs your decision (uncovered ACs, verdict divergence, open feedback, param drift, stale findings). Also surfaces the cheap reverse queries that today need grep — the AC→study gating matrix + unlinked-AC gaps, which studies cite a source, which findings measure an observable, and a study's prerequisite DAG. Pure deterministic query, no AI, no writes. Wraps GET /api/linkage-index (ac_gating_matrix, studies_for_source, findings_for_observable, study_dag, studies_for_observable, composite_emits) and GET /api/needs-attention (the decisions-needed scan).
+description: Use when you need read-only answers about the workspace knowledge graph without running anything — the AC→study gating matrix and unlinked-AC gaps, which studies cite a source, which findings measure an observable, a study's prerequisite DAG, or the ranked "decisions needed" list for an investigation.
 user-invocable: true
 allowed-tools: Bash(*) Read
 argument-hint: decisions <inv> | ac-gaps <inv> | source <bib_key> | finding-by-observable <token> | dag <inv> | observable <token> | composite <id>
 ---
 
-# viva-navigate
+# /viva-navigate
 
 Transversal, **read-only** skill. Queries the workspace **linkage index** — a
 derived, ephemeral knowledge graph over the YAML (studies ↔ composites ↔
@@ -16,15 +16,15 @@ dashboard computes server-side so you don't have to grep.
 
 **Lead with `decisions <inv>`.** When you arrive at an investigation, the first
 question is "what needs my decision?" — so run the **decisions-needed scan**
-first. It aggregates the divergences/gaps SP1–SP4 already compute into one ranked
-list (it makes no new judgment — it gathers + ranks existing signals). The other
-subcommands answer the follow-up "where does this link?" questions.
+first. It aggregates the divergences/gaps the linkage index already computes into
+one ranked list (it makes no new judgment — it gathers + ranks existing signals).
+The other subcommands answer the follow-up "where does this link?" questions.
 
-Every subcommand calls the dashboard: `GET /api/linkage-index` (SP4a/SP4b
-linkage + navigate queries, param-dispatched) or `GET /api/needs-attention`
-(the SP5 decisions-needed scan) — the same deterministic derive the old
-in-process helpers computed, now TTL-cached server-side. This requires the
-dashboard server to be running (see preamble below).
+Every subcommand calls the dashboard: `GET /api/linkage-index` (the linkage +
+navigate queries, param-dispatched) or `GET /api/needs-attention` (the
+decisions-needed scan) — the same deterministic derive the old in-process
+helpers computed, now TTL-cached server-side. This requires the dashboard
+server to be running (see preamble below).
 
 ## Subcommands
 
