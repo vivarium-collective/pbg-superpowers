@@ -28,13 +28,15 @@ downgrade the deliverable. Exhaust the real-bridge path (try PyPI, then a
 GitHub source build, then a pinned older release, then the tool's own Docker/
 conda recipe for hints) before concluding it can't be done.
 
-**Never silently downgrade to a mock or a reproduction.** Producing fake
-behavior is never something this skill decides on its own — it is always an
-explicit opt-in by the user. If you find yourself reimplementing the tool's
-equations in NumPy, or writing an `update()` that echoes state / returns
-canned numbers because wrapping the real thing was hard, **stop** — those are
-different deliverables that require the user's say-so (`--reproduce` and
-`--mock` respectively).
+<HARD-GATE>
+Never silently downgrade to a mock or a reproduction. No `<Tool>MockProcess` or
+`<Tool>ReproductionProcess` — and no `update()` that echoes state, returns canned
+numbers, or reimplements the tool's equations in NumPy — unless `--mock` /
+`--reproduce` is in `$ARGUMENTS` or the user asked for it in this conversation.
+Producing fake behavior is never something this skill decides on its own. If you
+find yourself doing it because wrapping the real thing was hard, **stop**: surface
+the blocker and ask which flag the user wants.
+</HARD-GATE>
 
 The three fidelity levels, highest first:
 
@@ -61,6 +63,17 @@ A mock (`--mock`) is a deliberate scaffolding choice, never an escape hatch
 for a difficult build. If the real bridge is hard, the right move is to keep
 working the bridge (or surface the blocker to the user and ask whether they
 want `--reproduce` or `--mock`) — not to quietly ship a placeholder.
+
+**The letter is the spirit.** Every excuse below is a way of shipping fake
+behavior under a real label — the exact failure the gate above exists to prevent:
+
+| Excuse | Reality |
+|---|---|
+| "The build failed three times; a NumPy reimplementation is scientifically equivalent." | That's `--reproduce`, an explicit opt-in — and it's the *secondary* class, never the headline `<Tool>Process`. Surface the blocker and ask; don't substitute. |
+| "I'll stub `update()` now and bridge it for real later." | A stub shipped as the deliverable is a mock without the flag. If you need scaffolding, that's `--mock` — ask first. |
+| "The tests need something runnable, so I'll return canned numbers." | Canned numbers ARE fake behavior; a test passing against them proves nothing about the real tool. |
+| "My NumPy port matches the paper's equations." | A paraphrase of the math is not the tool. The default deliverable drives the genuine installed simulator. |
+| "The real bridge only raises 'requires CUDA' here — close enough to skip it." | Ship the guarded real bridge **and** a labeled `--reproduce` fallback; don't quietly replace the headline class. |
 
 ## Detailed reference
 

@@ -65,6 +65,19 @@ read-only via [`/viva-workbench`](../viva-workbench/SKILL.md) (step 5).
    sweep a grid × multiseed in one pass and pick the recommended in-band point
    with provenance, instead of iterating single values.
 
+**The letter is the spirit.** These rules cost effort exactly when you're under
+pressure to skip them — a target that won't hit, a reviewer waiting, a run you'd
+rather not repeat. Talking yourself past one is breaking it. Common excuses, and
+the reality:
+
+| Excuse | Reality |
+|---|---|
+| "The expert would obviously approve this classic reference." | If they didn't provide it, it's a `pending` proposal, not a fact (rule 2). Record it; don't cite it as evidence. |
+| "The target is 28±3 and I got 24 — a modest recalibration is expected." | Recalibrating to hit a number IS forcing the result. Sweep for an in-band point with provenance (rule 5), or report the miss as an HONEST OPEN QUESTION. |
+| "Adding a small sink/cap term is just numerical hygiene." | An un-provided term added to move a metric is a fabricated mechanism (rule 2). Propose it `pending`; don't bake it in. |
+| "I'll keep the old chart too, just in case." | Stale charts auto-reappear and mislead reviewers (rule 3). Delete the file; re-render the view you value against the new run. |
+| "Tests can run after I hand back — the result is the run." | Testing is part of the run (rule 1). A verdict without this session's test output is a claim, not a result. |
+
 ## Common prelude
 
 All sub-commands:
@@ -263,6 +276,16 @@ compact index only; nothing here is the authoritative spec.
 | `check-observables <slug>` | Never-fabricate-observable guard: validate every `readouts[]` entry against the baseline composite's actual emittable structure. |
 | `migrate-readouts <slug>` | Canonicalize legacy readouts (safe auto-rewrite) and drive un-parseable ones to guided re-authoring. |
 
+<HARD-GATE>
+Do NOT run-baseline / run-variant / run-script until `verify <slug>` AND
+`check-observables <slug>` pass for this study. A run against an unverified spec or
+a phantom readout burns the simulation and poisons `runs[].outcomes` with a result
+you will have to throw away.
+</HARD-GATE>
+
+_"It's a 5-step smoke run, verify is overkill" — a phantom observable fails just as
+fast at 5 steps as at 5000, and now the run is worthless. Verify first._
+
 ### Simulate
 
 | Subcommand | Purpose |
@@ -280,6 +303,25 @@ by `POST /api/study-tests-run` (the Tests tab; results land in
 `study.yaml.tests.last_results`) and by `/viva-viz` (add/render visualizations).
 
 ### Decide
+
+<HARD-GATE>
+No verdict, conclusion, or finding without fresh evidence from THIS session.
+`set-verdicts`, `set-conclusion`, and `findings` write claims — and a claim you
+cannot point to a command's output for is fabrication, not a conclusion. Before
+writing each: identify what proves it, run it (or read the recorded artifact), and
+read the output.
+</HARD-GATE>
+
+| Claim you're about to write | Requires (this session) | NOT sufficient |
+|---|---|---|
+| a run is `ran` / `completed` | `runs[].outcomes` recorded **and** artifacts on disk **and** committed | the run launched; the log "looked fine" |
+| "band held" / a metric passed | reading `computed_outcomes[T].measured_value` against the band | eyeballing a chart |
+| a track `verdict` = passed | every gating `behavior_test` green under the canonical run | one seed; one calibration point; `tests.last_results` from a prior session |
+| "reproducible" | a re-run in the canonical env matches the fingerprint | the code is committed |
+
+If the evidence isn't there, the honest verdict is `blocked` or an OPEN QUESTION —
+not `passed`. This is the discipline `/viva-harden-investigation` enforces
+retroactively; applying it here means you rarely need it.
 
 | Subcommand | Purpose |
 |---|---|
