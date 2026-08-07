@@ -83,6 +83,7 @@ while [ "$DIR" != "/" ] && [ ! -f "$DIR/workspace.yaml" ]; do
 done
 cd "$DIR"
 URL="$(python3 -c "import json; print(json.load(open('.pbg/server/server-info'))['url'])")"
+python3 -m viva_superpowers.server_preflight --url "$URL" || true  # version-skew preflight (warns; never fails)
 
 EMIT_JSON='null'
 if [ -n "$EMIT" ]; then
