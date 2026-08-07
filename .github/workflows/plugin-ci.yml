@@ -2,6 +2,18 @@ name: plugin-ci
 on: [push, pull_request]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Ruff lint (F, E722 — config in pyproject.toml)
+        run: ruff check viva_superpowers/
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:

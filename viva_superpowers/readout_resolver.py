@@ -20,7 +20,7 @@ The id-tokenizer is shared with ``study_evaluator`` (same grammar, no fork):
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # ---------------------------------------------------------------------------
 # Reuse the id-tokenizer from study_evaluator — same grammar, no fork.

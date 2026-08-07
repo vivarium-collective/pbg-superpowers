@@ -1,24 +1,24 @@
 ---
 name: viva-init
-description: Install pbg-* skills into ~/.claude/skills/ so Claude can invoke /viva-catalog, /viva-run, /viva-study, and the other dashboard-driving skills. One-shot setup per machine.
+description: Install viva-* skills into ~/.claude/skills/ so Claude can invoke /viva-catalog, /viva-run, /viva-study, and the other dashboard-driving skills. One-shot setup per machine.
 user-invocable: true
 allowed-tools: Bash(*) Read Write
 argument-hint: (no args)
 ---
 
-# pbg-init
+# viva-init
 
-One-shot installer that makes every `pbg-*` skill in this plugin available
+One-shot installer that makes every `viva-*` skill in this plugin available
 to Claude in any conversation, regardless of cwd.
 
 ## When to run
 
-Once per machine — after cloning the `pbg-superpowers` plugin (or after
+Once per machine — after cloning the `viva-superpowers` plugin (or after
 adding a brand-new skill that hasn't propagated yet).
 
 ## What it does
 
-For every `skills/pbg-*/SKILL.md` in this plugin:
+For every `skills/viva-*/SKILL.md` in this plugin:
 
 1. If `~/.claude/skills/<name>/` already exists, compare mtimes.
    - If the plugin copy is newer **and** the existing target is a regular
@@ -53,7 +53,7 @@ SKILLS_DEST="$HOME/.claude/skills"
 mkdir -p "$SKILLS_DEST"
 
 printf "%-22s  %s\n" "NAME" "STATUS"
-for src in "$SKILLS_SRC"/viva-*/ "$SKILLS_SRC"/pbg-*/; do
+for src in "$SKILLS_SRC"/viva-*/; do
   name="$(basename "$src")"
   dest="$SKILLS_DEST/$name"
   if [ -L "$dest" ]; then
@@ -68,8 +68,8 @@ for src in "$SKILLS_SRC"/viva-*/ "$SKILLS_SRC"/pbg-*/; do
   fi
 done
 echo
-echo "Installed viva-* skills (+ pbg-* back-compat aliases):"
-ls -1 "$SKILLS_DEST" | grep -E '^(viva|pbg)-'
+echo "Installed viva-* skills:"
+ls -1 "$SKILLS_DEST" | grep -E '^viva-'
 ```
 
 ## Verification

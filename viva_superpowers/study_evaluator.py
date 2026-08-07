@@ -451,8 +451,6 @@ def _eval_ast_node(node: ast.expr, names: dict) -> Any:
     Allowed node types: Constant, Name, BinOp (+, -, *, /), UnaryOp (+, -).
     All other node types raise :py:exc:`ValueError`.
     """
-    import numpy as np
-
     if isinstance(node, ast.Constant):
         return float(node.value)
     if isinstance(node, ast.Name):
@@ -1211,7 +1209,7 @@ def compute_outcomes(
 
 
 # ---------------------------------------------------------------------------
-# B2b: CLI — pbg-compute-outcomes
+# B2b: CLI — viva-compute-outcomes
 # ---------------------------------------------------------------------------
 
 def _find_workspace_root(start: Any) -> "Any | None":
@@ -1232,7 +1230,7 @@ def _find_workspace_root(start: Any) -> "Any | None":
 import click as _click  # noqa: E402 — imported here to keep it optional at module top
 
 
-@_click.command("pbg-compute-outcomes")
+@_click.command("viva-compute-outcomes")
 @_click.option(
     "--workspace", "-w",
     type=_click.Path(file_okay=False),

@@ -6,7 +6,7 @@ allowed-tools: Bash(*) Read
 argument-hint: decisions <inv> | ac-gaps <inv> | source <bib_key> | finding-by-observable <token> | dag <inv> | observable <token> | composite <id>
 ---
 
-# pbg-navigate
+# viva-navigate
 
 Transversal, **read-only** skill. Queries the workspace **linkage index** — a
 derived, ephemeral knowledge graph over the YAML (studies ↔ composites ↔

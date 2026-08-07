@@ -6,7 +6,7 @@ allowed-tools: Bash(*) Read
 argument-hint: "[list | install <pkg> | uninstall <pkg>]"
 ---
 
-# pbg-catalog
+# viva-catalog
 
 Single front door for the workspace catalog. Replaces the trio
 `/pbg-list`, `/pbg-install`, `/pbg-uninstall` from v0.8.x.

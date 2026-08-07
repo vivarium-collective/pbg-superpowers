@@ -6,7 +6,7 @@ allowed-tools: Bash(*) Read Write Edit Glob
 argument-hint: <subcmd> [args...]
 ---
 
-# pbg-investigation
+# viva-investigation
 
 The interface for **Investigations** in the vivarium-workbench: named collections of studies that together answer a higher-level research question.
 

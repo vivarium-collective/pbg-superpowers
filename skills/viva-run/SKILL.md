@@ -6,7 +6,7 @@ allowed-tools: Bash(*) Read
 argument-hint: <composite-id> [--steps N] [--emit p1,p2,...]
 ---
 
-# pbg-run
+# viva-run
 
 Run a composite (spec or generator) for `N` steps and print a summary of
 the emitted observables. Wraps `/api/composite-test-run`.

@@ -6,7 +6,7 @@ allowed-tools: Bash(*) Read
 argument-hint: (no args)
 ---
 
-# pbg-status
+# viva-status
 
 Read-only diagnostic skill. Detects the nearest pbg workspace, checks the
 dashboard server, reports study counts, and prints git state.  Works even

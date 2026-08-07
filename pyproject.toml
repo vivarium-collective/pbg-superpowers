@@ -46,7 +46,9 @@ viva-migrate-inputs = "viva_superpowers.migrate_inputs:main"
 viva-backfill-runs = "viva_superpowers.backfill_runs:main"
 viva-compute-outcomes = "viva_superpowers.study_evaluator:compute_outcomes_cli"
 viva-sync-runs = "viva_superpowers.study_outcomes:main"
-viva-citation-gaps = "viva_superpowers.citation_gaps:main"
+# viva-citation-gaps removed: the citation-gap compute moved to the workbench
+# server (`GET /api/citation-gaps`); there is no `viva_superpowers.citation_gaps`
+# module, so the old entry point installed a script that tracebacked on invocation.
 viva-canonicalize-studies = "viva_superpowers.study_canonicalize:main"
 
 [build-system]
@@ -66,6 +68,13 @@ packages = ["viva_superpowers", "pbg_superpowers"]
 # installs still work.
 [tool.hatch.build.targets.wheel.force-include]
 "templates" = "viva_superpowers/_templates"
+
+[tool.ruff]
+# Minimal lint gate for the viva_superpowers package: pyflakes (F) catches
+# unused imports / undefined names / f-strings-without-placeholders, and E722
+# bans bare `except:`. Kept deliberately narrow so the gate stays actionable.
+[tool.ruff.lint]
+select = ["F", "E722"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
