@@ -402,7 +402,9 @@ Run a baseline composite. POST `/api/study-run-baseline`:
 
 `composite` is the entry name in `baseline[]`. If omitted, defaults to `baseline[0]`.
 
-After a successful run, automatically invokes `refresh-viz` for the study so registered charts regenerate against the new run. Pass `--no-refresh-viz` to skip.
+**Detached run.** This endpoint returns `202 {"run_id": "...", "status": "running"}` — the run executes in the background. **Poll** `GET /api/composite-run/<run_id>/status` until `status` is `completed` (or `failed`) before treating the run as done, recording it as `ran`, or reading its outcomes. A `202` is *running*, not *ran* — recording a verdict off it violates the evidence-before-verdict gate in SKILL.md. (The `run_detached` helper in the implementation outline does this polling.)
+
+On completion, charts refresh against the new run; pass `--no-refresh-viz` to skip.
 
 #### `run-variant <study-name> --variant <n> [--steps N] [--no-refresh-viz]`
 
@@ -412,7 +414,7 @@ Run a variant. The server resolves the variant's `base_composite` against the St
 {"study": "<study-name>", "variant": "<n>", "steps": 5}
 ```
 
-After a successful run, automatically invokes `refresh-viz` for the study so registered charts regenerate against the new run. Pass `--no-refresh-viz` to skip.
+**Detached run** (same as `run-baseline`): returns `202 {run_id, status:"running"}`. Poll `GET /api/composite-run/<run_id>/status` to `completed` before treating it as `ran` or recording outcomes. On completion, charts refresh against the new run; pass `--no-refresh-viz` to skip.
 
 > **Clearing stale runs between reruns.** `runs.db` accumulates a fresh
 > row each invocation; the auto-renderer reads the *latest* row, so a
@@ -844,6 +846,29 @@ post() {
   curl -sf -X POST -H "Content-Type: application/json" -d "$body" "$URL$path" | python3 -m json.tool
 }
 
+# Study runs are DETACHED: /api/study-run-* returns 202 {run_id, status:"running"}.
+# Poll to completion before treating the run as done — a 202 is "running", not "ran"
+# (see the evidence-before-verdict gate in SKILL.md). Charts refresh server-side on
+# completion.
+run_detached() {
+  local path="$1"; shift
+  local body="$1"; shift
+  local run_id st
+  run_id=$(curl -s -X POST -H "Content-Type: application/json" -d "$body" "$URL$path" \
+    | python3 -c "import json,sys; r=json.load(sys.stdin); (sys.stderr.write('ERROR: '+r['error']+'\n'), sys.exit(1)) if 'error' in r else print(r.get('run_id',''))")
+  [ -n "$run_id" ] || { echo "no run_id returned from $path" >&2; return 1; }
+  echo "run_id: $run_id  (detached; polling status…)"
+  st="running"
+  for _ in $(seq 1 120); do
+    st=$(curl -s "$URL/api/composite-run/$run_id/status" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','?'))")
+    [ "$st" = "completed" ] && break
+    [ "$st" = "failed" ] && { echo "run failed — see .pbg/runs/$run_id/" >&2; return 1; }
+    sleep 2
+  done
+  [ "$st" = "completed" ] || { echo "run did not complete (status: $st) — do NOT record it as ran" >&2; return 1; }
+  echo "status: completed  (run_id $run_id)"
+}
+
 sub="${1:-}"; shift || true
 
 case "$sub" in
@@ -944,7 +969,7 @@ b = {'study': os.environ['NAME']}
 if os.environ['COMPOSITE']: b['composite'] = os.environ['COMPOSITE']
 if os.environ['STEPS']: b['steps'] = int(os.environ['STEPS'])
 print(json.dumps(b))")
-    post "/api/study-run-baseline" "$BODY"
+    run_detached "/api/study-run-baseline" "$BODY"
     ;;
 
   variant-add)
@@ -1023,7 +1048,7 @@ import json, os
 b = {'study': os.environ['NAME'], 'variant': os.environ['VNAME']}
 if os.environ['STEPS']: b['steps'] = int(os.environ['STEPS'])
 print(json.dumps(b))")
-    post "/api/study-run-variant" "$BODY"
+    run_detached "/api/study-run-variant" "$BODY"
     ;;
 
   intervention-add)
