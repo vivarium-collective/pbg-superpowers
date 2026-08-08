@@ -218,6 +218,26 @@ surfaces it — a missing field is a `gap`. Before a study is "done", address ea
 dimension (or say why not). Full guide + field shapes:
 [`docs/conventions/rigor-checklist.md`](../../docs/conventions/rigor-checklist.md).
 
+> **Insist on evidence, follow-ups, and decisions — don't finish a study silently.**
+> These three are the easiest to skip and the first a reviewer misses, so when a
+> study reaches **Evaluate/Decide you MUST actively prompt the expert for and fill
+> them** — treat a study with any of them empty as **NOT done**, and ask before you
+> set `confidence: Accepted`:
+> - **Evidence** — every finding needs `evidence.observed` (the concrete measured
+>   result, e.g. "recruitment index 0.77 vs 0.00 across 5 seeds, d=6.38"), not just a
+>   claim. An empty `evidence` renders a **blank Evidence section** in the report.
+> - **Follow-ups** — at least one `discovery_implications.followup_study_proposals`
+>   (each with a real `motivation`), added via `/viva-study propose-followup`. A study
+>   that answers a question always opens the next one — capture it, or the Follow-ups
+>   section is blank.
+> - **Decisions** — any choice the result forces: an open design decision
+>   (`design_pivot_required` via `/viva-study add-pivot`) or a recorded conclusion.
+>   If the result changes what to do next, that is a decision — record it, don't leave
+>   it implicit.
+>
+> Don't wait to be asked for these at the end; surface them **as the study is being
+> worked on** (a finding lands → prompt for its evidence and the follow-up it opens).
+
 > **Real composites + emitters (both linted).** Every study must reference a
 > **REAL registered composite** — `baseline[].composite` has to resolve in the
 > workspace registry (run `/viva-catalog` to see what's installed; a typo or a
