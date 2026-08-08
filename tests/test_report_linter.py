@@ -1171,3 +1171,92 @@ def test_missing_planned_runs_phase_gated(tmp_path, phase, expected_level):
     fired = [f for f in ctx.findings if f.check == "missing_planned_runs"]
     assert len(fired) == 1
     assert fired[0].level == expected_level
+
+
+# --- Render-guarantee check (issue #96) -------------------------------------
+
+import viva_superpowers.report_linter as _rl  # noqa: E402
+from viva_superpowers.report_linter import _check_renders_via_dashboard  # noqa: E402
+
+
+def _render_ctx(tmp_path, slug="s1"):
+    return _LintContext(ws_root=tmp_path, slug=slug, spec={"name": slug})
+
+
+def test_render_check_skips_when_server_absent(tmp_path, monkeypatch):
+    """When the workbench isn't reachable, the check is a silent no-op."""
+    monkeypatch.setattr(_rl, "_dashboard_render_error", lambda ws, slug: None)
+    ctx = _render_ctx(tmp_path)
+    _check_renders_via_dashboard(ctx)
+    assert ctx.findings == []
+
+
+def test_render_check_flags_unloadable_spec(tmp_path, monkeypatch):
+    """A spec that passes static lint but fails the dashboard loader is an
+    error-level render_blocked finding (regression for #96)."""
+    ctx = _render_ctx(tmp_path)
+    monkeypatch.setattr(
+        _rl, "_dashboard_render_error",
+        lambda ws, slug: (
+            "failed to build study 's1': InvestigationSpecError: "
+            "'baseline' must be a non-empty list of composites"
+        ),
+    )
+    _check_renders_via_dashboard(ctx)
+    assert [f.check for f in ctx.findings] == ["render_blocked"]
+    assert ctx.findings[0].level == "error"
+    assert "baseline" in ctx.findings[0].message
+
+
+def test_render_check_passes_loadable_spec(tmp_path, monkeypatch):
+    """When the dashboard loads the study, there's no finding."""
+    ctx = _render_ctx(tmp_path)
+    monkeypatch.setattr(_rl, "_dashboard_render_error", lambda ws, slug: None)
+    _check_renders_via_dashboard(ctx)
+    assert ctx.findings == []
+
+
+def test_render_blocked_registered_in_checks():
+    assert "render_blocked" in _rl.CHECKS
+
+
+# --- _dashboard_render_error HTTP parsing -----------------------------------
+
+def _http_error(url, code, payload):
+    import io
+    import json as _json
+    import urllib.error
+    body = io.BytesIO(_json.dumps(payload).encode("utf-8"))
+    return urllib.error.HTTPError(url, code, "err", {}, body)
+
+
+def test_dashboard_render_error_flags_spec_error(tmp_path, monkeypatch):
+    """A 500 whose error names InvestigationSpecError → returns the message."""
+    import viva_superpowers.server_preflight as _sp
+    monkeypatch.setattr(_sp, "read_server_url", lambda root=".": "http://localhost:0")
+
+    def boom(req, timeout=None):
+        raise _http_error(
+            req.full_url, 500,
+            {"error": "failed to build study 's1': InvestigationSpecError: bad baseline"},
+        )
+    monkeypatch.setattr("urllib.request.urlopen", boom)
+    err = _rl._dashboard_render_error(tmp_path, "s1")
+    assert err and "InvestigationSpecError" in err
+
+
+def test_dashboard_render_error_ignores_non_spec_500(tmp_path, monkeypatch):
+    """A 500 from some other loader/enrichment failure is NOT a render block."""
+    import viva_superpowers.server_preflight as _sp
+    monkeypatch.setattr(_sp, "read_server_url", lambda root=".": "http://localhost:0")
+
+    def boom(req, timeout=None):
+        raise _http_error(req.full_url, 500, {"error": "failed to build study 's1': KeyError: 'runs'"})
+    monkeypatch.setattr("urllib.request.urlopen", boom)
+    assert _rl._dashboard_render_error(tmp_path, "s1") is None
+
+
+def test_dashboard_render_error_skips_when_no_server(tmp_path, monkeypatch):
+    import viva_superpowers.server_preflight as _sp
+    monkeypatch.setattr(_sp, "read_server_url", lambda root=".": None)
+    assert _rl._dashboard_render_error(tmp_path, "s1") is None

@@ -501,6 +501,9 @@ _INVESTIGATION_CHECK_FUNCTIONS = (
 
 
 CHECKS = (
+    # Render-guarantee: the spec loads through the dashboard's own load_spec(),
+    # so "passes lint" implies "renders" (#96). Error: fails to render.
+    "render_blocked",
     "incomplete_summaries",
     "status_contradictions",
     "missing_provenance",
@@ -2747,7 +2750,82 @@ def _check_hedged_verdict_when_passed(ctx: _LintContext) -> None:
                 break  # one finding per field is enough
 
 
+def _dashboard_render_error(ws_root: Path, slug: str) -> str | None:
+    """Ask the running workbench whether ``slug`` loads, via ``GET /api/study/<slug>``.
+
+    Returns the loader's error message when the dashboard rejects the spec (its
+    detail page won't render), or ``None`` when it loads, the server isn't
+    running, or the check can't be performed.
+
+    The compute lives in the workbench; the plugin reaches it over HTTP (stdlib
+    ``urllib``), never by importing it — importing ``vivarium_workbench`` back
+    into the plugin would reintroduce the dependency cycle and break the
+    ``study_audit --gate`` step that runs ``--no-install-package
+    vivarium-workbench`` (see ``tests/test_no_workbench_import.py``).
+
+    Factored out so the check below is unit-testable by monkeypatching this one
+    function.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    from viva_superpowers.server_preflight import read_server_url
+
+    url = read_server_url(ws_root)
+    if not url:
+        return None  # server not running → render check unavailable, skip
+    try:
+        req = urllib.request.Request(
+            f"{url.rstrip('/')}/api/study/{slug}", method="GET"
+        )
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            resp.read()
+        return None  # 200 → renders
+    except urllib.error.HTTPError as e:
+        if e.code != 500:
+            return None  # 400 invalid slug / 404 not found → not a render block
+        try:
+            body = _json.loads(e.read().decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            return None
+        err = body.get("error") or ""
+        # Only spec-load failures — not transient I/O — count as render-blocked.
+        return err if "InvestigationSpecError" in err else None
+    except Exception:  # noqa: BLE001 — server unreachable mid-lint, timeout, …
+        return None
+
+
+def _check_renders_via_dashboard(ctx: _LintContext) -> None:
+    """Render-guarantee: confirm the study loads through the dashboard (#96).
+
+    The other checks are static YAML analysis; a spec can pass every one of them
+    yet still fail to render, because the dashboard's ``load_spec`` rejects it
+    (empty baseline, wrong ``expected_behavior`` shape, …) and the study-detail
+    route then returns an error instead of the page. Ask the running workbench
+    (``GET /api/study/<slug>``) so "passes lint" implies "renders".
+
+    When the server isn't running (e.g. a standalone lint run in CI) the check
+    skips silently rather than failing.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    err = _dashboard_render_error(ctx.ws_root, ctx.slug)
+    if err:
+        ctx.add(
+            level="error",
+            field_path="<render>",
+            message=(
+                f"Study does not load in the dashboard: {err} — the static lint "
+                "passed, but the dashboard's loader rejects this spec, so its "
+                "detail page will not render. Fix the field named in the error."
+            ),
+            check="render_blocked",
+        )
+
+
 _CHECK_FUNCTIONS = (
+    _check_renders_via_dashboard,
     _check_incomplete_summaries,
     _check_status_contradictions,
     _check_missing_provenance,
