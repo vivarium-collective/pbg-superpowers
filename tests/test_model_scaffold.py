@@ -42,7 +42,7 @@ def test_scaffold_creates_expected_files(tmp_path, plugin_root):
     # No .j2 files left
     assert not list(target.rglob("*.j2"))
     # Placeholder dir has been renamed
-    assert not (target / "viva_<model>").exists()
+    assert not (target / "viva__model__").exists()
 
 
 def test_placeholder_substitution(tmp_path, plugin_root):

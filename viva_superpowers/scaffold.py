@@ -535,8 +535,14 @@ def _render_template_tree(src: Path, dst: Path, substitutions: dict) -> None:
 
 
 def _rename_placeholder_pkg(target: Path, slug: str) -> None:
-    """Rename the literal `viva_<model>` dir to `viva_<slug>`."""
-    placeholder = target / "viva_<model>"
+    """Rename the literal `viva__model__` placeholder dir to `viva_<slug>`.
+
+    The shipped template dir must avoid `<`/`>` — those are reserved characters
+    in native Windows filenames, so a bracketed name (`viva_<model>`) fails to
+    extract from the wheel on Windows with os error 123 before scaffolding ever
+    runs (issue #202). `viva__model__` is Windows-legal and unambiguous.
+    """
+    placeholder = target / "viva__model__"
     if placeholder.exists():
         placeholder.rename(target / f"viva_{slug}")
 
