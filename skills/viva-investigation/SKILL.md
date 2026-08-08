@@ -413,7 +413,7 @@ For each phase/stage/section in the plan that represents a discrete implementati
 - `hypothesis` — one paragraph stating the expected outcome.
 - `objective` — imperative present tense: "Simulate … and measure … to determine …".
 - `description` — two-to-four paragraphs.
-- `expected_behavior` — list of `{name, observable, condition, rationale}` entries from the plan's acceptance criteria, behavioral requirements, or success metrics for this phase. Use the DSL name convention: `<process>-<observable>-<condition>` (e.g., `dnaa-count-in-mass-spec-range`). Generate at least one entry per study.
+- `expected_behavior` — list of **behavior-grammar** `(given, measure, expect)` entries — `{name, en, measure: {kind, …}, expect: {op, …}, status: stub}` — from the plan's acceptance criteria, behavioral requirements, or success metrics for this phase. `status: stub` is correct before the Build phase (the acceptance band is filled when the test is built out). Use the DSL name convention: `<process>-<observable>-<condition>` (e.g., `dnaa-count-in-mass-spec-range`). Generate at least one entry per study. The flat `{observable, condition, rationale}` shape is **rejected by the dashboard loader** — do not emit it.
 - `parent_studies` — wire linearly by default (each study depends on the previous with `condition: tests-passed`). The user can edit dependencies after scaffolding.
 - `status: planned` for all generated studies.
 
@@ -482,17 +482,33 @@ parent_studies:
   - {study: <prev-slug>, condition: tests-passed}   # omit for the first study
 
 expected_behavior:
-  - name: <behavior-name>
-    observable: <observable>
-    condition: <condition>
-    rationale: |
-      <rationale>
+  - name: <behavior-name>            # DSL slug: <process>-<observable>-<condition>
+    en: "<one-sentence English prediction>"
+    given:
+      condition: <condition>        # or {run: baseline, window: full}
+    measure:
+      kind: observable-comparison   # design-stage placeholder measure
+      observable: <observable>
+    expect:
+      op: within-tolerance
+      note: Acceptance band set when this test is built out (design-stage stub).
+    status: stub                    # pre-Build placeholder; promote to `implemented` at Build
 
-baseline: []
+baseline:
+  - name: baseline
+    composite: <pkg>.composites.<TODO>   # replace with a real registered composite (see /viva-catalog)
 variants: []
 interventions: []
 runs: []
 ```
+
+> **Why these shapes.** The dashboard loader (`load_spec`) hard-rejects a flat
+> `expected_behavior: {observable, condition, rationale}` entry and an empty
+> `baseline: []` — a scaffolded study with either then fails to render ("localhost
+> didn't send any data"). Emit the `(given, measure, expect)` grammar with
+> `status: stub`, and a single placeholder baseline entry (a `<TODO>` composite
+> path is fine pre-Build — it renders, and `/viva-report`'s linter nudges you to
+> wire a real one). See `docs/concepts/expected-behavior-grammar.md`.
 
 **Notes for Claude when running scaffold-from-plan:**
 
