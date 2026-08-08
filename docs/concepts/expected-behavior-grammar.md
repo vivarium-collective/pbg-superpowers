@@ -13,8 +13,19 @@ Overview tab.
 > `expected_behavior:` are auto-migrated on read.
 
 Adding a new behavioral test is a YAML edit only — no new test code required.
-The evaluator (`vivarium_workbench.lib.expected_behavior.evaluate()`) turns
-every entry into a deterministic pytest assertion.
+
+> **Canonical engine: `pass_if` (`viva_superpowers.study_evaluator`).** There is
+> **one** assertion engine — the plugin's `study_evaluator`, which grades
+> `behavior_tests[].pass_if`, runs offline, and gates `study_audit`. It is what
+> `auto_evaluate` / `compute_outcomes` / the Tests tab / the default Behavior-Tests
+> report card all use.
+>
+> The `(given, measure, **expect**)` form documented below is the **legacy
+> workbench grammar**. Its evaluator (`vivarium_workbench.lib.expected_behavior`)
+> has been **removed** (workbench #757 — a dead module with zero live consumers).
+> **Author new tests with `pass_if`** — see the **Config-selection** and **Cross-run measures**
+> sections below for the current grammar; the `expect` sections remain only to
+> explain existing v3 entries.
 
 ---
 
@@ -330,9 +341,14 @@ e.g. "the dissolved-O₂ trajectory converges under interval halving":
 
 ## Evaluator location
 
-`vivarium_workbench/lib/expected_behavior.py` — canonical upstream evaluator.
-Per-study `tests/_behaviors.py` files in v2ecoli were the original prototype;
-new workspaces should import from the dashboard package instead.
+**Canonical:** `viva_superpowers/study_evaluator.py` (the plugin) — the single
+`pass_if` engine that grades `behavior_tests`, offline and CI-gating.
+
+**Legacy (removed):** `vivarium_workbench/lib/expected_behavior.py` — the old
+`(given, measure, expect)` pytest evaluator — has been **deleted** (workbench
+#757; it had zero live consumers, since auto_evaluate / compute_outcomes / the
+Tests tab all use the plugin engine). Do not build new work against the `expect`
+form. Per-study `tests/_behaviors.py` files in v2ecoli were the original prototype.
 
 ## See also
 
