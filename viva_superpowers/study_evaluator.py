@@ -250,29 +250,160 @@ def _evaluate_config_value(test: dict, config: dict | None) -> dict:
     return _agent(f"config_value: unsupported op {op!r} for value {measured!r}")
 
 
-def evaluate_study(spec: dict, reader: "RunReader", ws_root=None) -> dict[str, dict]:
+# ---------------------------------------------------------------------------
+# Cross-run measures (issue #98): compare a readout across two runs.
+# ---------------------------------------------------------------------------
+
+def _scalar_compare(op: str, measured: float, pass_if: dict, label: str) -> dict:
+    """Apply a scalar pass_if op to a pre-computed measured value."""
+    if op in ("==", "eq", "equals"):
+        ok = _equals_ok(measured, pass_if.get("value"), pass_if)
+        return _code_outcome("PASS" if ok else "FAIL", round(measured, 6), label,
+                             f"{measured:.4g} == {pass_if.get('value')}")
+    if op in ("range", "in_range"):
+        low, high = float(pass_if["low"]), float(pass_if["high"])
+        ok = low <= measured <= high
+        return _code_outcome("PASS" if ok else "FAIL", round(measured, 6), label,
+                             f"{measured:.4g} in [{low}, {high}]")
+    cmps = {"<=": (lambda a, b: a <= b), ">=": (lambda a, b: a >= b),
+            "<": (lambda a, b: a < b), ">": (lambda a, b: a > b),
+            "!=": (lambda a, b: a != b)}
+    if op in cmps:
+        target = float(pass_if.get("value", pass_if.get("threshold", 0)))
+        ok = cmps[op](measured, target)
+        return _code_outcome("PASS" if ok else "FAIL", round(measured, 6), label,
+                             f"{measured:.4g} {op} {target}")
+    return _agent(f"run_delta: unsupported op {op!r}")
+
+
+def _series_time_value(df: "pl.DataFrame"):
+    """(abs_time[], value[]) float arrays from a resolved series, NaN-dropped."""
+    import numpy as np
+    t = df["abs_time"].cast(pl.Float64).to_numpy()
+    v = df["value"].cast(pl.Float64).to_numpy()
+    mask = ~(np.isnan(t) | np.isnan(v))
+    return t[mask], v[mask]
+
+
+def _run_delta(primary_df, compare_df, align: str, metric: str) -> float | None:
+    """Scalar distance between the same readout on two runs.
+
+    ``align='time'`` interpolates both onto the primary's abs_time grid within
+    their overlap; ``align='index'`` pairs by position. ``metric`` reduces the
+    per-point diff (``max_abs_diff`` | ``mean_abs_diff`` | ``final_abs_diff`` |
+    ``rmse``). Returns None on empty / non-overlapping series.
+    """
+    import numpy as np
+    tp, vp = _series_time_value(primary_df)
+    tc, vc = _series_time_value(compare_df)
+    if len(tp) == 0 or len(tc) == 0:
+        return None
+    if align == "time":
+        lo, hi = max(tp.min(), tc.min()), min(tp.max(), tc.max())
+        grid = tp[(tp >= lo) & (tp <= hi)]
+        if len(grid) == 0:
+            return None
+        a, b = np.interp(grid, tp, vp), np.interp(grid, tc, vc)
+    elif align in (None, "index"):
+        n = min(len(vp), len(vc))
+        if n == 0:
+            return None
+        a, b = vp[:n], vc[:n]
+    else:
+        raise ValueError(f"unknown align: {align!r}")
+    d = np.abs(a - b)
+    if metric == "max_abs_diff":
+        return float(d.max())
+    if metric == "mean_abs_diff":
+        return float(d.mean())
+    if metric == "final_abs_diff":
+        return float(abs(a[-1] - b[-1]))
+    if metric == "rmse":
+        return float(np.sqrt(np.mean((a - b) ** 2)))
+    raise ValueError(f"unknown metric: {metric!r}")
+
+
+def _evaluate_run_delta(test: dict, reader, run_opener) -> dict:
+    """Evaluate a ``kind: run_delta`` cross-run measure (#98).
+
+    Applies the inner ``of`` readout to two runs — the primary (``given.run``,
+    defaulting to the passed ``reader``) and the compare run (``given.compare_to``,
+    resolved via ``run_opener``) — aligns them, reduces to a scalar distance, and
+    applies the ``pass_if`` comparator.
+    """
+    measure = test.get("measure") or {}
+    pass_if = test.get("pass_if")
+    if not pass_if:
+        return _agent("missing pass_if block")
+    op = pass_if.get("op", "")
+    if not _op_supported(op):
+        return _agent(f"unsupported op: {op!r}")
+    of = measure.get("of") or {}
+    inner = (of.get("readout") or of.get("path") or of.get("field") or "").strip()
+    if not inner:
+        return _agent("run_delta measure needs `of.readout`/`of.path`")
+    given = test.get("given") or {}
+    compare_sel = given.get("compare_to")
+    if not compare_sel:
+        return _agent("run_delta requires given.compare_to")
+    if run_opener is None:
+        return _needs_rerun("run_delta needs a run opener (cross-run unavailable here)")
+    compare_reader = run_opener(compare_sel)
+    if compare_reader is None:
+        return _agent(f"compare run not resolvable: {compare_sel!r}")
+    primary_reader = reader
+    primary_sel = {k: v for k, v in given.items() if k != "compare_to"}
+    if primary_sel:
+        pr = run_opener(primary_sel)
+        if pr is not None:
+            primary_reader = pr
+    if primary_reader is None:
+        return _needs_rerun("run_delta: no primary run")
+    try:
+        pdf = _resolve_series(inner, primary_reader)
+        cdf = _resolve_series(inner, compare_reader)
+    except ObservableNotFound as exc:
+        return _agent(str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return _agent(f"run_delta series error: {exc}")
+    try:
+        delta = _run_delta(pdf, cdf, measure.get("align", "time"),
+                           measure.get("metric", "max_abs_diff"))
+    except ValueError as exc:
+        return _agent(str(exc))
+    if delta is None:
+        return _needs_rerun("run_delta: empty or non-overlapping series")
+    return _scalar_compare(op, delta, pass_if, f"run_delta/{op}")
+
+
+def evaluate_study(spec: dict, reader: "RunReader", ws_root=None, run_opener=None) -> dict[str, dict]:
     """Evaluate all behavior tests in a study spec.
 
     ws_root enables workspace-pluggable evaluators (load_workspace_evaluators);
-    omit it to evaluate with native kinds only.
+    omit it to evaluate with native kinds only. ``run_opener`` — an optional
+    ``callable(selector) -> RunReader | None`` — enables cross-run measures
+    (``kind: run_delta``); omit it and those tests report ``needs_rerun``.
     """
     tests = spec.get("tests") or spec.get("behavior_tests") or []
     results: dict[str, dict] = {}
     for i, test in enumerate(tests):
         name = test.get("name", f"test_{i}")
         config = _resolve_run_config(spec, test)
-        results[name] = evaluate_test(test, reader, ws_root=ws_root, config=config)
+        results[name] = evaluate_test(test, reader, ws_root=ws_root,
+                                      config=config, run_opener=run_opener)
     return results
 
 
-def evaluate_test(test: dict, reader: "RunReader", ws_root=None, config=None) -> dict:
+def evaluate_test(test: dict, reader: "RunReader", ws_root=None, config=None,
+                  run_opener=None) -> dict:
     """Evaluate a single behavior test against a run.
 
-    Resolution order: config-selection (``kind: config_value``) → native
-    RUN_DATA_KIND (code) → workspace-registered evaluator for the kind → agent
-    bucket. ``config`` is the run's declared params (see ``_resolve_run_config``),
-    used by ``config_value`` measures and by ``config:``-referenced expected
-    values in equals/comparison ops.
+    Resolution order: config-selection (``kind: config_value``) → cross-run
+    (``kind: run_delta``) → native RUN_DATA_KIND (code) → workspace-registered
+    evaluator for the kind → agent bucket. ``config`` is the run's declared
+    params (see ``_resolve_run_config``), used by ``config_value`` measures and
+    ``config:``-referenced expected values. ``run_opener`` — ``callable(selector)
+    -> RunReader | None`` — enables ``run_delta`` cross-run measures.
     """
     # 1. Require measure block
     measure = test.get("measure")
@@ -282,6 +413,10 @@ def evaluate_test(test: dict, reader: "RunReader", ws_root=None, config=None) ->
     # 1b. Config-selection: read a declared param, no run data needed (#98).
     if measure.get("kind", "") == "config_value":
         return _evaluate_config_value(test, config)
+
+    # 1c. Cross-run: compare a readout across two runs (#98).
+    if measure.get("kind", "") == "run_delta":
+        return _evaluate_run_delta(test, reader, run_opener)
 
     # 2. Kind: native run-data, else a workspace-registered evaluator, else agent
     kind = measure.get("kind", "")
@@ -1217,6 +1352,59 @@ def _resolve_run_store(
 # B2b: compute_outcomes — write parallel computed_outcomes block per run
 # ---------------------------------------------------------------------------
 
+def _select_run_entry(runs: list, selector: dict) -> "dict | None":
+    """Map a run selector to a ``runs[]`` entry (cross-run convention, #98 2b).
+
+    - ``{run: variant, variant: X}`` → the entry whose ``variant`` or ``name`` is X.
+    - ``{run: baseline}`` (default) → the entry with ``canonical: true``, else the
+      first with no ``variant``, else the first entry.
+    """
+    if (selector or {}).get("run") == "variant":
+        want = selector.get("variant")
+        for r in runs:
+            if isinstance(r, dict) and (r.get("variant") == want or r.get("name") == want):
+                return r
+        return None
+    for r in runs:
+        if isinstance(r, dict) and r.get("canonical") is True:
+            return r
+    for r in runs:
+        if isinstance(r, dict) and not r.get("variant"):
+            return r
+    return runs[0] if runs and isinstance(runs[0], dict) else None
+
+
+def _build_run_opener(runs: list, study_dir: Any, ws_root: Any):
+    """Return ``opener(selector) -> RunReader | None`` over a study's ``runs[]``.
+
+    Resolves a selector to a run entry (``_select_run_entry``), then to a store
+    (``_resolve_run_store``), then opens a reader (cached by store path). Returns
+    None when the run/store can't be resolved or opened. This is the plugin-side
+    resolver that lets cross-run (``run_delta``) tests load their compare run.
+    """
+    try:
+        from pbg_emitters import RunReader  # noqa: PLC0415
+    except ImportError:
+        return None
+    cache: dict = {}
+
+    def opener(selector):
+        entry = _select_run_entry(runs, selector or {})
+        if entry is None:
+            return None
+        store = _resolve_run_store(entry, study_dir, ws_root)
+        if store is None:
+            return None
+        if store not in cache:
+            try:
+                cache[store] = RunReader.open(store)
+            except Exception:  # noqa: BLE001
+                cache[store] = None
+        return cache[store]
+
+    return opener
+
+
 def compute_outcomes(
     study_dir: Any,
     ws_root: Any = None,
@@ -1258,6 +1446,17 @@ def compute_outcomes(
     # Plain load for evaluate_study (reads tests / behavior_tests)
     spec = _yaml.safe_load(study_yaml_path.read_text(encoding="utf-8"))
 
+    # Cross-run (run_delta) tests are study-level, not per-run: split them out of
+    # the per-run pass and evaluate them once after the loop (#98 Stage 2b).
+    _tests_key = "tests" if spec.get("tests") else "behavior_tests"
+    _all_tests = spec.get(_tests_key) or []
+    _cross_run_tests = [
+        t for t in _all_tests
+        if isinstance(t, dict) and (t.get("measure") or {}).get("kind") == "run_delta"
+    ]
+    per_run_spec = dict(spec)
+    per_run_spec[_tests_key] = [t for t in _all_tests if t not in _cross_run_tests]
+
     # ruamel round-trip load: preserves comments + block style
     ryaml = ruamel.yaml.YAML()
     ryaml.preserve_quotes = True
@@ -1294,7 +1493,7 @@ def compute_outcomes(
                     "pip install 'pbg-superpowers[evaluator]'"
                 ) from _ie
             reader = RunReader.open(store_path)
-            outcomes = evaluate_study(spec, reader, ws_root=ws_root)
+            outcomes = evaluate_study(per_run_spec, reader, ws_root=ws_root)
         except Exception as exc:  # noqa: BLE001
             run["computed_outcomes"] = ruamel.yaml.CommentedMap(
                 {"_status": f"evaluation_error: {exc}"}
@@ -1333,6 +1532,44 @@ def compute_outcomes(
 
         run["computed_outcomes"] = new_co
         runs_evaluated += 1
+
+    # Study-level cross-run pass: evaluate run_delta tests ONCE (not per run) and
+    # attach each to its primary run's computed_outcomes (#98 Stage 2b).
+    runs_list = doc.get("runs") or []
+    if _cross_run_tests:
+        opener = _build_run_opener(runs_list, study_dir, ws_root)
+        for test in _cross_run_tests:
+            name = test.get("name", "run_delta")
+            given = test.get("given") or {}
+            primary_sel = {k: v for k, v in given.items() if k != "compare_to"} or {"run": "baseline"}
+            primary_reader = opener(primary_sel) if opener else None
+            outcome = evaluate_test(
+                test, primary_reader, ws_root=ws_root,
+                config=_resolve_run_config(spec, test), run_opener=opener,
+            )
+            target = _select_run_entry(runs_list, primary_sel)
+            if target is None:
+                continue
+            co = target.get("computed_outcomes")
+            if not isinstance(co, ruamel.yaml.CommentedMap):
+                co = ruamel.yaml.CommentedMap()
+                target["computed_outcomes"] = co
+            authored = target.get("outcomes") or {}
+            ae = authored.get(name) if isinstance(authored, dict) else None
+            ar = ae.get("result") if isinstance(ae, dict) else None
+            cr = outcome.get("result")
+            if cr == "ungraded":
+                cr = None
+            entry = ruamel.yaml.CommentedMap(outcome)
+            entry["reconcile"] = (
+                ("agree" if cr == ar else "divergent")
+                if (cr is not None and ar is not None) else "no_authored"
+            )
+            co[name] = entry
+            if outcome.get("evaluated_by") == "code":
+                tests_code += 1
+            else:
+                tests_agent += 1
 
     # Write only when something changed (idempotency)
     _new_sio = io.StringIO()

@@ -300,6 +300,34 @@ can be asserted equal to the *configured* value:
 > the full plan (cross-run measures, and behavior tests as the default Report
 > Card every study gets).
 
+## Cross-run measures (`run_delta`) — #98
+
+Compare the same readout across **two** runs and assert on the scalar distance —
+e.g. "the dissolved-O₂ trajectory converges under interval halving":
+
+```yaml
+- name: do-converges-under-interval-halving
+  given: {run: variant, variant: interval-half, compare_to: {run: baseline}}
+  measure:
+    kind: run_delta
+    of: {readout: dissolved_o2}     # inner readout, applied to BOTH runs
+    align: time                     # interpolate onto a shared abs_time grid (or `index`)
+    metric: max_abs_diff            # | mean_abs_diff | final_abs_diff | rmse
+  pass_if: {op: "<", value: 0.05}
+```
+
+- `given.compare_to` names the second run (same selector shape as `given`).
+- `run_delta` applies `of` to the primary run (`given`, defaulting to the run
+  under evaluation) and the compare run, aligns them, and reduces to a scalar.
+- The evaluator resolves the compare run through a **`run_opener`** callback
+  (`evaluate_study(spec, reader, run_opener=…)`); without one, `run_delta` tests
+  report `needs_rerun` rather than fabricating a verdict.
+- `compute_outcomes` **auto-builds** that opener from the study's `runs[]` and
+  evaluates each `run_delta` test **once** (study-level), attaching the outcome to
+  its primary run's `computed_outcomes`. Run-selection convention: `{run: baseline}`
+  → the `canonical: true` run (else the first with no `variant`); `{run: variant,
+  variant: X}` → the run whose `variant` or `name` is `X`.
+
 ## Evaluator location
 
 `vivarium_workbench/lib/expected_behavior.py` — canonical upstream evaluator.
