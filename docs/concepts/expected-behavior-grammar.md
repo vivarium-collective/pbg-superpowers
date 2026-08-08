@@ -266,6 +266,40 @@ The evaluator calls `evaluate(entry, history)`, which:
 
 ---
 
+## Config-selection (`pass_if` grammar) — #98
+
+The plugin evaluator (`viva_superpowers.study_evaluator`, the closed-op `pass_if`
+grammar that gates `study_audit`) can assert against a run's **declared config**,
+not just its run-data series. The config source is the run's params from the
+study's condition block (`conditions.baseline.params`, a variant's `params`
+merged over baseline) — deterministic and backend-independent.
+
+**`config_value` measure** — read a declared param (scalar, incl. categorical):
+
+```yaml
+- name: kla-correlation-is-configured
+  measure: {kind: config_value, path: "geometry.kla_correlation"}
+  pass_if: {op: equals, value: "wells-riley"}
+```
+
+**`equals` op + `config:` reference** — the expected side may be a literal
+`value:` or a `config:` path into the declared params, so an emitted observable
+can be asserted equal to the *configured* value:
+
+```yaml
+- name: coupling-interval-matches-config
+  measure: {kind: range_check_per_generation, path: "obs.coupling_interval", window: full_lineage_from_gen_0}
+  pass_if: {op: equals, config: "coupling.interval_s", tolerance_fraction: 0.01}
+```
+
+`equals` is exact for categoricals and numeric-with-tolerance (`tolerance` or
+`tolerance_fraction`). `in_set` likewise accepts a `config:`-referenced list.
+
+> This is the first slice of the unified assertion model; see
+> `docs/superpowers/specs/2026-08-08-unified-behavior-tests-report-card.md` for
+> the full plan (cross-run measures, and behavior tests as the default Report
+> Card every study gets).
+
 ## Evaluator location
 
 `vivarium_workbench/lib/expected_behavior.py` — canonical upstream evaluator.

@@ -132,6 +132,124 @@ class WindowNotSupported(Exception):
 # Public API
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Config-selection (issue #98): read the run's DECLARED params from the study's
+# condition block — deterministic and backend-independent (no RunReader change).
+# ---------------------------------------------------------------------------
+
+def _config_lookup(cfg: dict, path: str) -> Any:
+    """Resolve a dotted path in a params dict; None if any token is missing."""
+    cur: Any = cfg or {}
+    for tok in str(path).split("."):
+        if isinstance(cur, dict) and tok in cur:
+            cur = cur[tok]
+        else:
+            return None
+    return cur
+
+
+def _resolve_run_config(spec: dict, test: dict) -> dict:
+    """Declared params for the run a test targets.
+
+    baseline by default; a variant's params merged over the baseline when
+    ``given.run == variant``. Reads the v4 ``conditions.baseline``/``conditions.variants``
+    shape, falling back to the v3 top-level ``baseline``/``variants``.
+    """
+    conditions = spec.get("conditions") if isinstance(spec.get("conditions"), dict) else {}
+    base = conditions.get("baseline") if isinstance(conditions.get("baseline"), dict) else None
+    if base is None:
+        bl = spec.get("baseline")
+        if isinstance(bl, list) and bl and isinstance(bl[0], dict):
+            base = bl[0]
+        elif isinstance(bl, dict):
+            base = bl
+    cfg = dict((base or {}).get("params") or {})
+    given = test.get("given") or {}
+    if given.get("run") == "variant" and given.get("variant"):
+        variants: list = []
+        if isinstance(conditions.get("variants"), list):
+            variants += conditions["variants"]
+        if isinstance(spec.get("variants"), list):
+            variants += spec["variants"]
+        for v in variants:
+            if isinstance(v, dict) and v.get("name") == given["variant"]:
+                cfg.update(v.get("params") or v.get("parameter_overrides") or {})
+                break
+    return cfg
+
+
+def _as_float(x: Any) -> float | None:
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_expected(pass_if: dict, config: dict | None) -> Any:
+    """Expected value for an equals/comparison op: a `config:` reference (into
+    the run's declared params) takes precedence over a literal `value:`."""
+    if "config" in pass_if:
+        return _config_lookup(config or {}, str(pass_if["config"]))
+    return pass_if.get("value")
+
+
+def _equals_ok(measured: Any, target: Any, pass_if: dict) -> bool:
+    """Equality with optional numeric tolerance; exact for categoricals."""
+    m, t = _as_float(measured), _as_float(target)
+    if m is not None and t is not None:
+        tolf = pass_if.get("tolerance_fraction")
+        if tolf is not None:
+            return abs(m - t) <= abs(float(tolf)) * abs(t)
+        tol = float(pass_if["tolerance"]) if pass_if.get("tolerance") is not None else 0.0
+        return abs(m - t) <= tol
+    return measured == target
+
+
+def _evaluate_config_value(test: dict, config: dict | None) -> dict:
+    """Evaluate a ``kind: config_value`` measure against the run's declared params.
+
+    No run data / windowing — the measured value is the config field itself, so
+    this supports categorical (string) params that the numeric series path can't.
+    """
+    measure = test.get("measure") or {}
+    pass_if = test.get("pass_if")
+    if not pass_if:
+        return _agent("missing pass_if block")
+    op = pass_if.get("op", "")
+    if not _op_supported(op):
+        return _agent(f"unsupported op: {op!r}")
+    path = (measure.get("path") or measure.get("field") or "").strip()
+    if not path:
+        return _agent("config_value measure needs a path/field")
+    measured = _config_lookup(config or {}, path)
+    if measured is None:
+        return _agent(f"config field {path!r} not found in declared params")
+    label = f"config_value/{op}"
+    if op in ("equals", "==", "eq"):
+        target = _resolve_expected(pass_if, config)
+        ok = _equals_ok(measured, target, pass_if)
+        return _code_outcome("PASS" if ok else "FAIL", measured, label,
+                             f"{measured!r} == {target!r}")
+    if op == "in_set":
+        target_set = set(pass_if.get("set") or [])
+        if "config" in pass_if:
+            cv = _config_lookup(config or {}, str(pass_if["config"]))
+            if isinstance(cv, (list, tuple, set)):
+                target_set = set(cv)
+        ok = measured in target_set
+        return _code_outcome("PASS" if ok else "FAIL", measured, label,
+                             f"{measured!r} in {sorted(map(str, target_set))}")
+    m = _as_float(measured)
+    t = _as_float(_resolve_expected(pass_if, config))
+    cmps = {"<=": (lambda a, b: a <= b), ">=": (lambda a, b: a >= b),
+            "<": (lambda a, b: a < b), ">": (lambda a, b: a > b),
+            "!=": (lambda a, b: a != b)}
+    if m is not None and t is not None and op in cmps:
+        ok = cmps[op](m, t)
+        return _code_outcome("PASS" if ok else "FAIL", measured, label, f"{m} {op} {t}")
+    return _agent(f"config_value: unsupported op {op!r} for value {measured!r}")
+
+
 def evaluate_study(spec: dict, reader: "RunReader", ws_root=None) -> dict[str, dict]:
     """Evaluate all behavior tests in a study spec.
 
@@ -142,20 +260,28 @@ def evaluate_study(spec: dict, reader: "RunReader", ws_root=None) -> dict[str, d
     results: dict[str, dict] = {}
     for i, test in enumerate(tests):
         name = test.get("name", f"test_{i}")
-        results[name] = evaluate_test(test, reader, ws_root=ws_root)
+        config = _resolve_run_config(spec, test)
+        results[name] = evaluate_test(test, reader, ws_root=ws_root, config=config)
     return results
 
 
-def evaluate_test(test: dict, reader: "RunReader", ws_root=None) -> dict:
+def evaluate_test(test: dict, reader: "RunReader", ws_root=None, config=None) -> dict:
     """Evaluate a single behavior test against a run.
 
-    Resolution order: native RUN_DATA_KIND (code) → workspace-registered
-    evaluator for the kind → agent bucket.
+    Resolution order: config-selection (``kind: config_value``) → native
+    RUN_DATA_KIND (code) → workspace-registered evaluator for the kind → agent
+    bucket. ``config`` is the run's declared params (see ``_resolve_run_config``),
+    used by ``config_value`` measures and by ``config:``-referenced expected
+    values in equals/comparison ops.
     """
     # 1. Require measure block
     measure = test.get("measure")
     if not measure:
         return _agent("missing measure block")
+
+    # 1b. Config-selection: read a declared param, no run data needed (#98).
+    if measure.get("kind", "") == "config_value":
+        return _evaluate_config_value(test, config)
 
     # 2. Kind: native run-data, else a workspace-registered evaluator, else agent
     kind = measure.get("kind", "")
@@ -211,7 +337,7 @@ def evaluate_test(test: dict, reader: "RunReader", ws_root=None) -> dict:
 
     # 10. Reduce + predicate → outcome
     try:
-        return _apply_op(windowed, pass_if, kind, op)
+        return _apply_op(windowed, pass_if, kind, op, config=config)
     except Exception as exc:  # noqa: BLE001
         return _agent(f"evaluation error: {exc}")
 
@@ -605,7 +731,7 @@ _SUPPORTED_OPS: frozenset[str] = frozenset({
     "in_range",
     "in_range_every_generation",
     "generation_average_in_range",
-    "<=", ">=", "<", ">", "==", "!=", "eq",
+    "<=", ">=", "<", ">", "==", "!=", "eq", "equals",
     "in_set",
     "cv_below",
     "median_within_tolerance",
@@ -660,7 +786,7 @@ def _flat_values(data: Any, window_kind: str) -> list[float]:
     return []
 
 
-def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str) -> dict:
+def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str, config=None) -> dict:
     """Apply a pass_if predicate to windowed data.
 
     Returns a code outcome dict or an agent/needs_rerun dict.
@@ -730,21 +856,29 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str) -> dict:
                     else f"gens out of [{low}, {high}]: {failing}"),
         )
 
-    # -- scalar comparators --
-    if op in ("<=", ">=", "<", ">", "==", "!=", "eq"):
+    # -- scalar comparators (incl. equals with tolerance + config: refs, #98) --
+    if op in ("<=", ">=", "<", ">", "==", "!=", "eq", "equals"):
         vals = _flat_values(data, window_kind)
         measured = float(pl.Series(vals, dtype=pl.Float64).mean())
-        target = float(pass_if.get("value", 0))
-        effective_op = "==" if op == "eq" else op
-        comparators = {
-            "<=": lambda a, b: a <= b,
-            ">=": lambda a, b: a >= b,
-            "<":  lambda a, b: a < b,
-            ">":  lambda a, b: a > b,
-            "==": lambda a, b: a == b,
-            "!=": lambda a, b: a != b,
-        }
-        ok = comparators[effective_op](measured, target)
+        # target: a `config:` reference into the run's declared params wins over
+        # a literal `value:` — lets an observable be asserted equal to the
+        # CONFIGURED value ("emitted coupling interval == configured value").
+        target = _as_float(_resolve_expected(pass_if, config))
+        if target is None:
+            target = float(pass_if.get("value", 0))
+        if op in ("==", "eq", "equals"):
+            ok = _equals_ok(measured, target, pass_if)
+            effective_op = "=="
+        else:
+            effective_op = op
+            comparators = {
+                "<=": lambda a, b: a <= b,
+                ">=": lambda a, b: a >= b,
+                "<":  lambda a, b: a < b,
+                ">":  lambda a, b: a > b,
+                "!=": lambda a, b: a != b,
+            }
+            ok = comparators[effective_op](measured, target)
         return _code_outcome(
             result="PASS" if ok else "FAIL",
             measured_value=round(measured, 6),
@@ -752,11 +886,15 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str) -> dict:
             detail=f"{measured:.4g} {effective_op} {target}",
         )
 
-    # -- in_set --
+    # -- in_set (set may be a literal `set:` or a `config:`-referenced list) --
     if op == "in_set":
         vals = _flat_values(data, window_kind)
         measured = float(pl.Series(vals, dtype=pl.Float64).mean())
         target_set = set(pass_if.get("set", []))
+        if "config" in pass_if:
+            cv = _config_lookup(config or {}, str(pass_if["config"]))
+            if isinstance(cv, (list, tuple, set)):
+                target_set = set(cv)
         ok = measured in target_set
         return _code_outcome(
             result="PASS" if ok else "FAIL",
