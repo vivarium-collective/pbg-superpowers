@@ -80,7 +80,11 @@ def test_evaluate_test_unknown_kind_no_ws_still_agent():
 
 def test_compute_outcomes_threads_ws_root_into_evaluate_study():
     src = inspect.getsource(se.compute_outcomes)
-    assert "evaluate_study(spec, reader, ws_root=ws_root)" in src, (
+    # ws_root must be threaded into evaluate_study so workspace evaluators are
+    # reachable. (The per-run pass evaluates `per_run_spec` — cross-run tests are
+    # split out into a study-level pass — so match on the ws_root kwarg, not the
+    # exact spec variable name.)
+    assert "evaluate_study(per_run_spec, reader, ws_root=ws_root)" in src, (
         "compute_outcomes must pass ws_root to evaluate_study so workspace "
         "evaluators are reachable"
     )
