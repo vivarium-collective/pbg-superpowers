@@ -107,3 +107,71 @@ def test_run_delta_unresolvable_compare_routes_to_agent():
     primary = FakeReader({"obs.do": _series([0, 1], [1, 1])})
     out = se.evaluate_test(_xrun_test(), primary, run_opener=lambda sel: None)
     assert out["evaluated_by"] == "agent"
+
+
+# ── _select_run_entry (run-selection convention, Stage 2b) ───────────────────
+
+def test_select_run_entry_variant_by_variant_field():
+    runs = [{"name": "b", "canonical": True}, {"name": "v", "variant": "half"}]
+    assert se._select_run_entry(runs, {"run": "variant", "variant": "half"})["name"] == "v"
+
+
+def test_select_run_entry_variant_by_name():
+    runs = [{"name": "b", "canonical": True}, {"name": "half"}]
+    assert se._select_run_entry(runs, {"run": "variant", "variant": "half"})["name"] == "half"
+
+
+def test_select_run_entry_baseline_prefers_canonical():
+    runs = [{"name": "v", "variant": "x"}, {"name": "b", "canonical": True}]
+    assert se._select_run_entry(runs, {"run": "baseline"})["name"] == "b"
+
+
+def test_select_run_entry_baseline_falls_back_to_no_variant():
+    runs = [{"name": "v", "variant": "x"}, {"name": "b"}]
+    assert se._select_run_entry(runs, {"run": "baseline"})["name"] == "b"
+
+
+def test_select_run_entry_unresolvable_variant_is_none():
+    runs = [{"name": "b", "canonical": True}]
+    assert se._select_run_entry(runs, {"run": "variant", "variant": "nope"}) is None
+
+
+# ── compute_outcomes cross-run integration (Stage 2b) ────────────────────────
+
+def test_compute_outcomes_cross_run_attaches_to_primary(tmp_path):
+    from unittest.mock import patch
+    import yaml
+
+    base_store = tmp_path / "base_store"; (base_store / "history").mkdir(parents=True)
+    var_store = tmp_path / "var_store"; (var_store / "history").mkdir(parents=True)
+    study_dir = tmp_path / "study"; study_dir.mkdir()
+    (study_dir / "study.yaml").write_text(
+        "name: xrun-study\n"
+        "conditions:\n  baseline: {composite: x, params: {}}\n"
+        "runs:\n"
+        f"- {{name: baseline-run, canonical: true, emitter: {{store: {base_store}}}}}\n"
+        f"- {{name: interval-half, variant: interval-half, emitter: {{store: {var_store}}}}}\n"
+        "behavior_tests:\n"
+        "- name: do-converges\n"
+        "  given: {run: variant, variant: interval-half, compare_to: {run: baseline}}\n"
+        "  measure: {kind: run_delta, of: {readout: 'obs.do'}, align: time, metric: max_abs_diff}\n"
+        "  pass_if: {op: '<', value: 0.05}\n",
+        encoding="utf-8",
+    )
+
+    def reader_for(store, kind=None):
+        if str(store) == str(base_store):
+            return FakeReader({"obs.do": _series([0, 1, 2], [5.0, 5.0, 5.0])})
+        return FakeReader({"obs.do": _series([0, 1, 2], [5.0, 5.01, 4.99])})
+
+    with patch("pbg_emitters.RunReader") as mock_cls:
+        mock_cls.open.side_effect = reader_for
+        se.compute_outcomes(study_dir)
+
+    doc = yaml.safe_load((study_dir / "study.yaml").read_text())
+    var_run = next(r for r in doc["runs"] if r.get("variant") == "interval-half")
+    base_run = next(r for r in doc["runs"] if r.get("canonical"))
+    # cross-run outcome attaches to the PRIMARY (variant) run, once
+    assert var_run["computed_outcomes"]["do-converges"]["result"] == "PASS"
+    # and NOT duplicated onto the baseline run
+    assert "do-converges" not in (base_run.get("computed_outcomes") or {})

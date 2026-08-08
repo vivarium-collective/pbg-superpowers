@@ -322,6 +322,11 @@ e.g. "the dissolved-O₂ trajectory converges under interval halving":
 - The evaluator resolves the compare run through a **`run_opener`** callback
   (`evaluate_study(spec, reader, run_opener=…)`); without one, `run_delta` tests
   report `needs_rerun` rather than fabricating a verdict.
+- `compute_outcomes` **auto-builds** that opener from the study's `runs[]` and
+  evaluates each `run_delta` test **once** (study-level), attaching the outcome to
+  its primary run's `computed_outcomes`. Run-selection convention: `{run: baseline}`
+  → the `canonical: true` run (else the first with no `variant`); `{run: variant,
+  variant: X}` → the run whose `variant` or `name` is `X`.
 
 ## Evaluator location
 

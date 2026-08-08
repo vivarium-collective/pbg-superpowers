@@ -1352,6 +1352,59 @@ def _resolve_run_store(
 # B2b: compute_outcomes — write parallel computed_outcomes block per run
 # ---------------------------------------------------------------------------
 
+def _select_run_entry(runs: list, selector: dict) -> "dict | None":
+    """Map a run selector to a ``runs[]`` entry (cross-run convention, #98 2b).
+
+    - ``{run: variant, variant: X}`` → the entry whose ``variant`` or ``name`` is X.
+    - ``{run: baseline}`` (default) → the entry with ``canonical: true``, else the
+      first with no ``variant``, else the first entry.
+    """
+    if (selector or {}).get("run") == "variant":
+        want = selector.get("variant")
+        for r in runs:
+            if isinstance(r, dict) and (r.get("variant") == want or r.get("name") == want):
+                return r
+        return None
+    for r in runs:
+        if isinstance(r, dict) and r.get("canonical") is True:
+            return r
+    for r in runs:
+        if isinstance(r, dict) and not r.get("variant"):
+            return r
+    return runs[0] if runs and isinstance(runs[0], dict) else None
+
+
+def _build_run_opener(runs: list, study_dir: Any, ws_root: Any):
+    """Return ``opener(selector) -> RunReader | None`` over a study's ``runs[]``.
+
+    Resolves a selector to a run entry (``_select_run_entry``), then to a store
+    (``_resolve_run_store``), then opens a reader (cached by store path). Returns
+    None when the run/store can't be resolved or opened. This is the plugin-side
+    resolver that lets cross-run (``run_delta``) tests load their compare run.
+    """
+    try:
+        from pbg_emitters import RunReader  # noqa: PLC0415
+    except ImportError:
+        return None
+    cache: dict = {}
+
+    def opener(selector):
+        entry = _select_run_entry(runs, selector or {})
+        if entry is None:
+            return None
+        store = _resolve_run_store(entry, study_dir, ws_root)
+        if store is None:
+            return None
+        if store not in cache:
+            try:
+                cache[store] = RunReader.open(store)
+            except Exception:  # noqa: BLE001
+                cache[store] = None
+        return cache[store]
+
+    return opener
+
+
 def compute_outcomes(
     study_dir: Any,
     ws_root: Any = None,
@@ -1393,6 +1446,17 @@ def compute_outcomes(
     # Plain load for evaluate_study (reads tests / behavior_tests)
     spec = _yaml.safe_load(study_yaml_path.read_text(encoding="utf-8"))
 
+    # Cross-run (run_delta) tests are study-level, not per-run: split them out of
+    # the per-run pass and evaluate them once after the loop (#98 Stage 2b).
+    _tests_key = "tests" if spec.get("tests") else "behavior_tests"
+    _all_tests = spec.get(_tests_key) or []
+    _cross_run_tests = [
+        t for t in _all_tests
+        if isinstance(t, dict) and (t.get("measure") or {}).get("kind") == "run_delta"
+    ]
+    per_run_spec = dict(spec)
+    per_run_spec[_tests_key] = [t for t in _all_tests if t not in _cross_run_tests]
+
     # ruamel round-trip load: preserves comments + block style
     ryaml = ruamel.yaml.YAML()
     ryaml.preserve_quotes = True
@@ -1429,7 +1493,7 @@ def compute_outcomes(
                     "pip install 'pbg-superpowers[evaluator]'"
                 ) from _ie
             reader = RunReader.open(store_path)
-            outcomes = evaluate_study(spec, reader, ws_root=ws_root)
+            outcomes = evaluate_study(per_run_spec, reader, ws_root=ws_root)
         except Exception as exc:  # noqa: BLE001
             run["computed_outcomes"] = ruamel.yaml.CommentedMap(
                 {"_status": f"evaluation_error: {exc}"}
@@ -1468,6 +1532,44 @@ def compute_outcomes(
 
         run["computed_outcomes"] = new_co
         runs_evaluated += 1
+
+    # Study-level cross-run pass: evaluate run_delta tests ONCE (not per run) and
+    # attach each to its primary run's computed_outcomes (#98 Stage 2b).
+    runs_list = doc.get("runs") or []
+    if _cross_run_tests:
+        opener = _build_run_opener(runs_list, study_dir, ws_root)
+        for test in _cross_run_tests:
+            name = test.get("name", "run_delta")
+            given = test.get("given") or {}
+            primary_sel = {k: v for k, v in given.items() if k != "compare_to"} or {"run": "baseline"}
+            primary_reader = opener(primary_sel) if opener else None
+            outcome = evaluate_test(
+                test, primary_reader, ws_root=ws_root,
+                config=_resolve_run_config(spec, test), run_opener=opener,
+            )
+            target = _select_run_entry(runs_list, primary_sel)
+            if target is None:
+                continue
+            co = target.get("computed_outcomes")
+            if not isinstance(co, ruamel.yaml.CommentedMap):
+                co = ruamel.yaml.CommentedMap()
+                target["computed_outcomes"] = co
+            authored = target.get("outcomes") or {}
+            ae = authored.get(name) if isinstance(authored, dict) else None
+            ar = ae.get("result") if isinstance(ae, dict) else None
+            cr = outcome.get("result")
+            if cr == "ungraded":
+                cr = None
+            entry = ruamel.yaml.CommentedMap(outcome)
+            entry["reconcile"] = (
+                ("agree" if cr == ar else "divergent")
+                if (cr is not None and ar is not None) else "no_authored"
+            )
+            co[name] = entry
+            if outcome.get("evaluated_by") == "code":
+                tests_code += 1
+            else:
+                tests_agent += 1
 
     # Write only when something changed (idempotency)
     _new_sio = io.StringIO()
