@@ -88,10 +88,31 @@ All sub-commands:
 
 ## Tests on a Study (v4 schema)
 
-A v4 Study has a `tests/` subdirectory containing pytest files. The dashboard
-runs them via `POST /api/study-tests-run {study}` and writes a summary back to
-`study.yaml.tests.last_results`. The Tests tab on the Study detail page shows
-per-test pass/fail with expandable tracebacks.
+A study's **acceptance criteria live in the `behavior_tests:` list** in
+`study.yaml` — the `(given, measure, expect)` grammar (see
+[`docs/concepts/expected-behavior-grammar.md`](../../docs/concepts/expected-behavior-grammar.md)).
+This is the load-bearing form: the evaluators, the report-card axes, the audit,
+and the Tests tab all read it, and it's what studies actually use. **Author your
+criteria here** via the `/viva-study` Design/Evaluate subcommands — start here,
+not with the pytest directory below.
+
+### Optional: a `tests/` pytest subdirectory (dashboard-only)
+
+A study MAY *additionally* carry a `tests/` subdirectory of pytest files, for
+**executable invariants that need real arrays** rather than a scalar compared
+against a band (e.g. a per-feature round-trip over thousands of features). This
+is an **optional, dashboard-only extra** — no study is required to have one, and
+in practice most don't (the `tests:` mapping in `study.yaml` —
+`auto_discover` / `data_source` / `pytest_args` / `last_results` — only
+configures this runner; it is inert without a `tests/` dir):
+
+- The dashboard runs them via `POST /api/study-tests-run {study}` and writes a
+  summary to `study.yaml.tests.last_results`; the Tests tab shows per-test
+  pass/fail with expandable tracebacks.
+- The `run` fixture comes from `vivarium_workbench.testing`, so this path is
+  available **only where the workbench is installed** (the dashboard side) — not
+  from a consuming workspace's own venv. Reach for `tests/` only when a
+  `behavior_tests` band genuinely can't express the invariant.
 
 Tests use a `run` pytest fixture provided by `vivarium_workbench.testing`:
 
