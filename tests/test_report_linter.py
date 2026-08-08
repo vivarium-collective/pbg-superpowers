@@ -1132,3 +1132,42 @@ def test_missing_visualizations_satisfied_by_embed_or_ondisk(tmp_path):
     # nothing at all -> the warning fires.
     ws3 = _min_viz_ws(tmp_path / "w3", "name: s1\n")
     assert "missing_visualizations" in _findings_by_check(lint_workspace_report(ws3))
+
+
+# --- Phase-aware completeness gating (issue #97) ----------------------------
+
+from viva_superpowers.report_linter import (  # noqa: E402
+    _LintContext,
+    _check_missing_planned_runs,
+    _completeness_level,
+)
+
+
+def test_completeness_level_gates_on_phase():
+    # No phase signal -> preserve pre-#97 behavior (warn).
+    assert _completeness_level({}, warn_at="Simulate") == "warning"
+    # Below the threshold -> downgraded to info (correctly sparse for the stage).
+    assert _completeness_level({"phase": "Design"}, warn_at="Simulate") == "info"
+    assert _completeness_level({"phase": "Build"}, warn_at="Simulate") == "info"
+    # At/after the threshold -> genuinely overdue -> warn.
+    assert _completeness_level({"phase": "Simulate"}, warn_at="Simulate") == "warning"
+    assert _completeness_level({"phase": "Decide"}, warn_at="Simulate") == "warning"
+    # Case-insensitive; unknown phase strings fall back to warn.
+    assert _completeness_level({"phase": "design"}, warn_at="Build") == "info"
+    assert _completeness_level({"phase": "bogus"}, warn_at="Build") == "warning"
+
+
+@pytest.mark.parametrize(
+    "phase, expected_level",
+    [(None, "warning"), ("Design", "info"), ("Build", "info"), ("Simulate", "warning")],
+)
+def test_missing_planned_runs_phase_gated(tmp_path, phase, expected_level):
+    """A Design-stage study with no planned_runs is 'correctly sparse' (info);
+    a Simulate-stage one is genuinely overdue (warning). Regression for #97 —
+    the completeness warning no longer buries real findings during Design."""
+    spec = {} if phase is None else {"phase": phase}
+    ctx = _LintContext(ws_root=tmp_path, slug="s1", spec=spec)
+    _check_missing_planned_runs(ctx)
+    fired = [f for f in ctx.findings if f.check == "missing_planned_runs"]
+    assert len(fired) == 1
+    assert fired[0].level == expected_level

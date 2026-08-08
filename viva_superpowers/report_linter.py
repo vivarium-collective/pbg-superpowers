@@ -122,6 +122,43 @@ class _LintContext:
 
 
 # ---------------------------------------------------------------------------
+# Phase-aware completeness gating (issue #97)
+# ---------------------------------------------------------------------------
+
+# A study advances Design -> Build -> Simulate -> Evaluate -> Decide. A study
+# in early Design legitimately has no planned runs, simulation set, or variants
+# yet — the processes it tests aren't built. Firing completeness *warnings* on
+# those fields conflates "Design-stage, correctly sparse" with "should be
+# filled," which inflates the warning count and buries the actionable findings.
+_PHASE_ORDER = {"Design": 0, "Build": 1, "Simulate": 2, "Evaluate": 3, "Decide": 4}
+
+
+def _phase_index(spec: dict) -> int | None:
+    """Numeric rank of the study's ``phase``; ``None`` when unset/unknown.
+
+    ``None`` means 'no phase signal' — callers preserve the pre-#97 behavior
+    (warn) rather than silently suppressing.
+    """
+    phase = spec.get("phase")
+    if not isinstance(phase, str) or not phase.strip():
+        return None
+    return _PHASE_ORDER.get(phase.strip().capitalize())
+
+
+def _completeness_level(spec: dict, *, warn_at: str) -> str:
+    """Level for a completeness check, gated on the study's phase.
+
+    - phase unknown          -> ``"warning"`` (no phase signal; keep old behavior)
+    - phase >= ``warn_at``    -> ``"warning"`` (genuinely overdue)
+    - phase <  ``warn_at``    -> ``"info"``    (correctly sparse for its stage)
+    """
+    idx = _phase_index(spec)
+    if idx is None:
+        return "warning"
+    return "warning" if idx >= _PHASE_ORDER[warn_at] else "info"
+
+
+# ---------------------------------------------------------------------------
 # Override-key derivation
 # ---------------------------------------------------------------------------
 
@@ -2131,7 +2168,7 @@ def _check_missing_baseline(ctx: _LintContext) -> None:
     if has_v3_baseline or has_v4_baseline:
         return
     ctx.add(
-        level="warning",
+        level=_completeness_level(ctx.spec, warn_at="Build"),
         field_path="baseline",
         message=(
             "Study has no baseline composite declared. Every study card in "
@@ -2162,7 +2199,7 @@ def _check_missing_variants(ctx: _LintContext) -> None:
        (isinstance(v4_variants, list) and len(v4_variants) > 0):
         return
     ctx.add(
-        level="warning",
+        level=_completeness_level(ctx.spec, warn_at="Build"),
         field_path="variants",
         message=(
             "Study has no variants declared. Variants are the planned "
@@ -2193,7 +2230,7 @@ def _check_missing_planned_runs(ctx: _LintContext) -> None:
        (isinstance(runs, list) and len(runs) > 0):
         return
     ctx.add(
-        level="warning",
+        level=_completeness_level(ctx.spec, warn_at="Simulate"),
         field_path="planned_runs",
         message=(
             "Study has no planned_runs[] and no runs[]. Document the "
@@ -2222,7 +2259,7 @@ def _check_missing_readouts(ctx: _LintContext) -> None:
     if isinstance(readouts, list) and len(readouts) > 0:
         return
     ctx.add(
-        level="warning",
+        level=_completeness_level(ctx.spec, warn_at="Simulate"),
         field_path="readouts",
         message=(
             "Study has no readouts declared. Describe what the study "
@@ -2288,7 +2325,7 @@ def _check_missing_simulation_set(ctx: _LintContext) -> None:
     if isinstance(ss, list) and len(ss) > 0:
         return
     ctx.add(
-        level="warning",
+        level=_completeness_level(ctx.spec, warn_at="Simulate"),
         field_path="simulation_set",
         message=(
             "Study has no `simulation_set:` entries. The dashboard's "
