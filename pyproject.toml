@@ -17,9 +17,15 @@ dependencies = [
     # selection, package naming). Replaces the hand-vendored
     # workspace_paths.py copy + the duplicated canonical_outcomes bodies.
     "viva-workspace",
-    # Default framework emitters available in every pbg- workspace. Base install
-    # is lightweight (SQLiteEmitter, stdlib); heavy backends stay extras-gated
-    # via pbg-emitters[parquet] / [xarray] (see the `evaluator` extra).
+    # Default framework emitters available in every workspace. Base install is
+    # lightweight (SQLiteEmitter, stdlib); heavy backends stay extras-gated via
+    # pbg-emitters[parquet] / [xarray] (see the `evaluator` extra). Resolved from
+    # PyPI (pbg-emitters is published; module `pbg_emitters`) — NOT pinned to the
+    # git repo, whose main was renamed to `viva-emitters`: a git build there now
+    # produces package `viva-emitters`, which fails uv's name check for the
+    # `pbg-emitters` requirement and aborted every downstream git install
+    # (viva-biomodels@main -> viva-superpowers). Re-add a git source only once
+    # viva-emitters is published to PyPI and consumers move to that name.
     "pbg-emitters",
 ]
 
@@ -39,7 +45,10 @@ events = ["investigation-contracts"]
 
 [tool.uv.sources]
 viva-workspace = { git = "https://github.com/vivarium-collective/viva-workspace.git", branch = "main" }
-pbg-emitters = { git = "https://github.com/vivarium-collective/pbg-emitters.git", branch = "main" }
+# NOTE: no pbg-emitters git source — its main was renamed to `viva-emitters`, so a
+# git build produces a mismatched package name. Resolve pbg-emitters from PyPI
+# instead (see the dependency comment above). Restore a git/viva-emitters source
+# when viva-emitters is on PyPI.
 pbg-basic-processes = { git = "https://github.com/vivarium-collective/pbg-basic-processes.git", branch = "main" }
 investigation-contracts = { git = "https://github.com/vivarium-collective/investigation-contracts.git", branch = "main" }
 
