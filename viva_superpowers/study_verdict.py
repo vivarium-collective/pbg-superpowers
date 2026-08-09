@@ -114,6 +114,61 @@ def roll_up_verdict(spec: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Canonical display confidence (reconciles the status surfaces)
+# ---------------------------------------------------------------------------
+
+_CONFIDENCE_ACCEPTED = "Accepted"
+_CONFIDENCE_INVESTIGATING = "Investigating"
+_CONFIDENCE_REFUTED = "Refuted"
+_CONFIDENCE_PLANNED = "Planned"
+
+
+def derive_confidence(spec: dict) -> str:
+    """The single canonical display confidence for a study.
+
+    A study's status shows up in three places — the left-rail dot, the
+    investigation-graph node, and the study badge — and they diverge when each
+    reads a different field (computed gate vs. authored ``report.verdict`` vs.
+    stale lifecycle ``status``). This derives ONE value all three can read so they
+    never disagree. Derive-only: it never mutates any authored field.
+
+    Priority:
+      1. the COMPUTED gate verdict from real per-test outcomes (``roll_up_verdict``)
+         when definitive (passed / failed / needs_calibration / blocked);
+      2. else the AUTHORED ``report.verdict`` (the same claim the rail dot reads),
+         so a study with no coded tests still reads consistently with the rail;
+      3. else the lifecycle run ``status``.
+
+    Returns one of ``"Accepted"`` / ``"Investigating"`` / ``"Refuted"`` /
+    ``"Planned"``.
+    """
+    result = (roll_up_verdict(spec) or {}).get("result")
+    if result == _RESULT_PASSED:
+        return _CONFIDENCE_ACCEPTED
+    if result == _RESULT_FAILED:
+        return _CONFIDENCE_REFUTED
+    if result in (_RESULT_NEEDS_CALIBRATION, _RESULT_BLOCKED):
+        return _CONFIDENCE_INVESTIGATING
+    # No coded verdict (not_started: runs but no coded tests) — fall to the
+    # authored report.verdict so the graph node matches the rail dot the reviewer
+    # already sees, then to the lifecycle status.
+    authored = ((spec.get("report") or {}).get("verdict")
+                or spec.get("gate_status") or "").strip().lower()
+    if authored in ("passed", "pass", "passing", "passing-with-caveats", "accepted"):
+        return _CONFIDENCE_ACCEPTED
+    if authored in ("failed", "failed_evaluation", "refuted", "failing", "blocked"):
+        return _CONFIDENCE_REFUTED
+    if authored in ("partial", "needs_calibration", "investigating", "inconclusive"):
+        return _CONFIDENCE_INVESTIGATING
+    status = (spec.get("status") or "").strip().lower()
+    if status in ("completed", "complete", "ran", "evaluated"):
+        return _CONFIDENCE_ACCEPTED
+    if status in ("running", "in_progress"):
+        return _CONFIDENCE_INVESTIGATING
+    return _CONFIDENCE_PLANNED
+
+
+# ---------------------------------------------------------------------------
 # Authored-vs-computed divergence (pure helper, reusable by callers/spines)
 # ---------------------------------------------------------------------------
 

@@ -393,3 +393,26 @@ def test_preregistration_criteria_mismatch():
         "behavior_tests": [{"name": "t1", "pass_if": {"low": 1}}],
     }
     assert preregistration_status(spec)["criteria_match"] is False
+
+
+def test_derive_confidence_reconciles_rail_and_graph():
+    """derive_confidence gives ONE canonical value so the rail dot, graph node,
+    and study badge agree: a study with runs but no coded tests (computed verdict
+    = not_started) falls back to the AUTHORED report.verdict the rail reads,
+    instead of the stale lifecycle status."""
+    from viva_superpowers.study_verdict import derive_confidence
+    # runs, no coded tests, authored passing verdict, status still "running":
+    # the graph should read Accepted (matching the green rail), not Investigating.
+    spec = {"status": "running", "runs": [{"name": "baseline", "status": "completed"}],
+            "report": {"verdict": "passing-with-caveats"}}
+    assert derive_confidence(spec) == "Accepted"
+    # authored refuted -> Refuted
+    assert derive_confidence({"report": {"verdict": "refuted"}}) == "Refuted"
+    # nothing authored, still running -> Investigating; planned -> Planned
+    assert derive_confidence({"status": "running"}) == "Investigating"
+    assert derive_confidence({"status": "planned"}) == "Planned"
+    # a real failing test outcome beats the authored verdict
+    refuted = {"behavior_tests": [{"name": "T1"}],
+               "runs": [{"name": "baseline", "outcomes": {"T1": "FAIL"}}],
+               "report": {"verdict": "passing"}}
+    assert derive_confidence(refuted) == "Refuted"
