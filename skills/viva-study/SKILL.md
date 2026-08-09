@@ -195,7 +195,7 @@ status. They sit alongside the existing fields the graph already reads:
 | `title:` | human display name (the slug stays the technical id) | graph node label, study heading, nav | slug with the `<inv>-NN-` ordering prefix stripped + humanized | **Design** |
 | `parent_studies[].relation:` | edge semantics on a dependency | solid edge (`leads-to`) or dashed edge (`regulatory` / `refutes`); `supports` reinforces | `leads-to` | **Design** |
 | `claim:` | one-line headline of the knowledge the study produced (what we now believe) | the node's "Finds" line | top `findings[].summary` | **Evaluate / Decide** |
-| `confidence:` | the study's acceptance/confidence state | node badge | from 6-axis status: completed/ran→`Accepted`, in_progress/running→`Investigating`, planned→`Planned`, failed/invalid→`Refuted` | **Decide** (when the derived value is wrong) |
+| `confidence:` | the study's acceptance/confidence state | node badge | `viva_superpowers.study_verdict.derive_confidence(spec)` — the SAME value the left-rail dot reads, so the rail and the graph never disagree: the rolled-up/authored verdict wins (`report.verdict`/`gate_status`: passing→`Accepted`, failed→`Refuted`, needs_calibration→`Investigating`), else the lifecycle `status` (completed/complete/ran/evaluated→`Accepted`, running→`Investigating`, else `Planned`) | **Decide** (when the derived value is wrong) |
 
 **Enums.**
 
@@ -283,6 +283,32 @@ one member study is `kind: adversarial` (a system that should NOT qualify; the
 metric passes by rejecting it). See `pbg-autopoiesis` for the reference shape
 (every study 8/8, investigation 5/5).
 
+### Render completeness — no blank tabs or sections
+
+Rigor is about *what a reviewer asks*; this is about *what the dashboard draws*.
+A study can be scientifically complete and still render with empty tabs because a
+field the UI reads is absent. When building a study, fill these so nothing shows
+blank — prompt the expert for each rather than shipping an empty section:
+
+- **`conditions:`** — the study-detail **Build tab renders from
+  `conditions.{baseline,variants,model_settings}`**, NOT from the top-level
+  `baseline:`/`variants:`. A study with a populated `baseline:` but no
+  `conditions:` block shows a **BLANK Build tab** (`report_linter` flags
+  `missing_conditions_block`). Mirror the baseline into `conditions.baseline`
+  (a mapping with a `composite:` — note the strict v4 validator requires
+  `composite`, so a `step:`/`process:`-only baseline needs its dotted path there
+  too, or the block is rejected) and add `conditions.model_settings: []`.
+- **`readouts:`** — the observables the run reports; without them the readouts
+  section is empty. Validate every entry against the real composite output with
+  `check-observables <slug>` (never fabricate an observable).
+- **`visualizations:` / `embed_visualizations:`** — at least one figure or an
+  embedded viewer, or the report has nothing to look at. Add via `/viva-viz`.
+- **v4 narrative spine** — the 15 narrative sections (`behavior_tests`,
+  `runtime`, `assumptions`, `enforced_params`, `literature_anchors`,
+  `implementation_requirements`, …); `report_linter` warns
+  `narrative_spine_completeness` with the exact missing set. Draft from plan +
+  expert docs with `fill-overview <slug> --include-narrative`.
+
 ## Sub-commands
 
 Organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide).
@@ -360,6 +386,17 @@ read the output.
 | "band held" / a metric passed | reading `computed_outcomes[T].measured_value` against the band | eyeballing a chart |
 | a track `verdict` = passed | every gating `behavior_test` green under the canonical run | one seed; one calibration point; `tests.last_results` from a prior session |
 | "reproducible" | a re-run in the canonical env matches the fingerprint | the code is committed |
+
+**Close out the lifecycle — advance `status` + `phase` when Decide is real.**
+A study whose runs completed, whose `report.verdict` (or `pipeline_gate.gate_evaluator.result`) is written, and whose Decide content exists (`discovery_implications.followup_study_proposals`) is **done** — but if you leave it at `status: running` / `phase: Evaluate`, the three status surfaces disagree: the left-rail dot and the graph node read the verdict (green/Accepted) while the phase badge reads the stale phase (pink "Evaluate"). That is the single most common "why are my markers inconsistent?" trap. On genuine close-out set both, so all three surfaces agree by construction:
+
+```yaml
+status: complete   # badge-complete renders green; derive_confidence → Accepted.
+                   #   Use `complete`, NOT `evaluated` — there is no badge-evaluated style.
+phase:  Decide     # phase-decide renders green (phase-evaluate is pink).
+```
+
+Gate this on real evidence, never on wishful completion: advance ONLY when a `report.verdict` exists, the gate result ∈ {`passed`, `needs_calibration`}, and at least one `runs[]` entry is `completed`. A study missing its `report.verdict` falls back to the lifecycle `status` for its marker — so an otherwise-finished study with an empty `report` shows **Investigating** until you write the verdict. Write the verdict from the evidence the findings already record; don't advance a study that hasn't actually concluded.
 
 If the evidence isn't there, the honest verdict is `blocked` or an OPEN QUESTION —
 not `passed`. This is the discipline `/viva-harden-investigation` enforces
