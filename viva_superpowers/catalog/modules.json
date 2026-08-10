@@ -151,13 +151,13 @@
     ]
   },
   {
-    "name": "pbg-emitters",
+    "name": "viva-emitters",
     "display_name": "viva-emitters",
     "description": "Focused emitter library for process-bigraph composites",
-    "source": "https://github.com/vivarium-collective/pbg-emitters.git",
+    "source": "https://github.com/vivarium-collective/viva-emitters.git",
     "ref": "main",
-    "package": "pbg_emitters",
-    "homepage": "https://github.com/vivarium-collective/pbg-emitters",
+    "package": "viva_emitters",
+    "homepage": "https://github.com/vivarium-collective/viva-emitters",
     "tags": []
   },
   {

@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, Callable
 import polars as pl
 
 if TYPE_CHECKING:
-    from pbg_emitters import RunReader
+    from viva_emitters import RunReader
 
 
 # ---------------------------------------------------------------------------
@@ -809,7 +809,7 @@ def _apply_window(series: pl.DataFrame, window_spec: str) -> tuple:
 
     if window_spec == "every_generation":
         try:
-            from pbg_emitters import by_generation  # noqa: PLC0415
+            from viva_emitters import by_generation  # noqa: PLC0415
         except ImportError as _ie:
             raise ImportError(
                 "by_generation requires the evaluator extra: "
@@ -1088,7 +1088,7 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str, config=None) -
             gen_data: dict[int, pl.DataFrame] = data
         elif window_kind == "flat":
             try:
-                from pbg_emitters import by_generation  # noqa: PLC0415
+                from viva_emitters import by_generation  # noqa: PLC0415
             except ImportError as _ie:
                 raise ImportError(
                     "by_generation requires the evaluator extra: "
@@ -1142,7 +1142,7 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str, config=None) -
             gen_data_2: dict[int, pl.DataFrame] = data
         elif window_kind == "flat":
             try:
-                from pbg_emitters import by_generation  # noqa: PLC0415
+                from viva_emitters import by_generation  # noqa: PLC0415
             except ImportError as _ie:
                 raise ImportError(
                     "by_generation requires the evaluator extra: "
@@ -1207,7 +1207,7 @@ def _apply_op(windowed: tuple, pass_if: dict, kind: str, op: str, config=None) -
             gen_data_3: dict[int, pl.DataFrame] = data
         elif window_kind == "flat":
             try:
-                from pbg_emitters import by_generation  # noqa: PLC0415
+                from viva_emitters import by_generation  # noqa: PLC0415
             except ImportError as _ie:
                 raise ImportError(
                     "by_generation requires the evaluator extra: "
@@ -1383,7 +1383,7 @@ def _build_run_opener(runs: list, study_dir: Any, ws_root: Any):
     resolver that lets cross-run (``run_delta``) tests load their compare run.
     """
     try:
-        from pbg_emitters import RunReader  # noqa: PLC0415
+        from viva_emitters import RunReader  # noqa: PLC0415
     except ImportError:
         return None
     cache: dict = {}
@@ -1486,7 +1486,7 @@ def compute_outcomes(
         # Open reader and evaluate
         try:
             try:
-                from pbg_emitters import RunReader  # noqa: PLC0415
+                from viva_emitters import RunReader  # noqa: PLC0415
             except ImportError as _ie:
                 raise ImportError(
                     "RunReader requires the evaluator extra: "

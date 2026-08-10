@@ -164,7 +164,7 @@ def test_compute_outcomes_cross_run_attaches_to_primary(tmp_path):
             return FakeReader({"obs.do": _series([0, 1, 2], [5.0, 5.0, 5.0])})
         return FakeReader({"obs.do": _series([0, 1, 2], [5.0, 5.01, 4.99])})
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.side_effect = reader_for
         se.compute_outcomes(study_dir)
 
