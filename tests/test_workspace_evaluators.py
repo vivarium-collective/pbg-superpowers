@@ -133,7 +133,7 @@ def test_compute_outcomes_ungraded_reconciles_as_no_authored(tmp_path: Path):
                         "detail": "no verdict file found"}}
 
     with (
-        patch("pbg_emitters.RunReader") as mock_cls,
+        patch("viva_emitters.RunReader") as mock_cls,
         patch.object(se, "evaluate_study", side_effect=_fake_evaluate_study),
     ):
         mock_cls.open.return_value = fake_reader

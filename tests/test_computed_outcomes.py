@@ -233,7 +233,7 @@ def test_compute_outcomes_writes_computed_outcomes_block(
 ):
     """compute_outcomes writes a computed_outcomes block for each run."""
     study_dir, _store = study_with_real_store
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         se.compute_outcomes(study_dir)
 
@@ -249,7 +249,7 @@ def test_compute_outcomes_writes_computed_outcomes_block(
 def test_compute_outcomes_scalar_test_is_code_evaluated(study_with_real_store):
     """The scalar-test (range_check kind, resolvable path) is code-evaluated."""
     study_dir, _store = study_with_real_store
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         se.compute_outcomes(study_dir)
 
@@ -263,7 +263,7 @@ def test_compute_outcomes_scalar_test_is_code_evaluated(study_with_real_store):
 def test_compute_outcomes_agent_test_preserved(study_with_real_store):
     """Non-run-data kind tests are agent-bucketed in computed_outcomes."""
     study_dir, _store = study_with_real_store
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         se.compute_outcomes(study_dir)
 
@@ -280,7 +280,7 @@ def test_compute_outcomes_authored_outcomes_never_modified(study_with_real_store
     original_doc = yaml.safe_load(original_text)
     original_outcomes = original_doc["runs"][0]["outcomes"]
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         se.compute_outcomes(study_dir)
 
@@ -297,7 +297,7 @@ def test_compute_outcomes_authored_outcomes_never_modified(study_with_real_store
 def test_compute_outcomes_comments_preserved(study_with_real_store):
     """Comments in study.yaml survive the ruamel round-trip."""
     study_dir, _store = study_with_real_store
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         se.compute_outcomes(study_dir)
 
@@ -309,7 +309,7 @@ def test_compute_outcomes_comments_preserved(study_with_real_store):
 def test_compute_outcomes_reconcile_agree(study_with_real_store):
     """reconcile=agree when computed result matches authored result."""
     study_dir, _store = study_with_real_store
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         se.compute_outcomes(study_dir)
 
@@ -352,7 +352,7 @@ def test_compute_outcomes_reconcile_divergent(tmp_path: Path):
     study_dir.mkdir()
     (study_dir / "study.yaml").write_text(yaml_text)
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         se.compute_outcomes(study_dir)
 
@@ -390,7 +390,7 @@ def test_compute_outcomes_reconcile_no_authored(tmp_path: Path):
     study_dir.mkdir()
     (study_dir / "study.yaml").write_text(yaml_text)
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         se.compute_outcomes(study_dir)
 
@@ -403,13 +403,13 @@ def test_compute_outcomes_idempotent(study_with_real_store):
     """Second compute_outcomes call produces byte-identical output (no write)."""
     study_dir, _store = study_with_real_store
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         se.compute_outcomes(study_dir)
 
     text_after_first = (study_dir / "study.yaml").read_text()
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         se.compute_outcomes(study_dir)
 
@@ -451,7 +451,7 @@ def test_compute_outcomes_unresolvable_store_sets_status(tmp_path: Path):
 def test_compute_outcomes_returns_summary(study_with_real_store):
     """compute_outcomes returns a dict with runs_evaluated, tests_code, tests_agent."""
     study_dir, _store = study_with_real_store
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         summary = se.compute_outcomes(study_dir)
 
@@ -502,7 +502,7 @@ def test_compute_outcomes_cli_study_dir(study_with_real_store):
 
     study_dir, _store = study_with_real_store
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader_for_obs_val()
         runner = CliRunner()
         result = runner.invoke(compute_outcomes_cli, ["--study-dir", str(study_dir)])

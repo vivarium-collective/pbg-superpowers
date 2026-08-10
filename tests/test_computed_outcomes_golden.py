@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-pytest.importorskip("pbg_emitters")
+pytest.importorskip("viva_emitters")
 
 from viva_superpowers import study_evaluator as se
 

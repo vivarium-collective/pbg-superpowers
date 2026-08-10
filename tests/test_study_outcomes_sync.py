@@ -124,7 +124,7 @@ def test_sync_returns_record_runs_keys_and_computed(study_with_store_and_db):
     """sync returns added/updated from record_runs PLUS a computed key with summary."""
     study_dir, _store = study_with_store_and_db
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader()
         result = so.sync(study_dir)
 
@@ -146,7 +146,7 @@ def test_sync_compute_outcomes_writes_computed_outcomes_block(study_with_store_a
     """sync's compute_outcomes call writes computed_outcomes into run-a in study.yaml."""
     study_dir, _store = study_with_store_and_db
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader()
         so.sync(study_dir)
 
@@ -166,7 +166,7 @@ def test_sync_record_runs_side_effects_preserved(study_with_store_and_db):
     """After sync, run-b (only in DB) is present in study.yaml."""
     study_dir, _store = study_with_store_and_db
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader()
         so.sync(study_dir)
 
@@ -231,7 +231,7 @@ def test_sync_includes_findings_key_in_summary(study_with_store_and_db):
     """sync summary has a 'findings' key after populate_finding_observations is wired."""
     study_dir, _store = study_with_store_and_db
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader()
         result = so.sync(study_dir)
 
@@ -266,7 +266,7 @@ def test_sync_findings_zero_when_no_findings(study_with_store_and_db):
     """When the study has no findings[], findings={filled:0, skipped:0}."""
     study_dir, _store = study_with_store_and_db
 
-    with patch("pbg_emitters.RunReader") as mock_cls:
+    with patch("viva_emitters.RunReader") as mock_cls:
         mock_cls.open.return_value = _fake_reader()
         result = so.sync(study_dir)
 

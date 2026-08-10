@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("pbg_emitters")
+pytest.importorskip("viva_emitters")
 
 from viva_superpowers import study_evaluator as se
 
@@ -70,7 +70,7 @@ def test_golden_dnaa_atp_fraction_evaluated_by_code(capsys):
     → the fraction series is computed → evaluate_test returns evaluated_by='code'
     with a numeric measured_value (the per-gen average ATP fractions).
     """
-    from pbg_emitters import RunReader
+    from viva_emitters import RunReader
 
     reader = RunReader.open(str(HIVE_PATH))
     outcome = se.evaluate_test(DNAA2_ATP_FRACTION_TEST, reader)
@@ -121,7 +121,7 @@ def test_golden_dnaa_atp_fraction_measured_value_plausible():
     This checks that the fraction is not trivially 0 or 1 (which would indicate
     a bug), and that real data is flowing (not injected constants).
     """
-    from pbg_emitters import RunReader
+    from viva_emitters import RunReader
 
     reader = RunReader.open(str(HIVE_PATH))
     outcome = se.evaluate_test(DNAA2_ATP_FRACTION_TEST, reader)
@@ -144,7 +144,7 @@ def test_golden_never_guess_preserved_with_absent_bulk_id():
     This confirms that the fallback only helps for present IDs — absent ones still route
     to the agent bucket, never fabricating a PASS.
     """
-    from pbg_emitters import RunReader
+    from viva_emitters import RunReader
 
     reader = RunReader.open(str(HIVE_PATH))
     test = {
@@ -168,7 +168,7 @@ def test_golden_never_guess_preserved_with_absent_bulk_id():
 @skipif_no_real_data
 def test_golden_full_dnaa_bulk_expression_pipeline(capsys):
     """Combined pipeline: ATP fraction + total DnaA, both via bulk-id resolution."""
-    from pbg_emitters import RunReader
+    from viva_emitters import RunReader
 
     reader = RunReader.open(str(HIVE_PATH))
 

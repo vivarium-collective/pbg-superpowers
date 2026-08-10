@@ -69,7 +69,7 @@ def _mechanical_record(db_row: dict) -> dict:
     # via RunReader, so all simulations render uniformly. Best-effort.
     if emitter_path:
         try:
-            from pbg_emitters.run_reader import RunReader
+            from viva_emitters.run_reader import RunReader
             summ = RunReader.open(emitter_path).summary()
             if summ.get("generations") is not None:
                 rec["generations"] = summ["generations"]

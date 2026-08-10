@@ -24,7 +24,7 @@ import polars as pl
 import pytest
 import yaml
 
-pytest.importorskip("pbg_emitters")
+pytest.importorskip("viva_emitters")
 
 from viva_superpowers import study_evaluator as se
 
@@ -134,7 +134,7 @@ def _is_valid_outcome_shape(out: dict) -> bool:
 @skipif_no_real_data
 def test_golden_no_exceptions():
     """evaluate_study must not raise for any test in the real dnaa-1 study."""
-    from pbg_emitters import RunReader
+    from viva_emitters import RunReader
 
     spec = yaml.safe_load(STUDY_YAML.read_text())
     reader = RunReader.open(str(HIVE_PATH))
@@ -147,7 +147,7 @@ def test_golden_no_exceptions():
 @skipif_no_real_data
 def test_golden_all_outcomes_have_valid_shape():
     """Every outcome must match one of the three valid shapes."""
-    from pbg_emitters import RunReader
+    from viva_emitters import RunReader
 
     spec = yaml.safe_load(STUDY_YAML.read_text())
     reader = RunReader.open(str(HIVE_PATH))
@@ -173,7 +173,7 @@ def test_golden_study_tests_all_agent_bucketed(capsys):
     All are correct B2 agent-bucket reasons; bulk resolution and structured
     aggregation are follow-on work (B3+).
     """
-    from pbg_emitters import RunReader
+    from viva_emitters import RunReader
 
     spec = yaml.safe_load(STUDY_YAML.read_text())
     reader = RunReader.open(str(HIVE_PATH))
@@ -240,7 +240,7 @@ def test_golden_real_scalar_observables_code_evaluated(capsys):
     against real run data and produces biologically sane, unmistakably non-injected
     results.  The tight cell_mass band [550, 700] fg proves real data is flowing.
     """
-    from pbg_emitters import RunReader
+    from viva_emitters import RunReader
 
     reader = RunReader.open(str(HIVE_PATH))
 
@@ -302,7 +302,7 @@ def test_golden_never_fabricates_verdict(capsys):
     This is the most important invariant: the evaluator must NEVER fabricate
     a PASS/FAIL for a test it cannot actually compute.
     """
-    from pbg_emitters import RunReader
+    from viva_emitters import RunReader
 
     spec = yaml.safe_load(STUDY_YAML.read_text())
     reader = RunReader.open(str(HIVE_PATH))
@@ -324,7 +324,7 @@ def test_golden_full_combined_run(capsys):
 
     This is the human-readable integration check.  Run with -s to see output.
     """
-    from pbg_emitters import RunReader
+    from viva_emitters import RunReader
 
     spec = yaml.safe_load(STUDY_YAML.read_text())
     reader = RunReader.open(str(HIVE_PATH))
