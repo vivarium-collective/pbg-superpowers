@@ -193,14 +193,14 @@ status. They sit alongside the existing fields the graph already reads:
 | Field | What it is | Dashboard shows | Derive-when-absent | Authored in |
 |---|---|---|---|---|
 | `title:` | human display name (the slug stays the technical id) | graph node label, study heading, nav | slug with the `<inv>-NN-` ordering prefix stripped + humanized | **Design** |
-| `parent_studies[].relation:` | edge semantics on a dependency | solid edge (`leads-to`) or dashed edge (`regulatory` / `refutes`); `supports` reinforces | `leads-to` | **Design** |
+| `parent_studies[].relation:` | edge semantics on a dependency | solid edge (`leads-to`) or dashed edge (`regulatory` / `refutes` / `refines`); `supports` reinforces | `leads-to` | **Design** |
 | `claim:` | one-line headline of the knowledge the study produced (what we now believe) | the node's "Finds" line | top `findings[].summary` | **Evaluate / Decide** |
 | `confidence:` | the study's acceptance/confidence state | node badge | `viva_superpowers.study_verdict.derive_confidence(spec)` — the SAME value the left-rail dot reads, so the rail and the graph never disagree: the rolled-up/authored verdict wins (`report.verdict`/`gate_status`: passing→`Accepted`, failed→`Refuted`, needs_calibration→`Investigating`), else the lifecycle `status` (completed/complete/ran/evaluated→`Accepted`, running→`Investigating`, else `Planned`) | **Decide** (when the derived value is wrong) |
 
 **Enums.**
 
 - `confidence:` ∈ `Accepted | Investigating | Planned | Refuted`.
-- `parent_studies[].relation:` ∈ `leads-to` (default) `| regulatory | supports | refutes`. Renders solid for `leads-to`, dashed for `regulatory` / `refutes`. Author the relation when declaring a dependency to express the discourse relationship, not just ordering.
+- `parent_studies[].relation:` ∈ `leads-to` (default) `| regulatory | supports | refutes | refines`. Renders solid for `leads-to`, dashed for `regulatory` / `refutes` / `refines`. Author the relation when declaring a dependency to express the discourse relationship, not just ordering. `refines` marks the finer-grained realization of the same claim as its coarser parent — pair it with a `refinement.must_preserve` + `satisfaction` block on the finer study (see [pbg-investigation § Multi-realization claims](../viva-investigation/SKILL.md)).
 
 ```yaml
 # studies/<slug>/study.yaml
@@ -229,6 +229,8 @@ Studies that share a research arc can be grouped into an **Investigation** (a na
 ## Reference / mechanism discipline: NEVER silently add what the expert did not provide
 
 When you cite a paper (`--cite`, `--source`, `cites:`, `literature_anchors[].source`) or lean on a mechanism, that reference/mechanism must be one the **expert actually provided or explicitly approved**. If, while building or evaluating a study, you reach for a paper, parameter, or mechanism the expert did **not** give you, do **not** quietly fold it into `cites:` / `literature_anchors` / the prose as if it were sanctioned. Record it on the parent **investigation** under `proposed_inputs:` with `status: pending`, a `provenance` (which commit / why it surfaced), and a `rationale` (what you used it for), and let the expert Accept or Decline it in the report. On Accept, a `kind: reference` item is promoted into the investigation's `inputs.references` and becomes a real provided reference (then it is fair to cite); a `kind: mechanism` item is marked accepted for a human to integrate. On Decline it is left out. See the `proposed_inputs:` schema in **pbg-investigation**. This guardrail keeps outside claims from entering the record as expert-sanctioned.
+
+A cited/sanctioned parameter itself still needs its provenance labelled: `cites` (real literature value), `provenance: theory` with a "not fit" note (a deliberate, recorded modeling choice), or `proposed_inputs` (pending). Never let a `provenance: theory` value read as fit or data-anchored. See `/viva-cite-bands` § Step 3.
 
 ## Rigor pass (Evaluate → Decide): fill the required information so the scorecard goes green
 
@@ -298,6 +300,11 @@ blank — prompt the expert for each rather than shipping an empty section:
   (a mapping with a `composite:` — note the strict v4 validator requires
   `composite`, so a `step:`/`process:`-only baseline needs its dotted path there
   too, or the block is rejected) and add `conditions.model_settings: []`.
+  **`model_settings` is read only as `conditions.model_settings`, and only on
+  a v4 study** (`schema_version: 4`, what `/viva-study new` scaffolds) — a
+  top-level `model_settings:` on a v3 study is authored-but-inert, not
+  surfaced by the Build tab. Author calibrated params under v4
+  `conditions.model_settings`, or migrate the study to v4 first.
 - **`readouts:`** — the observables the run reports; without them the readouts
   section is empty. Validate every entry against the real composite output with
   `check-observables <slug>` (never fabricate an observable).

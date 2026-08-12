@@ -194,6 +194,7 @@ because all code-owned slots are already present.
 | Uncertain mechanism → mark novel | If you cannot find a literature match, set `status: novel` and do not fabricate `expert_reference` |
 | No from_test → skip | A finding with only `from_run` is never auto-filled (never-fabricate rule); document it as an authored finding |
 | Idempotent | Re-running populate on an already-filled study is always safe |
+| Non-circular observable | The readout's domain/denominator must be fixed independently of the mechanism under test — a metric computed only over the sub-population the mechanism gates/selects (e.g. recruitment measured only over the cells the mechanism activated) is circular by construction |
 
 ---
 
@@ -211,6 +212,12 @@ With calibration_anchor.literature_target L:
 With threshold T only:
   divergence_factor = (measured - T) / T   (signed)
 ```
+
+**Guard:** `literature_target` must be in the observable's own units. A
+parameter-calibration citation (e.g. a Kd) belongs in the study's
+`model_settings[].cites`, never here — writing a parameter value as
+`literature_target` on a differently-united observable makes
+`divergence_factor` meaningless. See `/viva-cite-bands` Step 3.
 
 ---
 
