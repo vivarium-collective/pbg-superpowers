@@ -36,6 +36,13 @@ def _band_from_pass_if(pass_if: Any) -> dict | None:
 
     Returns ``{"low": N, "high": M}`` / ``{"threshold": T}`` when the block
     carries numeric bounds; ``None`` when no band is detectable.
+
+    Note: does NOT include ``pass_if.value`` (the comparator-op threshold,
+    e.g. ``{op: "<", value: 0.05}``) — callers that need the divergence-
+    arithmetic band keep using ``low``/``high``/``threshold`` only, since
+    ``value`` sits on a different (unsigned comparator) shape. Use
+    :func:`has_numeric_band` for the presence check, which DOES count a
+    numeric ``value`` as a band (see its docstring for why).
     """
     if not isinstance(pass_if, dict):
         return None
@@ -47,6 +54,71 @@ def _band_from_pass_if(pass_if: Any) -> dict | None:
     if isinstance(pass_if.get("threshold"), (int, float)):
         band["threshold"] = pass_if["threshold"]
     return band if band else None
+
+
+def _is_numeric_scalar(value: Any) -> bool:
+    """True for plain int/float, excluding bool (bool is an int subclass)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+# ---------------------------------------------------------------------------
+# Canonical band detector — single source of truth (was reimplemented 3x:
+# here, rigor.py, and report_linter.py, and they disagreed on pass_if.value).
+# ---------------------------------------------------------------------------
+
+def has_numeric_band(test: Any) -> bool:
+    """True when *test* carries a quantitative acceptance band.
+
+    A test "has a band" when its ``pass_if`` block contains a numeric
+    ``low`` / ``high`` / ``threshold`` / ``value`` key, OR its
+    ``calibration_anchor`` block carries a ``literature_target``.
+
+    ``pass_if.value`` reconciliation: the closed ``pass_if`` op set (see
+    ``docs/concepts/expected-behavior-grammar.md``) uses ``value`` two ways —
+    (1) a numeric threshold for the scalar comparator ops (``<=``, ``>=``,
+    ``<``, ``>``, ``==``, ``!=``, ``eq``), e.g. ``{op: "<", value: 0.05}``,
+    which IS a quantitative acceptance band; and (2) a non-numeric
+    config-selector, e.g. ``{op: equals, value: "wells-riley"}``, which is
+    not. Gating on "is ``value`` a plain number" (mirroring the existing
+    ``low``/``high``/``threshold`` numeric checks) separates the two without
+    needing to enumerate the comparator op set — a non-numeric ``value`` is
+    never a quantitative band regardless of ``op``.
+    """
+    if not isinstance(test, dict):
+        return False
+    pass_if = test.get("pass_if")
+    if isinstance(pass_if, dict):
+        for k in ("low", "high", "threshold", "value"):
+            if _is_numeric_scalar(pass_if.get(k)):
+                return True
+    anch = test.get("calibration_anchor")
+    if isinstance(anch, dict) and anch.get("literature_target") is not None:
+        return True
+    return False
+
+
+def numeric_band_of(test: Any) -> dict | None:
+    """Return the full band dict backing :func:`has_numeric_band`, or ``None``.
+
+    Superset of :func:`_band_from_pass_if` — also folds in a numeric
+    ``pass_if.value`` (as ``{"value": V}``) and, when no ``pass_if`` band is
+    present, ``calibration_anchor.literature_target`` (as
+    ``{"literature_target": L}``). Priority mirrors ``has_numeric_band``:
+    pass_if bounds first, literature_target as the fallback.
+    """
+    if not has_numeric_band(test):
+        return None
+    pass_if = test.get("pass_if") if isinstance(test, dict) else None
+    band = _band_from_pass_if(pass_if) or {}
+    if isinstance(pass_if, dict):
+        v = pass_if.get("value")
+        if _is_numeric_scalar(v):
+            band = {**band, "value": v}
+    if not band:
+        anch = test.get("calibration_anchor") if isinstance(test, dict) else None
+        if isinstance(anch, dict) and anch.get("literature_target") is not None:
+            band = {"literature_target": anch["literature_target"]}
+    return band or None
 
 
 def _has_cites(entry: dict) -> bool:
@@ -95,14 +167,9 @@ def bands_missing_provenance(spec: dict) -> list[dict]:
             if not isinstance(test, dict):
                 continue
 
-            # 1. Detect the band.
-            band = _band_from_pass_if(test.get("pass_if"))
-
-            # 2. Also treat calibration_anchor.literature_target as a band indicator.
-            if not band:
-                anch = test.get("calibration_anchor") or {}
-                if isinstance(anch, dict) and anch.get("literature_target") is not None:
-                    band = {"literature_target": anch["literature_target"]}
+            # 1. Detect the band (canonical detector — also catches a numeric
+            #    pass_if.value comparator band, e.g. {op: "<", value: 0.05}).
+            band = numeric_band_of(test)
 
             if not band:
                 continue  # not a band test — skip

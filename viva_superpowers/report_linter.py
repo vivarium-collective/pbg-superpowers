@@ -51,6 +51,7 @@ from typing import Iterable, Iterator
 
 import yaml
 
+from viva_superpowers.band_provenance import has_numeric_band as _is_numeric_band
 from viva_superpowers.bibtex import bib_keys
 from viva_superpowers.rigor import run_is_emitter_backed
 from viva_superpowers.workspace_paths import WorkspacePaths
@@ -1340,27 +1341,11 @@ def _check_finding_scope_generality_lifecycle(ctx: _LintContext) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _is_numeric_band(test: dict) -> bool:
-    """Return True if *test* carries a quantitative acceptance band.
-
-    A test "has a band" when its ``pass_if`` block contains numeric
-    ``low`` / ``high`` / ``threshold`` keys OR its ``calibration_anchor``
-    block carries a ``literature_target``.
-    """
-    if not isinstance(test, dict):
-        return False
-    pass_if = test.get("pass_if") or {}
-    if isinstance(pass_if, dict):
-        if isinstance(pass_if.get("low"), (int, float)):
-            return True
-        if isinstance(pass_if.get("high"), (int, float)):
-            return True
-        if isinstance(pass_if.get("threshold"), (int, float)):
-            return True
-    anch = test.get("calibration_anchor") or {}
-    if isinstance(anch, dict) and anch.get("literature_target") is not None:
-        return True
-    return False
+# _is_numeric_band: see the top-of-file import — was a local reimplementation
+# here that disagreed with band_provenance.py / rigor.py (this one didn't
+# count pass_if.value, so a value-style test was invisible to the
+# /viva-cite-bands citation-gap worklist yet counted as "sourced" in rigor's
+# gate). Now a single import of the canonical band_provenance.has_numeric_band.
 
 
 def _check_band_test_missing_cites(ctx: _LintContext) -> None:

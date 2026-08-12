@@ -67,6 +67,11 @@ from __future__ import annotations
 
 from typing import Any
 
+# Canonical band detector — see band_provenance.has_numeric_band's docstring
+# for the pass_if.value reconciliation rule (numeric value = band regardless
+# of comparator op; non-numeric value, e.g. a config-selector, is not).
+from .band_provenance import has_numeric_band as _has_numeric_band
+
 # Severity vocabulary, ordered worst→best for roll-ups.
 GAP = "gap"
 WARN = "warn"
@@ -320,20 +325,8 @@ def _study_test_entries(spec: dict) -> list[dict]:
     return out
 
 
-def _has_numeric_band(test: dict) -> bool:
-    """True when a test carries a quantitative acceptance band (numeric
-    ``pass_if.low/high/threshold/value`` or ``calibration_anchor.literature_target``)."""
-    if not isinstance(test, dict):
-        return False
-    pass_if = test.get("pass_if")
-    if isinstance(pass_if, dict):
-        for k in ("low", "high", "threshold", "value"):
-            if isinstance(pass_if.get(k), (int, float)) and not isinstance(pass_if.get(k), bool):
-                return True
-    anch = test.get("calibration_anchor")
-    if isinstance(anch, dict) and anch.get("literature_target") is not None:
-        return True
-    return False
+# _has_numeric_band: see the top-of-file import — was a local reimplementation
+# here that disagreed with band_provenance.py / report_linter.py.
 
 
 def _numeric_band_tests(spec: dict) -> list[dict]:

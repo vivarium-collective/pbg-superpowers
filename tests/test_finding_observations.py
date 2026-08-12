@@ -738,6 +738,99 @@ runs:
 
 
 # ---------------------------------------------------------------------------
+# Fix: _divergence_factor must not crash on per-generation dict measured_value
+# (in_range_every_generation / generation_average_in_range store measured_value
+# as {generation: value}, not a scalar — see study_evaluator.py ~:867-868).
+# ---------------------------------------------------------------------------
+
+
+def test_divergence_factor_scalar_still_computes_exactly_as_before():
+    """Sanity: scalar measured_value arithmetic is unchanged by the type guard."""
+    from viva_superpowers.finding_observations import _divergence_factor
+
+    band = {"low": 0.2, "high": 0.5}
+    assert _divergence_factor(0.28, band, None) == pytest.approx(0.0)
+    assert _divergence_factor(0.15, band, None) == pytest.approx(0.25)
+    assert _divergence_factor(0.7, band, None) == pytest.approx(0.4)
+
+
+def test_divergence_factor_dict_measured_value_returns_none_not_raise():
+    """A per-generation dict measured_value (e.g. from in_range_every_generation)
+    must not raise TypeError from the ``low <= measured <= high`` comparison —
+    it is not a well-defined single scalar, so divergence arithmetic is skipped."""
+    from viva_superpowers.finding_observations import _divergence_factor
+
+    band = {"low": 0.2, "high": 0.5}
+    per_gen_measured = {"0": 0.28, "1": 0.31, "2": 0.19}
+
+    result = _divergence_factor(per_gen_measured, band, None)  # must not raise
+    assert result is None
+
+    # Also exercise the calibration_anchor and threshold-only code paths with a
+    # dict measured_value — none of them should raise either.
+    assert _divergence_factor(per_gen_measured, None, 0.35) is None
+    assert _divergence_factor(per_gen_measured, {"threshold": 0.3}, None) is None
+
+
+def test_populate_per_generation_dict_measured_value_does_not_raise(tmp_path):
+    """End-to-end: a finding linked to a per-generation test (measured_value is
+    a dict, as produced by in_range_every_generation/generation_average_in_range
+    in study_evaluator.py) must not crash populate_finding_observations. The
+    dict is still recorded as evidence.observed (never fabricated away), but
+    divergence_factor is skipped since it has no defined arithmetic for a
+    per-generation shape."""
+    study_yaml = """\
+name: test-study
+tests:
+  - name: per-gen-test
+    measure:
+      kind: in_range_every_generation
+      path: obs.fraction
+    pass_if:
+      op: in_range
+      low: 0.2
+      high: 0.5
+runs:
+  - name: run-canonical
+    status: completed
+    timestamp: '2026-01-01T00:00:00Z'
+    computed_outcomes:
+      per-gen-test:
+        result: PASS
+        measured_value:
+          '0': 0.28
+          '1': 0.31
+          '2': 0.19
+        evaluated_by: code
+findings:
+  - id: F-01
+    kind: computational
+    status: confirms
+    statement: 'Per-generation finding.'
+    evidence:
+      from_test: per-gen-test
+"""
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    _write_study(study_dir / "study.yaml", study_yaml)
+
+    from viva_superpowers.finding_observations import populate_finding_observations
+
+    # Must not raise (this reproduces the /viva-biology-forward crash).
+    result = populate_finding_observations(study_dir)
+
+    assert result["filled"] == 1
+    assert result["skipped"] == 0
+
+    doc = _load(study_dir / "study.yaml")
+    finding = doc["findings"][0]
+    # evidence.observed is still recorded (the raw dict), never fabricated
+    assert finding["evidence"]["observed"] == {"0": 0.28, "1": 0.31, "2": 0.19}
+    # divergence_factor is skipped for the non-scalar shape (no crash, no field)
+    assert "divergence_factor" not in finding["evidence"]
+
+
+# ---------------------------------------------------------------------------
 # Task 2: sync wiring
 # ---------------------------------------------------------------------------
 
