@@ -161,6 +161,25 @@ Show the snippets to the user so they can review the evidence.
 
 ## Step 3 — Agent judgment (the only AI step)
 
+**Parameter calibration vs acceptance band — classify before writing.** Does
+the cited number share **units** with the observable the band tests (e.g.
+both a 0-1 fraction, both a cell count)? Only then may it become
+`calibration_anchor.literature_target`. If the cited number is a **parameter
+value in the parameter's own units** (a Kd, an affinity, a rate constant —
+never the observable's units), it calibrates the *model*, not the *band*:
+route it to the study's `model_settings[].cites` instead, and **never** write
+it as a behavior-test `literature_target`. A Kd recorded as the
+`literature_target` on a dimensionless fraction silently corrupts
+`divergence_factor` downstream (see `/viva-biology-forward`'s arithmetic
+block) — this is the trap to avoid.
+
+A cited parameter itself always falls into one of three buckets — label it
+explicitly, never leave it ambiguous:
+1. **Cited** (`cites: [bib_key]`) — a real literature value the model is calibrated to.
+2. **Recorded modeling choice** (`provenance: theory`, note "not fit") — a deliberate choice, not fit to data.
+3. **Pending** (`proposed_inputs`, per Step 3 above) — not yet sourced.
+Bucket 2 must be explicitly labelled as such — never silently treated as (1) cited or as data-anchored.
+
 Read the candidate snippets.  If needed, open the cited PDF page with the
 `Read` tool for fuller context.
 
@@ -202,7 +221,9 @@ print(json.dumps({
     "study": sys.argv[1],
     "test_name": sys.argv[2],
     "cites": [sys.argv[3]],
-    # include calibration_anchor only when the band has a literature midpoint
+    # include calibration_anchor only when the midpoint is in the OBSERVABLE's
+    # own units (see the classification callout above) — a parameter value
+    # (Kd/rate/affinity) belongs in model_settings[].cites, never here.
     "calibration_anchor": {
         "literature_target": float(sys.argv[4]),
         "cites": [sys.argv[3]],

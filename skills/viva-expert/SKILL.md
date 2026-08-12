@@ -506,6 +506,20 @@ Wiring rules:
 - `[".."]` references the parent scope.
 - `["..", "sibling"]` references a sibling store.
 
+**Cross-scale coupling only fires through `Composite.run`.** A coupling
+between two Processes at different scales (e.g. a subcellular Process
+writing a port a cell-level Process reads) takes effect only because
+`Composite` resolves the port graph — the write reaches the reader through
+wiring, not through any direct call. Driving the wrapped simulator's own raw
+`engine.run()` loop instead of `Composite.run(...)` bypasses port resolution
+entirely, and the coupling **silently no-ops**: the subcell process can emit
+correctly and the coupled observable still never moves. Don't stop at
+"the subcell process emits" — verify the coupled observable actually changes
+under a real `Composite.run`. One concrete failure mode: a keyed-map port
+populated only at init drops writes to any key absent at that point
+(`methods/apply.py`) — a coupling that targets a not-yet-present map key
+silently no-ops even inside a genuine `Composite.run`.
+
 ## Bigraph-Schema Essentials
 
 Common built-in types:

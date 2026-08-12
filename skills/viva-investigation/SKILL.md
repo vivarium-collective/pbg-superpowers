@@ -96,6 +96,30 @@ These are **study-level** fields — author them per member study via `/viva-stu
 > stays as-is.)
 
 
+## Multi-realization claims
+
+An investigation may hold **more than one realization of the same claim** at
+different fidelity levels — e.g. a phenomenological realization (a scalar
+rate/knob) alongside a mechanistic realization (the same behavior emergent
+from a finer-grained process). Both are first-class members; the finer one
+does not replace the coarser one, it **refines** it.
+
+- Declare the relationship with `parent_studies[].relation: refines` (see the
+  `relation` enum in [pbg-study → Investigation-graph fields](../viva-study/SKILL.md)),
+  pointing from the finer (refining) study back to the coarser one it refines.
+- On the finer study, name the coarser realization's passing behaviors it must
+  reproduce, and whether it currently does:
+
+  ```yaml
+  refinement:
+    must_preserve:
+      - {coarse_study: <coarse-slug>, behavior: <coarse-behavior-name>, note: "…"}
+    satisfaction: PASSED   # PASSED | FAILED | PENDING
+  ```
+
+- **Re-check `satisfaction` whenever either realization changes** — a `refines`
+  edge is a standing obligation, not a one-time note at authoring time.
+
 ## Investigation ≡ branch ≡ worktree
 
 An Investigation slug is also a **git branch name** and a **worktree directory name**. The three are kept in 1:1 correspondence so that parallel agents can each work on a different Investigation without trampling each other's files, runtime DBs (`.pbg/composite-runs.db`), or dashboard ports.
@@ -509,6 +533,14 @@ runs: []
 > `status: stub`, and a single placeholder baseline entry (a `<TODO>` composite
 > path is fine pre-Build — it renders, and `/viva-report`'s linter nudges you to
 > wire a real one). See `docs/concepts/expected-behavior-grammar.md`.
+
+> **schema_version: 3 caveat.** This scaffold emits `schema_version: 3`, but
+> `model_settings` is only read by the Build tab on a **v4** study (see
+> `/viva-study` § Render completeness) — a top-level `model_settings:` on a
+> v3 study is authored-but-inert. If a phase's studies will carry calibrated
+> parameters, migrate them to v4 (`schema_version: 4`, params under
+> `conditions.model_settings`) once they leave the design stage, rather than
+> authoring `model_settings` here where it silently won't render.
 
 **Notes for Claude when running scaffold-from-plan:**
 

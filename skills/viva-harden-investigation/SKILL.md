@@ -49,6 +49,12 @@ prioritize.
 | Overclaimed verdict (`verdict: pass, confidence: high` on thin evidence) | Reconcile `verdict_status`/confidence to the evidence via `/viva-study set-verdicts` / `set-conclusion` |
 | Open `decisions_needed` / empty followups | Resolve, or fill with concrete follow-up proposals (`/viva-study propose-followup`, `seed-from-followup`) |
 
+> **Bounded-metric CIs.** A normal-approximation CI on a bounded metric (a
+> fraction in [0,1], a count, a non-negative rate) can spill outside the
+> metric's support — e.g. a lower bound below 0 on a [0,1] fraction. Use a
+> Wilson score interval, or at minimum clamp the normal-approx CI to the
+> metric's support; never report a CI bound outside the metric's range.
+
 **3. Look for cross-investigation leverage.** The same signature (e.g. an O₂ exchange deficit)
 often weakens two investigations at once. Root-cause once; update *every* study/investigation that
 cites it, including the `decisions_needed` your finding resolves.
@@ -85,6 +91,7 @@ workflow goes **green** (a triggered run ≠ a successful one).
 - "The survey/memory says study X is a scaffold" → confirm on current `origin/main` first (step 0).
 - "Let me add seeds and statistics to this failing gate" → root-cause it first (step 2).
 - "Here are 11 things to improve" with no ranking → you skipped triage (step 1).
+- An observable computed only over the sub-population the mechanism gates/selects (e.g. measuring recruitment over just the cells the mechanism activated) → circular by construction; require the observable's domain/denominator be fixed independently of the mechanism under test.
 - Hardening the investigation you were handed without checking a sibling has the same defect (step 3).
 - Committing in the shared `~/code/<repo>` checkout instead of a worktree (step 4).
 - Merging an agent's whole branch, or trusting `diff origin/main..branch` — cherry-pick per commit and check the landed diff is deliverables-only (step 4).
