@@ -120,8 +120,17 @@ def _divergence_factor(
 
     Priority: range band > calibration_anchor.literature_target > threshold.
 
-    Returns None when no arithmetic is applicable or a div-by-zero guard fires.
+    Returns None when no arithmetic is applicable, a div-by-zero guard fires,
+    or ``measured`` is not a plain scalar. Per-generation test ops
+    (``in_range_every_generation``, ``generation_average_in_range``, see
+    ``study_evaluator.py``) store ``measured_value`` as a ``{generation: value}``
+    dict rather than a single number — divergence arithmetic against a single
+    band/target is undefined for that shape, so it is skipped (no field
+    written) rather than raising.
     """
+    if not isinstance(measured, (int, float)) or isinstance(measured, bool):
+        return None
+
     low = band.get("low") if isinstance(band, dict) else None
     high = band.get("high") if isinstance(band, dict) else None
     threshold = band.get("threshold") if isinstance(band, dict) else None
