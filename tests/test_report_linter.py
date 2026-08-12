@@ -1260,3 +1260,167 @@ def test_dashboard_render_error_skips_when_no_server(tmp_path, monkeypatch):
     import viva_superpowers.server_preflight as _sp
     monkeypatch.setattr(_sp, "read_server_url", lambda root=".": None)
     assert _rl._dashboard_render_error(tmp_path, "s1") is None
+
+
+# ---------------------------------------------------------------------------
+# perf/report-linter-cache — workspace-global scans run once per lint run,
+# not once per study.
+# ---------------------------------------------------------------------------
+
+
+def _multi_study_ws_for_scan_cache(tmp_path, n: int):
+    """An n-study workspace that exercises all three workspace-global scans
+    (bib keys, expert-doc names, viz classes) identically in every study —
+    each study cites a known + an unknown bib key, references a known + an
+    unknown expert doc, and addresses a resolved + an unresolved local viz
+    class. Every one of those checks depends only on ``ws_root``, so before
+    memoization each scan ran once PER STUDY (n times); after memoization
+    each should run once for the whole lint call.
+    """
+    ws = tmp_path / "ws"
+    (ws / "references").mkdir(parents=True)
+    (ws / "references" / "papers.bib").write_text(
+        "@article{KnownKey2020,\n  title = {Known},\n  year = {2020},\n}\n"
+    )
+    (ws / "pkg" / "visualizations").mkdir(parents=True)
+    (ws / "pkg" / "visualizations" / "viz.py").write_text(
+        "class KnownViz:\n    pass\n"
+    )
+    (ws / "workspace.yaml").write_text(_yaml.safe_dump({
+        "schema_version": 2,
+        "name": "multi-study-scan-cache",
+        "package_path": "pkg",
+        "expert_docs": [
+            {"name": "known_doc", "path": "references/expert/known.pdf"},
+        ],
+    }))
+    slugs = [f"study-{i}" for i in range(n)]
+    for slug in slugs:
+        sd = ws / "studies" / slug
+        sd.mkdir(parents=True)
+        spec = {
+            "name": slug,
+            "baseline": [{"name": "b1", "composite": "pkg.composites.x"}],
+            "findings": [
+                {
+                    "id": "F-01",
+                    "kind": "biological",
+                    "status": "confirms",
+                    "statement": "Cites a known and an unknown bib key.",
+                    "evidence": {"from_test": "t1"},
+                    "expected": {"cites": ["KnownKey2020", "UnknownKey2099"]},
+                },
+                {
+                    "id": "F-02",
+                    "kind": "biological",
+                    "status": "confirms",
+                    "statement": "References an unknown expert doc.",
+                    "evidence": {"from_test": "t2"},
+                    "expert_reference": {"doc": "unknown_doc_not_registered"},
+                },
+            ],
+            "visualizations": [
+                {"name": "viz-ok", "address": "local:KnownViz"},
+                {"name": "viz-bad", "address": "local:MissingViz"},
+            ],
+        }
+        (sd / "study.yaml").write_text(_yaml.safe_dump(spec))
+    return ws, slugs
+
+
+def test_workspace_scans_run_once_per_lint_not_once_per_study(tmp_path, monkeypatch):
+    """The three workspace-global scans (bib keys, expert-doc names, viz
+    classes) depend only on ws_root, not on the individual study. Before
+    the perf/report-linter-cache fix, each ran once PER STUDY (N times for
+    an N-study workspace); this asserts each now runs exactly once for the
+    whole lint_workspace_report() call, and that the findings are exactly
+    what an uncached scan would have produced (memoization must not change
+    or leak results across studies)."""
+    n = 4
+    ws, slugs = _multi_study_ws_for_scan_cache(tmp_path, n=n)
+
+    calls = {"bib_keys": 0, "expert_doc_names": 0, "viz_classes": 0}
+    orig_bib = _rl._bib_keys_for_workspace
+    orig_expert = _rl._expert_doc_names_for_workspace
+    orig_viz = _rl._viz_classes_in_workspace
+
+    def counting_bib(ws_root):
+        calls["bib_keys"] += 1
+        return orig_bib(ws_root)
+
+    def counting_expert(ws_root):
+        calls["expert_doc_names"] += 1
+        return orig_expert(ws_root)
+
+    def counting_viz(ws_root):
+        calls["viz_classes"] += 1
+        return orig_viz(ws_root)
+
+    monkeypatch.setattr(_rl, "_bib_keys_for_workspace", counting_bib)
+    monkeypatch.setattr(_rl, "_expert_doc_names_for_workspace", counting_expert)
+    monkeypatch.setattr(_rl, "_viz_classes_in_workspace", counting_viz)
+
+    findings = lint_workspace_report(ws)
+
+    assert calls == {"bib_keys": 1, "expert_doc_names": 1, "viz_classes": 1}, (
+        f"expected each workspace-global scan to run exactly once across a "
+        f"{n}-study lint run (memoized), got {calls}"
+    )
+
+    # Correctness: every study still produced its own finding from each
+    # check — the shared cache must not leak stale or study-specific data.
+    by_check = _findings_by_check(findings)
+    unknown_bib = by_check.get("finding_cites_unknown_bib_key", [])
+    unknown_expert = by_check.get("finding_references_unknown_expert_doc", [])
+    unresolved_viz = by_check.get("visualization_address_unresolved", [])
+    assert len(unknown_bib) == n
+    assert len(unknown_expert) == n
+    assert len(unresolved_viz) == n
+    assert {f.study_slug for f in unknown_bib} == set(slugs)
+    assert {f.study_slug for f in unknown_expert} == set(slugs)
+    assert {f.study_slug for f in unresolved_viz} == set(slugs)
+    for f in unknown_bib:
+        assert "UnknownKey2099" in f.message
+    for f in unknown_expert:
+        assert "unknown_doc_not_registered" in f.message
+    for f in unresolved_viz:
+        assert "MissingViz" in f.message
+
+
+def test_workspace_scan_cache_is_not_stale_across_separate_lint_runs(tmp_path):
+    """The memo cache is scoped to one lint_workspace_report() call (a fresh
+    dict is minted every call — see lint_workspace_report()), not a
+    module-level cache keyed on ws_root. Prove it can't go stale: lint once
+    with no bibliography (every cite is "unknown"), add references/papers.bib
+    with the previously-missing key, lint again on the SAME ws_root, and
+    confirm the second run reflects the new file instead of a cached miss."""
+    ws = tmp_path / "ws"
+    sd = ws / "studies" / "s1"
+    sd.mkdir(parents=True)
+    (ws / "workspace.yaml").write_text("schema_version: 2\nname: ws\npackage_path: pkg\n")
+    (sd / "study.yaml").write_text(_yaml.safe_dump({
+        "name": "s1",
+        "baseline": [{"name": "b1", "composite": "pkg.composites.x"}],
+        "findings": [{
+            "id": "F-01",
+            "kind": "biological",
+            "status": "confirms",
+            "statement": "Cites a key that doesn't exist yet.",
+            "evidence": {"from_test": "t1"},
+            "expected": {"cites": ["LaterKey2020"]},
+        }],
+    }))
+
+    # No papers.bib yet: the check is silent (no bibliography to compare
+    # against is a deliberate no-op, per _check_finding_cites_unknown_bib_key).
+    before = _findings_by_check(lint_workspace_report(ws))
+    assert before.get("finding_cites_unknown_bib_key", []) == []
+
+    # Now add the bibliography, with the cited key present.
+    (ws / "references").mkdir()
+    (ws / "references" / "papers.bib").write_text(
+        "@article{LaterKey2020,\n  title = {x},\n  year = {2020},\n}\n"
+    )
+    after = _findings_by_check(lint_workspace_report(ws))
+    assert after.get("finding_cites_unknown_bib_key", []) == []
+    assert after.get("finding_references_unknown_expert_doc", []) == []
