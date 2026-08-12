@@ -92,13 +92,24 @@ class LintFinding:
 
 @dataclass
 class _LintContext:
-    """Per-study context handed to each check function."""
+    """Per-study context handed to each check function.
+
+    ``ws_cache`` is a plain dict shared by every ``_LintContext`` built
+    within a single ``lint_workspace_report()`` call (all studies AND
+    investigations in that run point at the *same* dict instance). It
+    memoizes the workspace-global scans (bib keys, expert-doc names, viz
+    classes) that depend only on ``ws_root`` — not on the study — so each
+    scan runs at most once per lint run instead of once per study. See
+    ``_cached()`` below and ``lint_workspace_report()``, which is the only
+    place a fresh ``ws_cache`` is minted.
+    """
 
     ws_root: Path
     slug: str
     spec: dict
     findings: list[LintFinding] = field(default_factory=list)
     strict: bool = False
+    ws_cache: dict = field(default_factory=dict)
 
     def add(
         self,
@@ -894,6 +905,25 @@ def _flag_if_truncated(ctx: _LintContext, path: str, value: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _cached(ctx: "_LintContext", key: str, compute):
+    """Memoize a workspace-global scan for the lifetime of one lint run.
+
+    ``ctx.ws_cache`` is shared across every ``_LintContext`` created inside
+    a single ``lint_workspace_report()`` call, so a scan that depends only
+    on ``ctx.ws_root`` (not on the individual study) runs at most once per
+    lint run — instead of once per study — while staying lazy: it's only
+    computed the first time a check actually needs it.
+
+    Scoped to one call, not module-level: a fresh ``ws_cache`` dict is
+    minted on every ``lint_workspace_report()`` invocation, so this can
+    never serve stale data across two separate lint runs even if the
+    workspace's files changed in between.
+    """
+    if key not in ctx.ws_cache:
+        ctx.ws_cache[key] = compute()
+    return ctx.ws_cache[key]
+
+
 def _bib_keys_for_workspace(ws_root: Path) -> set[str]:
     """Every @entry key declared in the workspace bibliography.
 
@@ -1009,7 +1039,7 @@ def _check_finding_cites_unknown_bib_key(ctx: _LintContext) -> None:
     findings = ctx.spec.get("findings") or []
     if not isinstance(findings, list):
         return
-    known = _bib_keys_for_workspace(ctx.ws_root)
+    known = _cached(ctx, "bib_keys", lambda: _bib_keys_for_workspace(ctx.ws_root))
     if not known:
         # No bibliography to compare against — surface nothing rather than
         # spamming errors. Authors who reference bib_keys without papers.bib
@@ -1045,7 +1075,7 @@ def _check_finding_references_unknown_expert_doc(ctx: _LintContext) -> None:
     findings = ctx.spec.get("findings") or []
     if not isinstance(findings, list):
         return
-    known = _expert_doc_names_for_workspace(ctx.ws_root)
+    known = _cached(ctx, "expert_doc_names", lambda: _expert_doc_names_for_workspace(ctx.ws_root))
     for idx, f in enumerate(findings):
         if not isinstance(f, dict):
             continue
@@ -1374,7 +1404,7 @@ def _check_band_cites_unknown_bib_key(ctx: _LintContext) -> None:
     Mirrors ``_check_finding_cites_unknown_bib_key``: silent when no
     ``papers.bib`` exists, error otherwise.
     """
-    known = _bib_keys_for_workspace(ctx.ws_root)
+    known = _cached(ctx, "bib_keys", lambda: _bib_keys_for_workspace(ctx.ws_root))
     if not known:
         # No bibliography to compare against — silent (same contract as finding check).
         return
@@ -1541,7 +1571,7 @@ def _check_visualization_addresses(ctx: _LintContext) -> None:
         if not cls:
             continue
         if known is None:
-            known = _viz_classes_in_workspace(ctx.ws_root)
+            known = _cached(ctx, "viz_classes", lambda: _viz_classes_in_workspace(ctx.ws_root))
         if cls in known:
             continue
         viz_name = v.get("name", f"<index-{idx}>")
@@ -2882,10 +2912,20 @@ def lint_workspace_report(ws_root: Path, *, strict: bool = False) -> list[LintFi
 
     ``strict`` promotes opt-in warning-level checks (e.g.
     ``viz_stale_vs_latest_run``) to error level.
+
+    Workspace-global scans (bib keys, expert-doc names, viz classes) depend
+    only on ``ws_root`` — not on the individual study — so a single
+    ``ws_cache`` dict is minted here and shared by every ``_LintContext``
+    built in this call (studies and investigations alike). Each scan then
+    runs at most once per call to this function, instead of once per
+    study. See ``_cached()``. The dict is scoped to this one call — a
+    fresh one every time ``lint_workspace_report()`` runs — so it can
+    never serve stale data across two separate lint runs.
     """
     out: list[LintFinding] = []
+    ws_cache: dict = {}
     for slug, spec in _iter_study_specs(ws_root):
-        ctx = _LintContext(ws_root=ws_root, slug=slug, spec=spec, strict=strict)
+        ctx = _LintContext(ws_root=ws_root, slug=slug, spec=spec, strict=strict, ws_cache=ws_cache)
         for fn in _CHECK_FUNCTIONS:
             try:
                 fn(ctx)
@@ -2903,7 +2943,7 @@ def lint_workspace_report(ws_root: Path, *, strict: bool = False) -> list[LintFi
     # Investigation-level checks (the modern v2 investigation.yaml narrative
     # spine) — run on investigation specs, not studies.
     for slug, spec in _iter_investigation_specs(ws_root):
-        ctx = _LintContext(ws_root=ws_root, slug=slug, spec=spec, strict=strict)
+        ctx = _LintContext(ws_root=ws_root, slug=slug, spec=spec, strict=strict, ws_cache=ws_cache)
         for fn in _INVESTIGATION_CHECK_FUNCTIONS:
             try:
                 fn(ctx)
