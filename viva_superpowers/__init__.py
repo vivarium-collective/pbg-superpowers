@@ -11,6 +11,8 @@ from viva_superpowers.post_sim import (  # noqa: E402,F401
     Analysis,
     AnalysisStep,
     ReportCardStep,
+    ResultsHandle,
+    ResultsStep,
     StudyContext,
     VisualizationStep,
     applicable,
