@@ -1,4 +1,12 @@
-"""Shared post-simulation Step family: Analysis, Visualization, ReportCard.
+"""Shared post-simulation Step family: Results, Analysis, Visualization, ReportCard.
+
+``ResultsStep`` is the family's head: it reads a finished run's emitted-output
+location and writes one ``ResultsHandle`` (emitter-agnostic, built on
+``viva_emitters``) to the ``results`` store. Every other Step in this module
+reads from that handle (``AnalysisStep``, and ``Analysis`` as a deprecated
+alias of it), so a composite shaped ``[emitter output] -> ResultsStep ->
+{AnalysisStep, ReportCardStep, ...}`` runs the whole family deterministically
+off one read of the run.
 
 Moved from v2ecoli (``v2ecoli/workflow/post_sim.py``,
 ``v2ecoli/workflow/analysis.py``, ``v2ecoli/workflow/report_cards/__init__.py``)
@@ -32,12 +40,14 @@ from __future__ import annotations
 
 import json
 import math
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+import viva_emitters
 from process_bigraph.composite import Step, SyncUpdate
 
 KINDS = ("analysis", "visualization", "report_card")
@@ -80,64 +90,221 @@ def iter_post_sim(kind: "str | None" = None) -> list:
     return sorted(out, key=lambda t: t[0])
 
 
-class Analysis(Step):
-    """Visualization-like analysis: reads sim output via a DuckDB connection +
-    the ParCa ``sim_data``, and emits a rendered ``view`` (HTML) plus optional
-    ``data`` (map). Faithful native ports of vEcoli's ``plot()`` analyses build
-    on this base (cf. the record-based ``AnalysisStep`` for emitted-observable
-    analyses). Subclasses set ``scale`` + ``name`` and implement ``analyze``.
+def _detect_backend(path: str) -> str:
+    """Guess a store's emitter backend from its path shape. ``.db``/``.sqlite``
+    (SQLite, an existing file) -> ``"sqlite"``; a ``.zarr`` root -> ``"xarray"``;
+    anything else (an existing or not-yet-materialized directory) -> ``"parquet"``
+    (the hive-partitioned ``ParquetEmitter`` layout)."""
+    p = Path(path)
+    suffix = p.suffix.lower()
+    if suffix in (".db", ".sqlite", ".sqlite3"):
+        return "sqlite"
+    if suffix == ".zarr":
+        return "xarray"
+    return "parquet"
 
-    Live, non-serializable handles (``conn``, ``sim_data``) are injected by the
-    runner into the state dict passed to ``update``; ``inputs()`` declares them
-    for discoverability with a permissive ("any") type.
+
+def _load_records_sqlite(path: str, simulation_id: "str | None") -> list[dict]:
+    sim_ids = [simulation_id] if simulation_id else [
+        s["simulation_id"] for s in viva_emitters.list_simulations(path)
+    ]
+    records: list[dict] = []
+    for sid in sim_ids:
+        records.extend(viva_emitters.load_history(path, sid))
+    return records
+
+
+def _load_records_parquet(path: str) -> list[dict]:
+    create_duckdb_conn = getattr(viva_emitters, "create_duckdb_conn", None)
+    if create_duckdb_conn is None:
+        raise RuntimeError(
+            "ResultsHandle: reading a parquet store requires the "
+            "'viva-emitters[parquet]' extra (duckdb/polars/pyarrow not "
+            "importable from viva_emitters)")
+    conn = create_duckdb_conn()
+    try:
+        rel = conn.sql(
+            f"SELECT * FROM read_parquet('{path}/**/*.pq', union_by_name=true)")
+        return rel.pl().to_dicts()
+    finally:
+        conn.close()
+
+
+def _load_records(paths: "list[str]", simulation_id: "str | None") -> list[dict]:
+    """Read every store in ``paths`` and concatenate their records. Backend is
+    auto-detected per path (mixed backends across ``paths`` are allowed)."""
+    records: list[dict] = []
+    for path in paths:
+        backend = _detect_backend(path)
+        if backend == "sqlite":
+            records.extend(_load_records_sqlite(path, simulation_id))
+        elif backend == "parquet":
+            records.extend(_load_records_parquet(path))
+        else:
+            raise NotImplementedError(
+                f"ResultsHandle: {backend!r} backend not yet wired for "
+                f"{path!r} (sqlite + parquet are supported)")
+    return records
+
+
+@dataclass
+class ResultsHandle:
+    """Typed, emitter-agnostic handle over a study run's emitted results —
+    the object ``ResultsStep`` writes to the ``results`` store and every
+    downstream post-sim Step (``AnalysisStep``, ``ReportCardStep``, ...)
+    reads from.
+
+    Reconstructs from ``{paths, sim_data_ref, simulation_id}`` via
+    ``from_config``/``to_config`` — a JSON-able config, not the live object —
+    so a handle produced in one process is file-rehydratable in another (e.g.
+    a report renderer opening a finished run from disk long after the
+    Composite that produced it exited).
+
+    - ``records(scale=None) -> list[dict]``: the run's emitted rows, read
+      once and cached. Opens SQLite (via ``viva_emitters.load_history``) or
+      DuckDB-over-parquet (``viva_emitters.create_duckdb_conn`` +
+      ``read_parquet``), whichever ``paths`` points at. ``scale`` is accepted
+      for forward-compatibility with the ``ANALYSIS_SCALES`` slicing
+      convention; this shared package does not itself implement per-scale
+      cell-record slicing (that logic — keyed by seed/generation — is
+      workspace-specific and stays out of ``viva_superpowers``), so today
+      every ``scale`` returns the same full record set.
+    - ``conn()``: a lazy DuckDB connection (``viva_emitters.create_duckdb_conn``)
+      with the handle's records registered as a view named ``"results"``, for
+      analyses that want direct SQL instead of record dicts. Only imports
+      duckdb/polars when actually called.
+    - ``sim_data``: lazily resolved from ``sim_data_ref`` — a pickle path is
+      unpickled on first access; anything else is returned as-is (opaque to
+      this package, resolved by the caller that set it).
+    - ``paths``: the store path(s) this handle was built from.
     """
 
-    scale: str = "single"
-    config_schema: dict = {}
+    paths: "list[str]"
+    sim_data_ref: Any = None
+    simulation_id: "str | None" = None
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if cls.scale not in ANALYSIS_SCALES:
-            raise ValueError(
-                f"{cls.__name__}.scale={cls.scale!r} not in {sorted(ANALYSIS_SCALES)}")
-        if "name" in cls.__dict__:
-            ANALYSIS_REGISTRY[cls.name] = cls
-        if "name" in cls.__dict__:
-            register_post_sim(cls, "analysis")
+    def __post_init__(self) -> None:
+        self._records: "list[dict] | None" = None
+        self._conn: Any = None
+        self._sim_data: Any = None
+        self._sim_data_loaded: bool = False
 
-    def inputs(self):
+    @classmethod
+    def from_config(cls, config: dict) -> "ResultsHandle":
+        return cls(
+            paths=list(config.get("paths") or []),
+            sim_data_ref=config.get("sim_data_ref"),
+            simulation_id=config.get("simulation_id") or None,
+        )
+
+    def to_config(self) -> dict:
         return {
-            "conn": "any", "history_sql": "string",
-            "config_sql": "string", "success_sql": "string",
-            "sim_data": "any", "validation_data": "any",
-            "variant_metadata": "any",
+            "paths": list(self.paths),
+            "sim_data_ref": self.sim_data_ref,
+            "simulation_id": self.simulation_id,
         }
 
+    def records(self, scale: "str | None" = None) -> "list[dict]":
+        if self._records is None:
+            self._records = _load_records(self.paths, self.simulation_id)
+        return self._records
+
+    def conn(self):
+        if self._conn is None:
+            create_duckdb_conn = getattr(viva_emitters, "create_duckdb_conn", None)
+            if create_duckdb_conn is None:
+                raise RuntimeError(
+                    "ResultsHandle.conn(): requires the 'viva-emitters[parquet]' "
+                    "extra (duckdb not importable from viva_emitters)")
+            self._conn = create_duckdb_conn()
+            import polars as pl
+            self._conn.register("results", pl.DataFrame(self.records()))
+        return self._conn
+
+    @property
+    def sim_data(self):
+        if not self._sim_data_loaded:
+            ref = self.sim_data_ref
+            if ref and isinstance(ref, (str, Path)) and Path(ref).suffix in (
+                    ".pickle", ".pkl", ".cpickle"):
+                with open(ref, "rb") as fh:
+                    self._sim_data = pickle.load(fh)
+            else:
+                self._sim_data = ref
+            self._sim_data_loaded = True
+        return self._sim_data
+
+
+class ResultsStep(Step):
+    """The head of the post-sim Step family: reads a finished run's emitted
+    results location (store path(s), and optionally a sim_data reference)
+    from config or from a wired-in state input, and writes one
+    ``ResultsHandle`` to the ``results`` store. Every downstream Step —
+    ``AnalysisStep``, ``ReportCardStep``, etc. — reads from that single
+    handle, so a composite shaped ``[emitter output] -> ResultsStep ->
+    {AnalysisStep, ReportCardStep, ...}`` gives every post-sim Step the same
+    view of the run, computed once (``ResultsHandle`` caches its own
+    ``.records()``/``.conn()``, so fan-out doesn't re-read the store).
+
+    Config keys (all optional): ``paths`` (list[str]), ``sim_data_ref``
+    (any), ``simulation_id`` (str). A same-named, non-empty ``state`` input
+    overrides the matching config key, so a composite can wire an upstream
+    store (e.g. a run-finished notification carrying the real output path)
+    instead of hard-coding a path in config.
+    """
+
+    # Deliberately empty (matches VisualizationStep/ReportCardStep/AnalysisStep
+    # in this module): `paths`/`sim_data_ref`/`simulation_id` are read straight
+    # off `self.config` without bigraph-schema validation, since the schema
+    # system has no registered "opaque value" type that would let
+    # `sim_data_ref` (an arbitrary python object) pass `core.fill()`.
+    config_schema: dict = {}
+
+    def inputs(self):
+        return {"paths": "tree", "sim_data_ref": "tree", "simulation_id": "tree"}
+
     def outputs(self):
-        return {"view": "string", "data": "map"}
-
-    def analyze(self, *, conn, history_sql, sim_data, **ctx) -> dict:
-        """Return {"view": <html str>, "data": <map>} (either key optional)."""
-        raise NotImplementedError
-
-    def invoke(self, state, interval=None):
-        # Fail loudly (like AnalysisStep): a broken analyze() must surface.
-        return SyncUpdate(self.update(state))
+        return {"results": "tree"}
 
     def update(self, state, interval=None):
-        kwargs = {k: state.get(k) for k in self.inputs()}
-        out = self.analyze(**kwargs) or {}
-        return {"view": out.get("view", ""), "data": out.get("data", {})}
+        cfg = dict(self.config or {})
+        for key in ("paths", "sim_data_ref", "simulation_id"):
+            val = state.get(key)
+            if val:
+                cfg[key] = val
+        return {"results": ResultsHandle.from_config(cfg)}
+
+    def invoke(self, state, interval=None):
+        # Same swallow-on-error guard as VisualizationStep/ReportCardStep: a
+        # run whose output isn't there yet (or a bad path) shouldn't crash
+        # the step cascade — downstream Steps just see no `results`.
+        try:
+            update = self.update(state)
+        except Exception:
+            update = {}
+        return SyncUpdate(update)
 
 
 class AnalysisStep(Step):
-    """Base for result-consuming analysis Steps.
+    """Canonical base for post-sim analyses.
 
-    Subclasses set ``scale`` (one of ANALYSIS_SCALES) and implement
-    ``analyze(rows) -> dict``. ``rows`` is a list of emitted result records
-    (dicts shaped like the partitioned parquet rows / in-state snapshots) for
-    the slice this scale covers. The Step's update() reads ``results`` from
-    state and writes the analysis output to ``analysis``.
+    Reads the ``ResultsHandle`` that ``ResultsStep`` wrote to the ``results``
+    store and implements ``analyze(rows) -> dict`` over
+    ``results.records(scale=self.scale)``. Subclasses that need direct SQL
+    access instead of record dicts can pull ``results.conn()`` (lazy DuckDB)
+    or ``results.sim_data`` from within ``analyze`` (the handle is available
+    via the ``results`` input if a subclass overrides ``update`` to keep it).
+    Subclasses set ``scale`` (one of ``ANALYSIS_SCALES``) + ``name``.
+
+    Supersedes the pre-collapse dual-base split (a record-list-only
+    ``AnalysisStep`` alongside a live-``conn`` ``Analysis``): both flavors of
+    analysis now read from the same ``ResultsHandle``, so a composite wires
+    every analysis the same way regardless of whether it wants ``.records()``
+    or ``.conn()``. For backward compatibility, ``update()`` also accepts a
+    plain list in the ``results`` store (the pre-collapse contract) — used
+    as-is, no handle required. ``Analysis`` (below) is kept as a thin
+    deprecated subclass preserving the old conn/history_sql-keyword
+    ``analyze()`` signature for call sites that haven't migrated yet.
     """
 
     scale: str = "single"
@@ -155,10 +322,10 @@ class AnalysisStep(Step):
             register_post_sim(cls, "analysis")
 
     def inputs(self):
-        return {"results": "list"}
+        return {"results": "tree"}
 
     def outputs(self):
-        return {"analysis": "map"}
+        return {"analysis": "tree"}
 
     def analyze(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
         raise NotImplementedError
@@ -170,8 +337,47 @@ class AnalysisStep(Step):
         return SyncUpdate(self.update(state))
 
     def update(self, state, interval=None):
-        rows = state.get("results") or []
+        results = state.get("results")
+        rows = results.records(self.scale) if hasattr(results, "records") else (results or [])
         return {"analysis": self.analyze(rows)}
+
+
+class Analysis(AnalysisStep):
+    """Deprecated: the pre-collapse live-``conn`` analysis base, kept as a
+    thin subclass of ``AnalysisStep`` so existing subclasses/imports built
+    against the old dual-base API keep working. New analyses should subclass
+    ``AnalysisStep`` directly and implement ``analyze(rows)``; ``Analysis``
+    derives ``conn``/``sim_data`` from the same ``ResultsHandle``
+    ``AnalysisStep`` reads (``results.conn()`` / ``results.sim_data``), so
+    both flavors are wired identically from a composite's perspective — only
+    the subclass-facing ``analyze()`` signature differs.
+
+    Faithful native ports of vEcoli's ``plot()`` analyses build on this base
+    (cf. the record-based ``AnalysisStep`` for emitted-observable analyses).
+    Subclasses set ``scale`` + ``name`` and implement ``analyze``.
+    """
+
+    def inputs(self):
+        return {"results": "tree"}
+
+    def outputs(self):
+        return {"view": "string", "data": "tree"}
+
+    def analyze(self, *, conn, history_sql, sim_data, **ctx) -> dict:
+        """Return {"view": <html str>, "data": <map>} (either key optional)."""
+        raise NotImplementedError
+
+    def update(self, state, interval=None):
+        results = state.get("results")
+        if hasattr(results, "conn"):
+            conn, sim_data = results.conn(), results.sim_data
+        else:
+            conn, sim_data = None, None
+        out = self.analyze(
+            conn=conn, history_sql="results", config_sql="", success_sql="",
+            sim_data=sim_data, validation_data=None, variant_metadata=None,
+        ) or {}
+        return {"view": out.get("view", ""), "data": out.get("data", {})}
 
 
 class VisualizationStep(Step):
@@ -191,10 +397,10 @@ class VisualizationStep(Step):
             register_post_sim(cls, "visualization")
 
     def inputs(self):
-        return {"study": "any"}
+        return {"study": "tree"}
 
     def outputs(self):
-        return {"view": "string", "data": "map"}
+        return {"view": "string", "data": "tree"}
 
     def render(self, study) -> "tuple[str, dict] | None":
         raise NotImplementedError
@@ -245,10 +451,10 @@ class ReportCardStep(Step):
             register_post_sim(cls, "report_card")
 
     def inputs(self):
-        return {"study": "any"}
+        return {"study": "tree"}
 
     def outputs(self):
-        return {"view": "string", "data": "map"}
+        return {"view": "string", "data": "tree"}
 
     def applies(self, study) -> bool:
         return True
