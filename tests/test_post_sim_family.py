@@ -70,6 +70,59 @@ def test_analysis_live_conn_subclass_auto_registers():
     assert POST_SIM_REGISTRY["probe_analysis_demo"]["kind"] == "analysis"
 
 
+def test_analysis_live_conn_surface_not_dropped(core):
+    """Regression test: Analysis.update() must read conn/history_sql/sim_data/
+    etc. straight off `state` (the surface v2ecoli's analysis_runner.py drives
+    ~30 concrete subclasses through) and pass them to analyze() unmodified —
+    NOT read a ResultsHandle from state["results"]. A prior collapse of
+    Analysis into a thin AnalysisStep alias silently dropped these kwargs
+    (analyze() saw None for everything), breaking every v2ecoli subclass."""
+    received = {}
+
+    class _ProbeLiveConnAnalysis(Analysis):
+        name = "probe_live_conn_analysis_demo"
+        scale = "single"
+
+        def analyze(self, *, conn, history_sql, sim_data, **ctx):
+            received["conn"] = conn
+            received["history_sql"] = history_sql
+            received["sim_data"] = sim_data
+            received["config_sql"] = ctx.get("config_sql")
+            received["success_sql"] = ctx.get("success_sql")
+            received["validation_data"] = ctx.get("validation_data")
+            received["variant_metadata"] = ctx.get("variant_metadata")
+            return {"view": "<i>ok</i>", "data": {"n": 1}}
+
+    conn_sentinel = object()
+    sim_data_sentinel = object()
+    validation_data_sentinel = object()
+    variant_metadata_sentinel = object()
+
+    step = _ProbeLiveConnAnalysis({}, core=core)
+    out = step.update({
+        "conn": conn_sentinel,
+        "history_sql": "SELECT 1",
+        "config_sql": "SELECT 2",
+        "success_sql": "SELECT 3",
+        "sim_data": sim_data_sentinel,
+        "validation_data": validation_data_sentinel,
+        "variant_metadata": variant_metadata_sentinel,
+        # A ResultsHandle-shaped "results" key must NOT be consulted by
+        # Analysis.update() — it isn't in Analysis.inputs(), so it must be
+        # ignored entirely (proves Analysis and AnalysisStep stayed distinct).
+        "results": object(),
+    })
+
+    assert received["conn"] is conn_sentinel
+    assert received["history_sql"] == "SELECT 1"
+    assert received["config_sql"] == "SELECT 2"
+    assert received["success_sql"] == "SELECT 3"
+    assert received["sim_data"] is sim_data_sentinel
+    assert received["validation_data"] is validation_data_sentinel
+    assert received["variant_metadata"] is variant_metadata_sentinel
+    assert out == {"view": "<i>ok</i>", "data": {"n": 1}}
+
+
 def test_visualization_step_subclass_auto_registers():
     class _ProbeViz(VisualizationStep):
         name = "probe_viz_demo"

@@ -2,11 +2,14 @@
 
 ``ResultsStep`` is the family's head: it reads a finished run's emitted-output
 location and writes one ``ResultsHandle`` (emitter-agnostic, built on
-``viva_emitters``) to the ``results`` store. Every other Step in this module
-reads from that handle (``AnalysisStep``, and ``Analysis`` as a deprecated
-alias of it), so a composite shaped ``[emitter output] -> ResultsStep ->
-{AnalysisStep, ReportCardStep, ...}`` runs the whole family deterministically
-off one read of the run.
+``viva_emitters``) to the ``results`` store, so a composite shaped
+``[emitter output] -> ResultsStep -> {AnalysisStep, ReportCardStep, ...}``
+runs deterministically off one read of the run. ``AnalysisStep`` reads that
+handle. ``Analysis`` is a genuinely separate, non-deprecated base for the
+live-``conn`` surface v2ecoli's ``analysis_runner.py`` drives directly
+(``conn``/``history_sql``/``sim_data``/... injected straight into ``state``,
+bypassing ``ResultsHandle``) — the two bases share only their
+``scale``/registry machinery, not their I/O contract.
 
 Moved from v2ecoli (``v2ecoli/workflow/post_sim.py``,
 ``v2ecoli/workflow/analysis.py``, ``v2ecoli/workflow/report_cards/__init__.py``)
@@ -296,15 +299,16 @@ class AnalysisStep(Step):
     via the ``results`` input if a subclass overrides ``update`` to keep it).
     Subclasses set ``scale`` (one of ``ANALYSIS_SCALES``) + ``name``.
 
-    Supersedes the pre-collapse dual-base split (a record-list-only
-    ``AnalysisStep`` alongside a live-``conn`` ``Analysis``): both flavors of
-    analysis now read from the same ``ResultsHandle``, so a composite wires
-    every analysis the same way regardless of whether it wants ``.records()``
-    or ``.conn()``. For backward compatibility, ``update()`` also accepts a
-    plain list in the ``results`` store (the pre-collapse contract) — used
-    as-is, no handle required. ``Analysis`` (below) is kept as a thin
-    deprecated subclass preserving the old conn/history_sql-keyword
-    ``analyze()`` signature for call sites that haven't migrated yet.
+    ``Analysis`` (below) is a *separate*, genuinely distinct base for the
+    live-``conn`` surface v2ecoli's ``analysis_runner.py`` drives directly —
+    it only shares ``__init_subclass__``'s ``scale``/registry machinery with
+    this class, not ``update()``/``inputs()``/``outputs()``. (An earlier
+    revision collapsed ``Analysis`` into a thin alias of this class, which
+    silently dropped the injected ``conn``/``history_sql``/``sim_data``
+    kwargs and broke every v2ecoli ``Analysis`` subclass; do not repeat
+    that — the two bases stay distinct.) For backward compatibility,
+    ``update()`` here also accepts a plain list in the ``results`` store
+    (the pre-``ResultsHandle`` contract) — used as-is, no handle required.
     """
 
     scale: str = "single"
@@ -343,40 +347,52 @@ class AnalysisStep(Step):
 
 
 class Analysis(AnalysisStep):
-    """Deprecated: the pre-collapse live-``conn`` analysis base, kept as a
-    thin subclass of ``AnalysisStep`` so existing subclasses/imports built
-    against the old dual-base API keep working. New analyses should subclass
-    ``AnalysisStep`` directly and implement ``analyze(rows)``; ``Analysis``
-    derives ``conn``/``sim_data`` from the same ``ResultsHandle``
-    ``AnalysisStep`` reads (``results.conn()`` / ``results.sim_data``), so
-    both flavors are wired identically from a composite's perspective — only
-    the subclass-facing ``analyze()`` signature differs.
+    """Live-``conn`` analysis base: reads sim output via a DuckDB connection +
+    the ParCa ``sim_data``, and emits a rendered ``view`` (HTML) plus optional
+    ``data`` (map). Faithful native ports of vEcoli's ``plot()`` analyses build
+    on this base (cf. the record-based ``AnalysisStep`` for emitted-observable
+    analyses). Subclasses set ``scale`` + ``name`` and implement ``analyze``.
 
-    Faithful native ports of vEcoli's ``plot()`` analyses build on this base
-    (cf. the record-based ``AnalysisStep`` for emitted-observable analyses).
-    Subclasses set ``scale`` + ``name`` and implement ``analyze``.
+    Live, non-serializable handles (``conn``, ``sim_data``) are injected by the
+    runner into the state dict passed to ``update``; ``inputs()`` declares them
+    for discoverability with a permissive ("any") type.
+
+    Genuinely distinct from ``AnalysisStep`` (its parent only for the shared
+    ``scale``/registry machinery via ``__init_subclass__``) — this is NOT a
+    thin alias. v2ecoli's production ``analysis_runner.py::run_analyses()``
+    drives ~30 concrete subclasses through exactly this surface (calling
+    ``update()`` with ``conn``/``history_sql``/``sim_data``/... injected
+    directly into ``state``, bypassing ``ResultsHandle`` entirely), so
+    ``update()`` here must read those keys straight off ``state`` — it must
+    NOT read a ``ResultsHandle`` from ``state["results"]`` the way
+    ``AnalysisStep.update()`` does. (A prior collapse of this base into
+    ``AnalysisStep`` silently dropped the injected conn/history_sql/sim_data
+    kwargs, breaking all ~30 subclasses; restored here to the original
+    pre-collapse behavior.)
     """
 
     def inputs(self):
-        return {"results": "tree"}
+        return {
+            "conn": "any", "history_sql": "string",
+            "config_sql": "string", "success_sql": "string",
+            "sim_data": "any", "validation_data": "any",
+            "variant_metadata": "any",
+        }
 
     def outputs(self):
-        return {"view": "string", "data": "tree"}
+        return {"view": "string", "data": "map"}
 
     def analyze(self, *, conn, history_sql, sim_data, **ctx) -> dict:
         """Return {"view": <html str>, "data": <map>} (either key optional)."""
         raise NotImplementedError
 
+    def invoke(self, state, interval=None):
+        # Fail loudly (like AnalysisStep): a broken analyze() must surface.
+        return SyncUpdate(self.update(state))
+
     def update(self, state, interval=None):
-        results = state.get("results")
-        if hasattr(results, "conn"):
-            conn, sim_data = results.conn(), results.sim_data
-        else:
-            conn, sim_data = None, None
-        out = self.analyze(
-            conn=conn, history_sql="results", config_sql="", success_sql="",
-            sim_data=sim_data, validation_data=None, variant_metadata=None,
-        ) or {}
+        kwargs = {k: state.get(k) for k in self.inputs()}
+        out = self.analyze(**kwargs) or {}
         return {"view": out.get("view", ""), "data": out.get("data", {})}
 
 
