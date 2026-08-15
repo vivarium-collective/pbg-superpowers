@@ -21,3 +21,9 @@ from viva_superpowers.post_sim import (  # noqa: E402,F401
     register_post_sim,
     write_card,
 )
+
+from viva_superpowers.test_contract import (  # noqa: E402,F401
+    Expected, value, band, predicate, check, TestBuilder, sanitize,
+)
+from viva_superpowers.test_diff import diff_reports  # noqa: E402,F401
+from viva_superpowers import test_vocab  # noqa: E402,F401
