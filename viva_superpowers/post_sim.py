@@ -615,3 +615,124 @@ def applicable(ctx: StudyContext, core, only: "str | None" = None) -> list:
         except Exception:  # noqa: BLE001 — one broken card never aborts selection
             continue
     return out
+
+
+# ---------------------------------------------------------------------------
+# TestReportStep: the Evaluate-tail Step that aggregates every TestStep's
+# verdict into one run report (report.json) and diffs it against the
+# previous run (diff.json), with a bounded on-disk history/ of prior reports.
+# ---------------------------------------------------------------------------
+from viva_superpowers.test_vocab import worst as _worst  # noqa: E402
+from viva_superpowers.test_diff import diff_reports as _diff_reports  # noqa: E402
+from viva_superpowers.test_contract import sanitize as _tc_sanitize  # noqa: E402
+
+HISTORY_KEEP = 10
+
+
+def tests_dir(ctx: StudyContext) -> Path:
+    return ctx.study_dir / "viz" / "tests"
+
+
+def history_dir(ctx: StudyContext) -> Path:
+    return tests_dir(ctx) / "history"
+
+
+def build_report(study_name: str, run_id, cards: dict) -> dict:
+    """Aggregate a ``{name: verdict_doc}`` map into a ``test_report/v1`` doc.
+    ``overall`` is the worst verdict over every card's ``overall``. ``counts``
+    tallies cards, total axes, and per-verdict axis counts (plus
+    ``hard_mismatch``, axes verdict ``mismatch`` with ``severity != "soft"``)."""
+    counts = {"cards": len(cards), "axes": 0, "within_tol": 0, "drift": 0,
+              "mismatch": 0, "ungraded": 0, "hard_mismatch": 0}
+    overalls = []
+    for doc in cards.values():
+        overalls.append(doc.get("overall", "ungraded"))
+        for grp in (doc.get("groups") or {}).values():
+            for ax in grp.get("axes") or []:
+                counts["axes"] += 1
+                v = ax.get("verdict", "ungraded")
+                if v in counts:
+                    counts[v] += 1
+                if v == "mismatch" and ax.get("severity", "hard") == "hard":
+                    counts["hard_mismatch"] += 1
+    return _tc_sanitize({
+        "schema": "test_report/v1", "study": study_name, "run_id": run_id,
+        "overall": _worst(overalls), "counts": counts, "cards": cards,
+    })
+
+
+def write_report(ctx: StudyContext, report: dict) -> Path:
+    """Write ``tests_dir(ctx)/report.json`` (sanitized, allow_nan=False).
+    Returns the path."""
+    d = tests_dir(ctx)
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / "report.json"
+    p.write_text(json.dumps(_tc_sanitize(report), indent=1, allow_nan=False) + "\n",
+                 encoding="utf-8")
+    return p
+
+
+def _latest_history(ctx: StudyContext):
+    hd = history_dir(ctx)
+    if not hd.is_dir():
+        return None
+    files = sorted(hd.glob("*.json"))
+    if not files:
+        return None
+    try:
+        return json.loads(files[-1].read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _rotate_history(ctx: StudyContext, report: dict, run_id) -> None:
+    hd = history_dir(ctx)
+    hd.mkdir(parents=True, exist_ok=True)
+    name = f"{run_id}.json" if run_id else f"{len(list(hd.glob('*.json'))):06d}.json"
+    (hd / name).write_text(json.dumps(_tc_sanitize(report), allow_nan=False), encoding="utf-8")
+    files = sorted(hd.glob("*.json"))
+    for old in files[:-HISTORY_KEEP]:
+        old.unlink()
+
+
+class TestReportStep(Step):
+    """Evaluate-tail Step: aggregate the run's TestStep verdicts into
+    report.json and diff against the previous run (diff.json). Emits
+    ``{report, diff, gate}``. ``run_id`` is never generated internally — it
+    arrives via config/state (workflow-engine ``Date.now()``-free rule)."""
+
+    config_schema: dict = {}
+
+    def _ctx(self, state) -> StudyContext:
+        if self.config.get("ws_root") and self.config.get("study_name"):
+            return StudyContext.load(Path(self.config["ws_root"]), self.config["study_name"])
+        return state.get("study")
+
+    def inputs(self):
+        return {"cards": "tree", "run_id": "tree"}
+
+    def outputs(self):
+        return {"report": "tree", "diff": "tree", "gate": "string"}
+
+    def update(self, state, interval=None):
+        ctx = self._ctx(state)
+        cards = state.get("cards") or self.config.get("cards") or {}
+        run_id = state.get("run_id") or self.config.get("run_id")
+        report = build_report(getattr(ctx, "study_name", ""), run_id, cards)
+        write_report(ctx, report)
+        prev = _latest_history(ctx)
+        prev_cards = (prev or {}).get("cards") or {}
+        diff = _diff_reports(prev_cards, cards)
+        (tests_dir(ctx) / "diff.json").write_text(
+            json.dumps(_tc_sanitize(diff), indent=1, allow_nan=False) + "\n", encoding="utf-8")
+        _rotate_history(ctx, report, run_id)
+        return {"report": report, "diff": diff, "gate": report["overall"]}
+
+    def invoke(self, state, interval=None):
+        # Same swallow-on-error guard as the other post-sim bases: a broken
+        # report never crashes the step cascade.
+        try:
+            update = self.update(state)
+        except Exception:
+            update = {}
+        return SyncUpdate(update)

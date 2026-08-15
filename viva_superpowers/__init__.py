@@ -12,10 +12,11 @@ from viva_superpowers import test_vocab  # noqa: E402,F401
 # (e.g. study_audit importing `check`) doesn't drag the simulation stack in.
 _POST_SIM_NAMES = frozenset({
     "TestStep", "ReportCardStep", "ResultsStep", "ResultsHandle",
-    "AnalysisStep", "Analysis", "VisualizationStep",
+    "AnalysisStep", "Analysis", "VisualizationStep", "TestReportStep",
     "TEST_REGISTRY", "REPORT_CARD_REGISTRY", "POST_SIM_REGISTRY",
     "VISUALIZATION_REGISTRY", "ANALYSIS_REGISTRY", "ANALYSIS_SCALES", "KINDS",
-    "StudyContext", "write_test", "write_card", "prune", "applicable",
+    "StudyContext", "write_test", "write_card", "write_report", "build_report",
+    "tests_dir", "history_dir", "prune", "applicable",
     "iter_post_sim", "register_post_sim",
 })
 
