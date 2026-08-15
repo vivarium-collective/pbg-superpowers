@@ -7,6 +7,7 @@ from viva_superpowers.post_sim import (  # noqa: E402,F401
     KINDS,
     POST_SIM_REGISTRY,
     REPORT_CARD_REGISTRY,
+    TEST_REGISTRY,
     VISUALIZATION_REGISTRY,
     Analysis,
     AnalysisStep,
@@ -14,12 +15,14 @@ from viva_superpowers.post_sim import (  # noqa: E402,F401
     ResultsHandle,
     ResultsStep,
     StudyContext,
+    TestStep,
     VisualizationStep,
     applicable,
     iter_post_sim,
     prune,
     register_post_sim,
     write_card,
+    write_test,
 )
 
 from viva_superpowers.test_contract import (  # noqa: E402,F401

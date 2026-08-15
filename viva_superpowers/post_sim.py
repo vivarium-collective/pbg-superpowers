@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 import math
 import pickle
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -53,7 +54,18 @@ import yaml
 import viva_emitters
 from process_bigraph.composite import Step, SyncUpdate
 
-KINDS = ("analysis", "visualization", "report_card")
+KINDS = ("analysis", "visualization", "test")
+
+# legacy kind string -> canonical kind string, accepted anywhere a kind is
+# passed in (register_post_sim / iter_post_sim).
+_LEGACY_KINDS = {"report_card": "test"}
+
+
+def _normalize_kind(kind: "str | None") -> "str | None":
+    if kind is None:
+        return None
+    return _LEGACY_KINDS.get(kind, kind)
+
 
 # name -> {"cls": <Step subclass>, "kind": <one of KINDS>}
 POST_SIM_REGISTRY: dict[str, dict] = {}
@@ -62,7 +74,11 @@ POST_SIM_REGISTRY: dict[str, dict] = {}
 # subclass that defines its own ``name``.
 ANALYSIS_REGISTRY: dict[str, type] = {}
 VISUALIZATION_REGISTRY: dict[str, type] = {}
-REPORT_CARD_REGISTRY: dict[str, type] = {}
+
+# canonical: TEST_REGISTRY. REPORT_CARD_REGISTRY is the SAME dict object,
+# kept for back-compat (v2ecoli's cards + workbench still read this name).
+TEST_REGISTRY: dict[str, type] = {}
+REPORT_CARD_REGISTRY: dict[str, type] = TEST_REGISTRY
 
 # scale name -> human description of the result slice it consumes
 ANALYSIS_SCALES: dict[str, str] = {
@@ -77,7 +93,9 @@ ANALYSIS_SCALES: dict[str, str] = {
 def register_post_sim(cls, kind: str, name: "str | None" = None) -> None:
     """Register a post-sim Step subclass under ``name`` (default ``cls.name``)
     with its ``kind``. No-op when the resolved name is falsy (abstract bases).
+    Accepts legacy kind strings (e.g. ``"report_card"`` -> ``"test"``).
     Raises ValueError for an unknown kind."""
+    kind = _normalize_kind(kind)
     if kind not in KINDS:
         raise ValueError(f"unknown post-sim kind {kind!r}; expected one of {KINDS}")
     nm = name if name is not None else getattr(cls, "name", "")
@@ -87,7 +105,9 @@ def register_post_sim(cls, kind: str, name: "str | None" = None) -> None:
 
 
 def iter_post_sim(kind: "str | None" = None) -> list:
-    """[(name, cls), ...] sorted by name, optionally filtered to one kind."""
+    """[(name, cls), ...] sorted by name, optionally filtered to one kind.
+    Accepts legacy kind strings (e.g. ``"report_card"`` -> ``"test"``)."""
+    kind = _normalize_kind(kind)
     out = [(nm, e["cls"]) for nm, e in POST_SIM_REGISTRY.items()
            if kind is None or e["kind"] == kind]
     return sorted(out, key=lambda t: t[0])
@@ -439,21 +459,22 @@ class VisualizationStep(Step):
         return SyncUpdate(update)
 
 
-class ReportCardStep(Step):
-    """A report card as a visualization-like Step (sibling of ``Analysis`` and
-    ``VisualizationStep``): emits ``view`` (HTML) + ``data`` (verdict map). Unlike
-    ``Analysis`` — which consumes a live DuckDB sim-output connection — a report
-    card's input is a ``StudyContext`` (the study's spec + dir), so cards grade
-    run-free. Subclasses set ``name`` and implement ``applies(study)`` +
-    ``build(study) -> (verdict_dict, html) | None``. A named subclass auto-registers
-    in ``REPORT_CARD_REGISTRY`` and, kind-tagged, in ``POST_SIM_REGISTRY``.
+class TestStep(Step):
+    """A test (formerly "report card") as a visualization-like Step (sibling of
+    ``Analysis`` and ``VisualizationStep``): emits ``view`` (HTML) + ``data``
+    (verdict map). Unlike ``Analysis`` — which consumes a live DuckDB sim-output
+    connection — a test's input is a ``StudyContext`` (the study's spec + dir),
+    so tests grade run-free. Subclasses set ``name`` and implement
+    ``applies(study)`` + ``build(study) -> (verdict_dict, html) | None``. A named
+    subclass auto-registers in ``TEST_REGISTRY`` and, kind-tagged, in
+    ``POST_SIM_REGISTRY``.
 
-    Gating convention: a card's verdict dict is free-form (existing cards are
-    not required to change), but a card intended to gate a study's Evaluate
+    Gating convention: a test's verdict dict is free-form (existing tests are
+    not required to change), but a test intended to gate a study's Evaluate
     stage should shape its verdict as ``{"status": "pass"|"fail"|"warn",
     "checks": [...], "summary": <str>}`` so a generic gate can read
-    ``data["status"]`` without knowing the card. ``checks`` is a list of
-    per-check detail dicts (card-defined shape); ``summary`` is a short
+    ``data["status"]`` without knowing the test. ``checks`` is a list of
+    per-check detail dicts (test-defined shape); ``summary`` is a short
     human-readable readout of the verdict.
     """
 
@@ -463,8 +484,8 @@ class ReportCardStep(Step):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         if cls.__dict__.get("name"):
-            REPORT_CARD_REGISTRY[cls.name] = cls
-            register_post_sim(cls, "report_card")
+            TEST_REGISTRY[cls.name] = cls
+            register_post_sim(cls, "test")
 
     def inputs(self):
         return {"study": "tree"}
@@ -495,6 +516,10 @@ class ReportCardStep(Step):
         except Exception:
             update = {}
         return SyncUpdate(update)
+
+
+# Back-compat alias: same class object, old name.
+ReportCardStep = TestStep
 
 
 def _sanitize(obj: Any) -> Any:
@@ -532,8 +557,8 @@ class StudyContext:
         return self.study_dir / "viz" / "report_card"
 
 
-def write_card(ctx: StudyContext, name: str, verdict: dict, html: str) -> Path:
-    """Write <card>.html + <card>.verdict.json into the study's report_card dir.
+def write_test(ctx: StudyContext, name: str, verdict: dict, html: str) -> Path:
+    """Write <test>.html + <test>.verdict.json into the study's report_card dir.
     Returns the html path. Verdict is sanitized + written with allow_nan=False."""
     d = ctx.card_dir
     d.mkdir(parents=True, exist_ok=True)
@@ -543,6 +568,12 @@ def write_card(ctx: StudyContext, name: str, verdict: dict, html: str) -> Path:
         json.dumps(_sanitize(verdict), indent=1, allow_nan=False) + "\n",
         encoding="utf-8")
     return html_path
+
+
+def write_card(ctx: StudyContext, name: str, verdict: dict, html: str) -> Path:
+    """Deprecated alias for ``write_test``."""
+    warnings.warn("write_card is renamed to write_test", DeprecationWarning, stacklevel=2)
+    return write_test(ctx, name, verdict, html)
 
 
 def prune(ctx: StudyContext, keep: set[str]) -> list[str]:
@@ -564,15 +595,15 @@ def prune(ctx: StudyContext, keep: set[str]) -> list[str]:
 
 
 def applicable(ctx: StudyContext, core, only: "str | None" = None) -> list:
-    """Instantiated report-card Steps to emit for a study. If the study spec lists
-    `report_cards:`, only those names are eligible; otherwise every registered card
-    is eligible. A card is emitted when eligible AND its applies(ctx) is True.
-    `only` (a name, or None/'all') narrows to a single card. `core` is a
+    """Instantiated test Steps to emit for a study. If the study spec lists
+    `report_cards:`, only those names are eligible; otherwise every registered test
+    is eligible. A test is emitted when eligible AND its applies(ctx) is True.
+    `only` (a name, or None/'all') narrows to a single test. `core` is a
     bigraph-schema core (built once by the caller) used to instantiate Steps."""
     declared = ctx.spec.get("report_cards")
     want = None if (only in (None, "all")) else {only}
     out = []
-    for nm, cls in REPORT_CARD_REGISTRY.items():
+    for nm, cls in TEST_REGISTRY.items():
         if want is not None and nm not in want:
             continue
         if declared is not None and nm not in declared:
