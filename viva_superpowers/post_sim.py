@@ -625,6 +625,7 @@ def applicable(ctx: StudyContext, core, only: "str | None" = None) -> list:
 from viva_superpowers.test_vocab import worst as _worst  # noqa: E402
 from viva_superpowers.test_diff import diff_reports as _diff_reports  # noqa: E402
 from viva_superpowers.test_contract import sanitize as _tc_sanitize  # noqa: E402
+from viva_superpowers.study_verdict import severity_gate as _severity_gate  # noqa: E402
 
 HISTORY_KEEP = 10
 
@@ -719,6 +720,10 @@ class TestReportStep(Step):
         cards = state.get("cards") or self.config.get("cards") or {}
         run_id = state.get("run_id") or self.config.get("run_id")
         report = build_report(getattr(ctx, "study_name", ""), run_id, cards)
+        # Severity-aware gate: only hard-severity axis mismatches fail; soft/drift
+        # warn; directional never gates. Injected into report.json so consumers
+        # read the gate + its actionable ``gated_by`` list.
+        report["gate"] = _severity_gate(report)
         write_report(ctx, report)
         prev = _latest_history(ctx)
         prev_cards = (prev or {}).get("cards") or {}
@@ -726,7 +731,7 @@ class TestReportStep(Step):
         (tests_dir(ctx) / "diff.json").write_text(
             json.dumps(_tc_sanitize(diff), indent=1, allow_nan=False) + "\n", encoding="utf-8")
         _rotate_history(ctx, report, run_id)
-        return {"report": report, "diff": diff, "gate": report["overall"]}
+        return {"report": report, "diff": diff, "gate": report["gate"]["status"]}
 
     def invoke(self, state, interval=None):
         # Same swallow-on-error guard as the other post-sim bases: a broken

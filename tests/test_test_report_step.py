@@ -47,7 +47,7 @@ def test_write_report_and_step_writes_report_and_diff(tmp_path):
     step.config = {"ws_root": str(tmp_path), "study_name": "demo", "run_id": "run1",
                    "cards": {"c1": _doc("within_tol", [("a", "within_tol", 0.3)])}}
     out = step.update({})
-    assert out["gate"] == "within_tol"
+    assert out["gate"] == "pass"  # severity_gate status (no hard mismatch)
     assert (_tests_dir(ctx) / "report.json").exists()
     diff = json.loads((_tests_dir(ctx) / "diff.json").read_text())
     entry = next(p for p in diff["per"] if p["id"] == "a")

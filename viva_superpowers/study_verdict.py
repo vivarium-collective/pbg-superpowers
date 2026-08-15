@@ -117,6 +117,40 @@ def roll_up_verdict(spec: dict) -> dict:
 # Canonical display confidence (reconciles the status surfaces)
 # ---------------------------------------------------------------------------
 
+def severity_gate(report: dict) -> dict:
+    """Severity-aware study gate over a ``build_report()`` ``test_report/v1`` doc.
+
+    Complements ``roll_up_verdict`` (which gates on per-*test* outcomes): this
+    gates on per-*axis* severity in the graded report cards.
+
+    - **fail** iff any ``hard``-severity axis is ``mismatch`` (``counts.hard_mismatch``).
+    - **warn** iff there's a non-hard miss to record — a ``soft`` mismatch or any
+      ``drift`` (calibration outstanding) — but nothing hard failed.
+    - **pass** otherwise.
+
+    ``directional`` axes never emit ``mismatch`` (they trend via ``drift`` + a
+    signed margin), so they never gate. Returns
+    ``{status: pass|fail|warn, hard_mismatch: int, gated_by: [{card, group, id}]}``
+    where ``gated_by`` is the actionable list of hard mismatches.
+    """
+    report = report or {}
+    counts = report.get("counts") or {}
+    hard = int(counts.get("hard_mismatch") or 0)
+    gated_by = []
+    for card, doc in (report.get("cards") or {}).items():
+        for gslug, grp in (doc.get("groups") or {}).items():
+            for ax in grp.get("axes") or []:
+                if ax.get("verdict") == "mismatch" and ax.get("severity", "hard") == "hard":
+                    gated_by.append({"card": card, "group": gslug, "id": ax.get("id")})
+    if hard > 0:
+        status = "fail"
+    elif int(counts.get("mismatch") or 0) > 0 or int(counts.get("drift") or 0) > 0:
+        status = "warn"
+    else:
+        status = "pass"
+    return {"status": status, "hard_mismatch": hard, "gated_by": gated_by}
+
+
 _CONFIDENCE_ACCEPTED = "Accepted"
 _CONFIDENCE_INVESTIGATING = "Investigating"
 _CONFIDENCE_REFUTED = "Refuted"
