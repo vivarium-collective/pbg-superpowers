@@ -63,7 +63,11 @@ severity (high → medium → low). One line per item:
 writes — the output is ephemeral.
 
 The signals: `uncovered_ac` (high), `verdict_divergence` (high), `param_drift`
-(high), `phantom_observable` (high, **build-gated/optional** — only when an
+(high), `hard_gate` (high — a hard-severity report-card axis making the study's
+severity gate FAIL; one item per axis in the gate's `gated_by`),
+`test_regression` (high when an axis **broke** pass→fail, medium when it
+**regressed** — margin fell — since the last run; from the cross-iteration test
+diff), `phantom_observable` (high, **build-gated/optional** — only when an
 `observables_for_ref` build callable is injected; the server supplies its
 cached one when enabled), `open_feedback` (medium), `stale_finding` (low).
 
