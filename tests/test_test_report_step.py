@@ -1,8 +1,6 @@
 import json
-from pathlib import Path
 from viva_superpowers.post_sim import (
-    TestReportStep, StudyContext, build_report, write_report,
-    tests_dir as _tests_dir, history_dir,
+    TestReportStep, StudyContext, build_report, tests_dir as _tests_dir, history_dir,
 )
 # Imported under a leading-underscore alias: pytest's default python_functions
 # ("test") prefix-matches any bare module-level name starting with "test",
@@ -62,5 +60,6 @@ def test_step_no_prior_history_diff_all_new(tmp_path):
     step.config = {"ws_root": str(tmp_path), "study_name": "demo", "run_id": "r1",
                    "cards": {"c1": _doc("within_tol", [("a", "within_tol", 0.1)])}}
     out = step.update({})
+    assert out["gate"] == "pass"  # first run, all within_tol → severity_gate pass
     diff = json.loads((_tests_dir(ctx) / "diff.json").read_text())
     assert diff["rollup"]["new"] == 1 and diff["per"][0]["change"] == "new"
