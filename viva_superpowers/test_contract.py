@@ -96,3 +96,40 @@ def check(id, label, observed, expected: Expected, *, severity="hard",
         "severity": severity, "units": units,
         "knob": list(knob) if knob else None, "citation": cite,
     }
+
+
+from viva_superpowers.test_vocab import worst as _worst
+
+
+def _slug_group(label: str) -> str:
+    return (label or "ungrouped").strip().lower().replace("&", "and").replace(" ", "_")
+
+
+class TestBuilder:
+    """Accumulate check() axes into a report_card_verdict/v2 document."""
+
+    def __init__(self, model_ref="", reference_model="", generated=""):
+        self.model_ref = model_ref
+        self.reference_model = reference_model
+        self.generated = generated
+        self._groups: dict[str, list] = {}
+
+    def add(self, group: str, axis: dict) -> "TestBuilder":
+        self._groups.setdefault(_slug_group(group), []).append(axis)
+        return self
+
+    def build(self) -> dict:
+        groups = {}
+        all_verdicts = []
+        for gslug, axes in self._groups.items():
+            vs = [a.get("verdict", "ungraded") for a in axes]
+            groups[gslug] = {"verdict": _worst(vs), "axes": axes}
+            all_verdicts.extend(vs)
+        return sanitize({
+            "schema": "report_card_verdict/v2",
+            "model_ref": self.model_ref,
+            "reference_model": self.reference_model,
+            "generated": self.generated,
+            "overall": _worst(all_verdicts),
+            "groups": groups,
+        })
