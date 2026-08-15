@@ -26,7 +26,7 @@ import yaml
 _VIVA_CORE = {
     "viva-biology-forward", "viva-catalog", "viva-cite-bands", "viva-expert",
     "viva-init", "viva-investigation", "viva-navigate",
-    "viva-report", "viva-run", "viva-status", "viva-study",
+    "viva-report", "viva-run", "viva-status", "viva-study", "viva-tests",
     "viva-viz", "viva-workbench", "viva-workspace",
 }
 _VIVA_EXTRA = {"viva-harden-investigation"}
