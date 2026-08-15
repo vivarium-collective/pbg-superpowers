@@ -96,6 +96,12 @@ and the Tests tab all read it, and it's what studies actually use. **Author your
 criteria here** via the `/viva-study` Design/Evaluate subcommands — start here,
 not with the pytest directory below.
 
+For **graded report-card tests** — axes with a signed `margin` (distance-to-pass),
+`severity`, cited acceptance bands, and a cross-iteration diff (the agent-feedback
+signal for iterative model building) — use [`/viva-tests`](../viva-tests/SKILL.md)
+(`author` / `enrich` / `run`). It builds on `viva_superpowers.check()`/`TestBuilder`
+and complements the `behavior_tests:` acceptance grammar above.
+
 ### Optional: a `tests/` pytest subdirectory (dashboard-only)
 
 A study MAY *additionally* carry a `tests/` subdirectory of pytest files, for
