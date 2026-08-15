@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 import math
 import pickle
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -53,7 +54,18 @@ import yaml
 import viva_emitters
 from process_bigraph.composite import Step, SyncUpdate
 
-KINDS = ("analysis", "visualization", "report_card")
+KINDS = ("analysis", "visualization", "test")
+
+# legacy kind string -> canonical kind string, accepted anywhere a kind is
+# passed in (register_post_sim / iter_post_sim).
+_LEGACY_KINDS = {"report_card": "test"}
+
+
+def _normalize_kind(kind: "str | None") -> "str | None":
+    if kind is None:
+        return None
+    return _LEGACY_KINDS.get(kind, kind)
+
 
 # name -> {"cls": <Step subclass>, "kind": <one of KINDS>}
 POST_SIM_REGISTRY: dict[str, dict] = {}
@@ -62,7 +74,11 @@ POST_SIM_REGISTRY: dict[str, dict] = {}
 # subclass that defines its own ``name``.
 ANALYSIS_REGISTRY: dict[str, type] = {}
 VISUALIZATION_REGISTRY: dict[str, type] = {}
-REPORT_CARD_REGISTRY: dict[str, type] = {}
+
+# canonical: TEST_REGISTRY. REPORT_CARD_REGISTRY is the SAME dict object,
+# kept for back-compat (v2ecoli's cards + workbench still read this name).
+TEST_REGISTRY: dict[str, type] = {}
+REPORT_CARD_REGISTRY: dict[str, type] = TEST_REGISTRY
 
 # scale name -> human description of the result slice it consumes
 ANALYSIS_SCALES: dict[str, str] = {
@@ -77,7 +93,9 @@ ANALYSIS_SCALES: dict[str, str] = {
 def register_post_sim(cls, kind: str, name: "str | None" = None) -> None:
     """Register a post-sim Step subclass under ``name`` (default ``cls.name``)
     with its ``kind``. No-op when the resolved name is falsy (abstract bases).
+    Accepts legacy kind strings (e.g. ``"report_card"`` -> ``"test"``).
     Raises ValueError for an unknown kind."""
+    kind = _normalize_kind(kind)
     if kind not in KINDS:
         raise ValueError(f"unknown post-sim kind {kind!r}; expected one of {KINDS}")
     nm = name if name is not None else getattr(cls, "name", "")
@@ -87,7 +105,9 @@ def register_post_sim(cls, kind: str, name: "str | None" = None) -> None:
 
 
 def iter_post_sim(kind: "str | None" = None) -> list:
-    """[(name, cls), ...] sorted by name, optionally filtered to one kind."""
+    """[(name, cls), ...] sorted by name, optionally filtered to one kind.
+    Accepts legacy kind strings (e.g. ``"report_card"`` -> ``"test"``)."""
+    kind = _normalize_kind(kind)
     out = [(nm, e["cls"]) for nm, e in POST_SIM_REGISTRY.items()
            if kind is None or e["kind"] == kind]
     return sorted(out, key=lambda t: t[0])
@@ -439,21 +459,22 @@ class VisualizationStep(Step):
         return SyncUpdate(update)
 
 
-class ReportCardStep(Step):
-    """A report card as a visualization-like Step (sibling of ``Analysis`` and
-    ``VisualizationStep``): emits ``view`` (HTML) + ``data`` (verdict map). Unlike
-    ``Analysis`` — which consumes a live DuckDB sim-output connection — a report
-    card's input is a ``StudyContext`` (the study's spec + dir), so cards grade
-    run-free. Subclasses set ``name`` and implement ``applies(study)`` +
-    ``build(study) -> (verdict_dict, html) | None``. A named subclass auto-registers
-    in ``REPORT_CARD_REGISTRY`` and, kind-tagged, in ``POST_SIM_REGISTRY``.
+class TestStep(Step):
+    """A test (formerly "report card") as a visualization-like Step (sibling of
+    ``Analysis`` and ``VisualizationStep``): emits ``view`` (HTML) + ``data``
+    (verdict map). Unlike ``Analysis`` — which consumes a live DuckDB sim-output
+    connection — a test's input is a ``StudyContext`` (the study's spec + dir),
+    so tests grade run-free. Subclasses set ``name`` and implement
+    ``applies(study)`` + ``build(study) -> (verdict_dict, html) | None``. A named
+    subclass auto-registers in ``TEST_REGISTRY`` and, kind-tagged, in
+    ``POST_SIM_REGISTRY``.
 
-    Gating convention: a card's verdict dict is free-form (existing cards are
-    not required to change), but a card intended to gate a study's Evaluate
+    Gating convention: a test's verdict dict is free-form (existing tests are
+    not required to change), but a test intended to gate a study's Evaluate
     stage should shape its verdict as ``{"status": "pass"|"fail"|"warn",
     "checks": [...], "summary": <str>}`` so a generic gate can read
-    ``data["status"]`` without knowing the card. ``checks`` is a list of
-    per-check detail dicts (card-defined shape); ``summary`` is a short
+    ``data["status"]`` without knowing the test. ``checks`` is a list of
+    per-check detail dicts (test-defined shape); ``summary`` is a short
     human-readable readout of the verdict.
     """
 
@@ -463,8 +484,8 @@ class ReportCardStep(Step):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         if cls.__dict__.get("name"):
-            REPORT_CARD_REGISTRY[cls.name] = cls
-            register_post_sim(cls, "report_card")
+            TEST_REGISTRY[cls.name] = cls
+            register_post_sim(cls, "test")
 
     def inputs(self):
         return {"study": "tree"}
@@ -495,6 +516,10 @@ class ReportCardStep(Step):
         except Exception:
             update = {}
         return SyncUpdate(update)
+
+
+# Back-compat alias: same class object, old name.
+ReportCardStep = TestStep
 
 
 def _sanitize(obj: Any) -> Any:
@@ -532,8 +557,8 @@ class StudyContext:
         return self.study_dir / "viz" / "report_card"
 
 
-def write_card(ctx: StudyContext, name: str, verdict: dict, html: str) -> Path:
-    """Write <card>.html + <card>.verdict.json into the study's report_card dir.
+def write_test(ctx: StudyContext, name: str, verdict: dict, html: str) -> Path:
+    """Write <test>.html + <test>.verdict.json into the study's report_card dir.
     Returns the html path. Verdict is sanitized + written with allow_nan=False."""
     d = ctx.card_dir
     d.mkdir(parents=True, exist_ok=True)
@@ -543,6 +568,12 @@ def write_card(ctx: StudyContext, name: str, verdict: dict, html: str) -> Path:
         json.dumps(_sanitize(verdict), indent=1, allow_nan=False) + "\n",
         encoding="utf-8")
     return html_path
+
+
+def write_card(ctx: StudyContext, name: str, verdict: dict, html: str) -> Path:
+    """Deprecated alias for ``write_test``."""
+    warnings.warn("write_card is renamed to write_test", DeprecationWarning, stacklevel=2)
+    return write_test(ctx, name, verdict, html)
 
 
 def prune(ctx: StudyContext, keep: set[str]) -> list[str]:
@@ -564,15 +595,15 @@ def prune(ctx: StudyContext, keep: set[str]) -> list[str]:
 
 
 def applicable(ctx: StudyContext, core, only: "str | None" = None) -> list:
-    """Instantiated report-card Steps to emit for a study. If the study spec lists
-    `report_cards:`, only those names are eligible; otherwise every registered card
-    is eligible. A card is emitted when eligible AND its applies(ctx) is True.
-    `only` (a name, or None/'all') narrows to a single card. `core` is a
+    """Instantiated test Steps to emit for a study. If the study spec lists
+    `report_cards:`, only those names are eligible; otherwise every registered test
+    is eligible. A test is emitted when eligible AND its applies(ctx) is True.
+    `only` (a name, or None/'all') narrows to a single test. `core` is a
     bigraph-schema core (built once by the caller) used to instantiate Steps."""
     declared = ctx.spec.get("report_cards")
     want = None if (only in (None, "all")) else {only}
     out = []
-    for nm, cls in REPORT_CARD_REGISTRY.items():
+    for nm, cls in TEST_REGISTRY.items():
         if want is not None and nm not in want:
             continue
         if declared is not None and nm not in declared:
@@ -584,3 +615,124 @@ def applicable(ctx: StudyContext, core, only: "str | None" = None) -> list:
         except Exception:  # noqa: BLE001 — one broken card never aborts selection
             continue
     return out
+
+
+# ---------------------------------------------------------------------------
+# TestReportStep: the Evaluate-tail Step that aggregates every TestStep's
+# verdict into one run report (report.json) and diffs it against the
+# previous run (diff.json), with a bounded on-disk history/ of prior reports.
+# ---------------------------------------------------------------------------
+from viva_superpowers.test_vocab import worst as _worst  # noqa: E402
+from viva_superpowers.test_diff import diff_reports as _diff_reports  # noqa: E402
+from viva_superpowers.test_contract import sanitize as _tc_sanitize  # noqa: E402
+
+HISTORY_KEEP = 10
+
+
+def tests_dir(ctx: StudyContext) -> Path:
+    return ctx.study_dir / "viz" / "tests"
+
+
+def history_dir(ctx: StudyContext) -> Path:
+    return tests_dir(ctx) / "history"
+
+
+def build_report(study_name: str, run_id, cards: dict) -> dict:
+    """Aggregate a ``{name: verdict_doc}`` map into a ``test_report/v1`` doc.
+    ``overall`` is the worst verdict over every card's ``overall``. ``counts``
+    tallies cards, total axes, and per-verdict axis counts (plus
+    ``hard_mismatch``, axes verdict ``mismatch`` with ``severity != "soft"``)."""
+    counts = {"cards": len(cards), "axes": 0, "within_tol": 0, "drift": 0,
+              "mismatch": 0, "ungraded": 0, "hard_mismatch": 0}
+    overalls = []
+    for doc in cards.values():
+        overalls.append(doc.get("overall", "ungraded"))
+        for grp in (doc.get("groups") or {}).values():
+            for ax in grp.get("axes") or []:
+                counts["axes"] += 1
+                v = ax.get("verdict", "ungraded")
+                if v in counts:
+                    counts[v] += 1
+                if v == "mismatch" and ax.get("severity", "hard") == "hard":
+                    counts["hard_mismatch"] += 1
+    return _tc_sanitize({
+        "schema": "test_report/v1", "study": study_name, "run_id": run_id,
+        "overall": _worst(overalls), "counts": counts, "cards": cards,
+    })
+
+
+def write_report(ctx: StudyContext, report: dict) -> Path:
+    """Write ``tests_dir(ctx)/report.json`` (sanitized, allow_nan=False).
+    Returns the path."""
+    d = tests_dir(ctx)
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / "report.json"
+    p.write_text(json.dumps(_tc_sanitize(report), indent=1, allow_nan=False) + "\n",
+                 encoding="utf-8")
+    return p
+
+
+def _latest_history(ctx: StudyContext):
+    hd = history_dir(ctx)
+    if not hd.is_dir():
+        return None
+    files = sorted(hd.glob("*.json"))
+    if not files:
+        return None
+    try:
+        return json.loads(files[-1].read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _rotate_history(ctx: StudyContext, report: dict, run_id) -> None:
+    hd = history_dir(ctx)
+    hd.mkdir(parents=True, exist_ok=True)
+    name = f"{run_id}.json" if run_id else f"{len(list(hd.glob('*.json'))):06d}.json"
+    (hd / name).write_text(json.dumps(_tc_sanitize(report), allow_nan=False), encoding="utf-8")
+    files = sorted(hd.glob("*.json"))
+    for old in files[:-HISTORY_KEEP]:
+        old.unlink()
+
+
+class TestReportStep(Step):
+    """Evaluate-tail Step: aggregate the run's TestStep verdicts into
+    report.json and diff against the previous run (diff.json). Emits
+    ``{report, diff, gate}``. ``run_id`` is never generated internally — it
+    arrives via config/state (workflow-engine ``Date.now()``-free rule)."""
+
+    config_schema: dict = {}
+
+    def _ctx(self, state) -> StudyContext:
+        if self.config.get("ws_root") and self.config.get("study_name"):
+            return StudyContext.load(Path(self.config["ws_root"]), self.config["study_name"])
+        return state.get("study")
+
+    def inputs(self):
+        return {"cards": "tree", "run_id": "tree"}
+
+    def outputs(self):
+        return {"report": "tree", "diff": "tree", "gate": "string"}
+
+    def update(self, state, interval=None):
+        ctx = self._ctx(state)
+        cards = state.get("cards") or self.config.get("cards") or {}
+        run_id = state.get("run_id") or self.config.get("run_id")
+        report = build_report(getattr(ctx, "study_name", ""), run_id, cards)
+        write_report(ctx, report)
+        prev = _latest_history(ctx)
+        prev_cards = (prev or {}).get("cards") or {}
+        diff = _diff_reports(prev_cards, cards)
+        (tests_dir(ctx) / "diff.json").write_text(
+            json.dumps(_tc_sanitize(diff), indent=1, allow_nan=False) + "\n", encoding="utf-8")
+        _rotate_history(ctx, report, run_id)
+        return {"report": report, "diff": diff, "gate": report["overall"]}
+
+    def invoke(self, state, interval=None):
+        # Same swallow-on-error guard as the other post-sim bases: a broken
+        # report never crashes the step cascade.
+        try:
+            update = self.update(state)
+        except Exception:
+            update = {}
+        return SyncUpdate(update)

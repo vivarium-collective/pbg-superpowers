@@ -145,7 +145,7 @@ def test_report_card_step_subclass_auto_registers():
 
     assert REPORT_CARD_REGISTRY["probe_card_demo"] is _ProbeCard
     assert POST_SIM_REGISTRY["probe_card_demo"] == {
-        "cls": _ProbeCard, "kind": "report_card"}
+        "cls": _ProbeCard, "kind": "test"}
     assert "probe_card_demo" in [n for n, _ in iter_post_sim("report_card")]
 
 
@@ -173,7 +173,7 @@ def test_abstract_bases_without_name_do_not_register():
 
 
 def test_kinds_constant():
-    assert KINDS == ("analysis", "visualization", "report_card")
+    assert KINDS == ("analysis", "visualization", "test")
 
 
 # ---------------------------------------------------------------------------
