@@ -78,24 +78,31 @@ def check(id, label, observed, expected: Expected, *, severity="hard",
     meter = None
     if expected.kind != "predicate" and isinstance(observed, (int, float)):
         obs = float(observed)
-        margin = _margin(obs, expected)
-        passed = _passes(margin, expected)
-        if passed:
-            v = "within_tol"
-        elif severity == "directional":
-            v = "drift"
+        if not math.isfinite(obs):
+            # a non-finite measurement isn't gradable, and nan/inf margins
+            # break allow_nan=False JSON serialization of the axis dict.
+            v = "ungraded"
+            margin = None
+            meter = None
         else:
-            v = "mismatch"
-        meter = _meter(margin, expected)
+            margin = _margin(obs, expected)
+            passed = _passes(margin, expected)
+            if passed:
+                v = "within_tol"
+            elif severity == "directional":
+                v = "drift"
+            else:
+                v = "mismatch"
+            meter = _meter(margin, expected)
     else:
         v = normalize_verdict(verdict)
-    return {
+    return sanitize({
         "id": id, "label": label, "verdict": v,
         "value": observed, "meter": meter, "detail": detail,
         "expected": expected.to_dict(), "margin": margin,
         "severity": severity, "units": units,
         "knob": list(knob) if knob else None, "citation": cite,
-    }
+    })
 
 
 from viva_superpowers.test_vocab import worst as _worst

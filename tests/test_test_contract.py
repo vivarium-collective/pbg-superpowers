@@ -1,4 +1,5 @@
 # tests/test_test_contract.py
+import json
 import math
 from viva_superpowers.test_contract import Expected, value, band, predicate, check, sanitize
 
@@ -42,3 +43,8 @@ def test_axis_has_all_v2_keys_and_expected_roundtrips():
 
 def test_sanitize_nonfinite():
     assert sanitize({"m": float("nan"), "xs": [float("inf"), 1.0]}) == {"m": None, "xs": [None, 1.0]}
+
+def test_check_nonfinite_observed_is_ungraded():
+    a = check("x", "X", float("nan"), band(0.0, 1.0))
+    assert a["verdict"] == "ungraded" and a["margin"] is None and a["meter"] is None
+    json.dumps(a, allow_nan=False)  # must not raise

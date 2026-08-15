@@ -47,7 +47,8 @@ def diff_reports(prev: dict, curr: dict) -> dict:
     pi, ci = _index(prev), _index(curr)
     rollup = {k: 0 for k in _CHANGES}
     per = []
-    for key in sorted(set(pi) | set(ci)):
+    for key in sorted(set(pi) | set(ci),
+                      key=lambda k: tuple("" if x is None else str(x) for x in k)):
         p, c = pi.get(key), ci.get(key)
         change = _classify(p, c)
         rollup[change] += 1

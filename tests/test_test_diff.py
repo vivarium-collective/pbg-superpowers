@@ -36,3 +36,10 @@ def test_diff_empty_prev():
     curr = {"card": _doc([("g", "a", "within_tol", 0.1)])}
     d = diff_reports({}, curr)
     assert d["per"][0]["change"] == "new" and d["rollup"]["new"] == 1
+
+def test_diff_handles_none_id():
+    curr = {"card": _doc([("g", None, "within_tol", 0.1), ("g", "a", "within_tol", 0.2)])}
+    d = diff_reports({}, curr)   # must not raise TypeError from sorting None vs str
+    assert len(d["per"]) == 2
+    ids = {p["id"] for p in d["per"]}
+    assert ids == {None, "a"}
