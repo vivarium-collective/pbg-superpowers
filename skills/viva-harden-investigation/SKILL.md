@@ -45,6 +45,7 @@ prioritize.
 |-----|---------|
 | Unbacked claim / deferred scaffold (`evidence_for` items are *targets*) | RUN it, measure, replace targets with real numbers |
 | Passed-but-thin (single seed, one generation, uncalibrated, directional-only gate) | Re-run at scale; add seeds, statistics, tolerance bands, fitted metrics (the generic-rigor part) |
+| Un-graded or un-cited **hard** gating axis (bare `passed: bool`, magic threshold, no evidence) | Grade it via [`/viva-tests`](../viva-tests/SKILL.md) `enrich` — a **cited** acceptance band + a signed `margin` + a `knob` — so the gate carries evidence and an agent-actionable gradient, not just pass/fail. An un-graded hard axis is itself a hardening gap. |
 | Failing / partial report-card gate with a real divergence | **ROOT-CAUSE it first — REQUIRED: superpowers:systematic-debugging.** No fix, no added rigor, until you can state the cause. A verdict of *real & understood* (no bug) is a COMPLETE hardening: document the mechanism, resolve the decide, recommend an optional fix — do **not** force a code patch |
 | Overclaimed verdict (`verdict: pass, confidence: high` on thin evidence) | Reconcile `verdict_status`/confidence to the evidence via `/viva-study set-verdicts` / `set-conclusion` |
 | Open `decisions_needed` / empty followups | Resolve, or fill with concrete follow-up proposals (`/viva-study propose-followup`, `seed-from-followup`) |

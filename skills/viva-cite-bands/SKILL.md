@@ -13,6 +13,13 @@ acceptance bands in a study's `behavior_tests[]` / `tests[]` that lack a
 `cites` bib_key.  The AI does the reading and judgment; the vivarium-workbench
 API surfaces candidates, writes the provenance, and validates.
 
+A cited band is also the acceptance band on a **graded Test axis** —
+`viva_superpowers.check(observed, band(low, high), cite=…)` inside a `TestStep`
+(see [`/viva-tests`](../viva-tests/SKILL.md)). Recording provenance here and
+grading a Test axis via `/viva-tests enrich` share one target: the band + its
+`cites` bib_key land on the axis so its verdict carries a signed margin *and* the
+evidence a reviewer would ask for.
+
 **Dashboard-AI-free rule:** the AI reasoning stays entirely in this skill
 (viva-superpowers).  The workbench only serves deterministic reads/writes —
 no judgment happens server-side.  All writes go through `POST
