@@ -352,14 +352,16 @@ def test_linter_readout_migration_status_silent_when_all_canonical(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 12. dag_edges_* — F3 (canonical pipeline_gate.prerequisites)
+# 12. dag_edges_* — canonical DAG edges are `inputs.from`
+# (parent_studies AND pipeline_gate.prerequisites are both legacy back-compat)
 # ---------------------------------------------------------------------------
 
 
 def test_dag_edges_legacy_only_fires_migration_warning(tmp_path):
-    """A study with parent_studies but no pipeline_gate.prerequisites fires
-    the soft migration warning — same shape as the runtime DeprecationWarning
-    the dashboard emits."""
+    """A study that declares edges via the legacy `parent_studies` field but
+    has no canonical `inputs.from` fires the soft migration warning — pointing
+    at `inputs.from`, NOT at `pipeline_gate.prerequisites` (which is itself
+    legacy now)."""
     ws = _copy_fixture("dag-edges-legacy-only", tmp_path / "ws")
     findings = lint_workspace_report(ws)
     by_check = _findings_by_check(findings)
@@ -368,17 +370,20 @@ def test_dag_edges_legacy_only_fires_migration_warning(tmp_path):
     f = legacy[0]
     assert f.level == "warning"
     assert f.study_slug == "legacy"
-    assert "pipeline_gate.prerequisites" in f.message
-    assert "back-compat fallback" in f.message
+    # Recommends the canonical inputs.from form...
+    assert "inputs" in f.message and "from" in f.message
+    assert "back-compat" in f.message
+    # ...and must NOT call pipeline_gate.prerequisites canonical anymore.
+    assert "prerequisites` (canonical" not in f.message
     # The disagreement and redundant variants must NOT fire for this case.
     assert by_check.get("dag_edges_legacy_redundant", []) == []
     assert by_check.get("dag_edges_legacy_and_canonical_disagree", []) == []
 
 
-def test_dag_edges_both_agree_fires_redundancy_warning(tmp_path):
-    """When both fields list the same parent SLUG SET (regardless of per-entry
-    condition), the legacy field is redundant — warn so the workspace drops
-    it during the next edit."""
+def test_dag_edges_legacy_redundant_when_covered_by_inputs_from(tmp_path):
+    """When the legacy field's parents are already covered by the canonical
+    `inputs.from` set, the legacy field is redundant — warn so the workspace
+    drops it during the next edit."""
     ws = _copy_fixture("dag-edges-both-agree", tmp_path / "ws")
     findings = lint_workspace_report(ws)
     by_check = _findings_by_check(findings)
@@ -387,30 +392,45 @@ def test_dag_edges_both_agree_fires_redundancy_warning(tmp_path):
     f = redundant[0]
     assert f.level == "warning"
     assert f.study_slug == "agree"
-    assert "Drop the `parent_studies` field" in f.message
-    # The legacy-only warning must NOT fire — the canonical field IS set.
+    assert "Drop the legacy `parent_studies` field" in f.message
+    assert "inputs.from" in f.message
+    # The legacy-only migration warning must NOT fire — canonical IS set.
     assert by_check.get("dag_edges_legacy_only", []) == []
 
 
-def test_dag_edges_both_conflict_fires_error(tmp_path):
-    """When both fields list DIFFERENT parent sets, the dashboard silently
-    ignores the legacy entries — that's a real foot-gun, so it's an error."""
+def test_dag_edges_legacy_disagrees_with_inputs_from_is_warning(tmp_path):
+    """When a legacy field lists a parent absent from the canonical
+    `inputs.from` set, that extra edge is silently ignored downstream — warn
+    (never a hard error, so existing workspaces don't suddenly break)."""
     ws = _copy_fixture("dag-edges-both-conflict", tmp_path / "ws")
     findings = lint_workspace_report(ws)
     by_check = _findings_by_check(findings)
     disagree = by_check.get("dag_edges_legacy_and_canonical_disagree", [])
     assert len(disagree) == 1
     f = disagree[0]
-    assert f.level == "error"
+    # Legacy is back-compat: disagreement is a warning now, never an error.
+    assert f.level == "warning"
     assert f.study_slug == "conflict"
-    # Message names both sets so the author can see which side is which.
+    # Message names both sides so the author can see which is which.
     assert "upstream-a" in f.message
     assert "upstream-z" in f.message
     assert "silently ignored" in f.message
+    assert "inputs.from" in f.message
+
+
+def test_dag_edges_inputs_from_canonical_is_clean(tmp_path):
+    """A study that declares its DAG edges via `inputs.from` only (the form
+    v2ecoli workspace conformance requires) produces NO dag-edge finding."""
+    ws = _copy_fixture("dag-edges-inputs-canonical", tmp_path / "ws")
+    findings = lint_workspace_report(ws)
+    by_check = _findings_by_check(findings)
+    assert by_check.get("dag_edges_legacy_only", []) == []
+    assert by_check.get("dag_edges_legacy_redundant", []) == []
+    assert by_check.get("dag_edges_legacy_and_canonical_disagree", []) == []
 
 
 def test_dag_edges_check_silent_on_clean_baseline(tmp_path):
-    """A study with neither field set produces no DAG-edge findings."""
+    """A study with no DAG edges at all produces no DAG-edge findings."""
     ws = _copy_fixture("clean-baseline", tmp_path / "ws")
     findings = lint_workspace_report(ws)
     by_check = _findings_by_check(findings)

@@ -2,11 +2,10 @@ name: agree
 baseline:
   - name: b1
     composite: pkg.composites.x
-pipeline_gate:
-  prerequisites:
-    - {study: upstream-a, condition: tests-passed}
-    - upstream-b
+inputs:
+  - {artifact: upstream-a, from: upstream-a}
+  - {artifact: upstream-b, from: upstream-b}
 parent_studies:
   - upstream-a
-  - {study: upstream-b, condition: ran}    # different conditions are OK — slug set matches
-# Fires `dag_edges_legacy_redundant` (warning).
+  - {study: upstream-b, condition: ran}    # already covered by inputs.from
+# Legacy parents ⊆ canonical inputs.from → fires `dag_edges_legacy_redundant` (warning).

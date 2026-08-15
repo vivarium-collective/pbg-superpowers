@@ -161,15 +161,32 @@ a review round (and often a confirmatory sweep). See
 [handling-investigation-feedback.md#acceptance-criteria](../../docs/conventions/handling-investigation-feedback.md)
 for the full rationale and the signals that the aggregate is intended.
 
-## Cross-study dependencies (parent_studies)
+## Cross-study dependencies (inputs.from — canonical)
 
-A study can declare ordering against other studies in the workspace via
-the optional `parent_studies:` field. Each entry is either a bare slug
-or an object `{study, condition}` where `condition` is one of
-`tests-passed` | `ran` | `complete` (default `tests-passed` when omitted).
+A study declares its ordering (DAG) edges against other studies via the
+**canonical** top-level `inputs:` list — each entry `{artifact: <slug>, from:
+<slug>}`, and the DAG edge set is the `from:` slugs. This is the form the
+v2ecoli workspace conformance test requires (it rejects the legacy
+`parent_studies` / `pipeline_gate.prerequisites` fields).
 
 ```yaml
 # studies/dnaa-02-atp-hydrolysis/study.yaml
+inputs:
+  - {artifact: dnaa-01-expression-dynamics, from: dnaa-01-expression-dynamics}
+  - {artifact: dnaa-03-box-binding,         from: dnaa-03-box-binding}
+```
+
+**Legacy forms (back-compat, still accepted — a warning, never a hard error):**
+`parent_studies:` (oldest) and `pipeline_gate.prerequisites:` (interim). Each
+entry is either a bare slug or an object `{study, condition}` where `condition`
+is one of `tests-passed` | `ran` | `complete`. New studies should use
+`inputs.from`; the report linter warns any study still on a legacy field to
+migrate. The discourse-graph `relation:` semantics below are still authored on
+`parent_studies[]` for edge styling — that is a rendering concern separate from
+the ordering DAG.
+
+```yaml
+# LEGACY (back-compat) — prefer inputs.from above
 parent_studies:
   - dnaa-01-expression-dynamics                       # legacy: tests-passed
   - {study: dnaa-03-box-binding, condition: ran}      # object: parent must have ≥1 run

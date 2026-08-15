@@ -38,7 +38,7 @@ feedback — but a finished study should address every dimension or say why not.
 | **Adversarial testing** | Add at least one study with `kind: adversarial` — systems that should NOT qualify (mimic / parasitic-or-dependent / externally-maintained / random-cyclic). The metric passes by REJECTING them. |
 | **Falsification exposure** | Don't let every study pass with nothing ever failing. A discriminating negative control, an adversarial study, or a non-passing result all count. |
 | **Comparative framing** | `investigation.yaml: competing_frameworks: [{name, relation}]` — compare your interpretive lens to alternatives (active inference, organizational/constraint closure, viability theory, …) so the findings are shown to uniquely support it. |
-| **Traceable methodology** | Already provided by the framework: study DAG (`pipeline_gate.prerequisites`) + explicit `acceptance_criteria` + pass/fail gates + traceable findings. Foreground it — it is often the strongest contribution. |
+| **Traceable methodology** | Already provided by the framework: study DAG (`inputs.from`) + explicit `acceptance_criteria` + pass/fail gates + traceable findings. Foreground it — it is often the strongest contribution. |
 | **Per-study rigor** | Sum of the per-study gaps above — drive each member study toward 8/8. |
 
 ## Worked example

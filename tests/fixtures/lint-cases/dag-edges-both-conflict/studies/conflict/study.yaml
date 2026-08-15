@@ -2,9 +2,10 @@ name: conflict
 baseline:
   - name: b1
     composite: pkg.composites.x
+inputs:
+  - {artifact: upstream-a, from: upstream-a}
 pipeline_gate:
   prerequisites:
-    - upstream-a
-parent_studies:
-  - upstream-z   # silently ignored by the dashboard — this is the foot-gun
-# Fires `dag_edges_legacy_and_canonical_disagree` (error).
+    - upstream-z   # NOT in inputs.from → silently ignored downstream
+# Legacy has a slug absent from canonical inputs.from →
+# fires `dag_edges_legacy_and_canonical_disagree` (warning).

@@ -22,7 +22,7 @@ Workspace
   ├── Investigations (in investigations/<slug>/investigation.yaml — v2 with 9-section narrative spine)
   │     ├── executive, scientific_argument, biological_story, lead
   │     ├── at_a_glance, how_to_read, glossary, guidelines
-  │     └── Studies[]      (list of study slugs; DAG from each study's pipeline_gate.prerequisites)
+  │     └── Studies[]      (list of study slugs; DAG from each study's inputs[].from — pipeline_gate.prerequisites is legacy)
   └── Visualization classes / registry (workspace-wide)
 ```
 
@@ -85,7 +85,7 @@ A v3 `study.yaml` is organized into 8 user-facing sections plus two cross-cuttin
 | Section            | YAML field(s)                                            |
 |--------------------|----------------------------------------------------------|
 | 1. Purpose         | `purpose:` (`question` / `mechanism` / `expected_outcome`) |
-| 2. Pipeline Gate   | `pipeline_gate:` (`prerequisites` / `enables` / `proceed_condition`) |
+| 2. Pipeline Gate   | `pipeline_gate:` (`enables` / `proceed_condition`). **DAG edges are canonically a top-level `inputs:` list of `{artifact: <slug>, from: <slug>}` — the edge set is the `from:` slugs.** `pipeline_gate.prerequisites` and `parent_studies` are legacy back-compat forms (v2ecoli workspace conformance requires `inputs.from` and rejects both legacy fields). |
 | 3. Simulations     | `simulation_set:` (replaces v3 `variants:` + `interventions:`) |
 | 4. Build           | `model_change:` + `implementation_requirements:`         |
 | 5. Readouts        | `readouts:` (replaces v3 `observables:`; each carries `status` + `blocked_by_requirements`) |
@@ -102,7 +102,7 @@ Top-level lifecycle field:
 
 Back-compat shims kept at the top level so v3-era dashboards still render:
 - `baseline:` — mirrors one entry of `simulation_set:`; the v4 renderer should consume `simulation_set:` directly.
-- `parent_studies:` — superseded by `pipeline_gate.prerequisites`; kept for the v3 dashboard's DAG layout.
+- `parent_studies:` and `pipeline_gate.prerequisites:` — both **legacy** DAG-edge forms, superseded by the canonical top-level `inputs:` list (`{artifact: <slug>, from: <slug>}`, edges = the `from:` slugs). Kept as back-compat for older dashboards; new studies should declare edges via `inputs.from` only (v2ecoli conformance rejects the legacy fields).
 
 Minimal example (truncate values to placeholders; the schema accepts the loose shapes below — see [`study.schema.json`](https://github.com/vivarium-collective/pbg-template/blob/main/template/.pbg/schemas/study.schema.json)):
 
@@ -128,12 +128,16 @@ purpose:
   expected_outcome: |
     <quantitative or qualitative prediction>
 
-# 2. PIPELINE GATE
+# CANONICAL DAG EDGES — top-level inputs list; edge set = the `from:` slugs
+inputs:
+  - {artifact: <parent-slug>, from: <parent-slug>}   # this study depends on <parent-slug>
+
+# 2. PIPELINE GATE  (DAG edges live in `inputs.from` above, NOT here)
 pipeline_gate:
-  prerequisites: []          # list of parent study slugs (or [])
   enables: []                # list of child study slugs
   proceed_condition: |
     <when downstream studies may start>
+  # prerequisites: []        # LEGACY back-compat; declare edges via inputs.from instead
 
 # 3. SIMULATION SET
 simulation_set:
@@ -218,7 +222,7 @@ bibliography:
   expert: [<expert-doc-key>, ...]
   bib_keys: [<bib-key>, ...]
 
-# v3 back-compat shim — superseded by pipeline_gate.prerequisites
+# v3 back-compat shim — legacy DAG-edge form, superseded by the canonical inputs.from (above)
 parent_studies: []
 
 # v3 dashboard-managed config (dashboard-v4-reserved shape)
@@ -315,7 +319,7 @@ The investigation schema (`schema_version: 2`) adds a parallel narrative spine t
 - `guidelines: {literature_anchors, parameter_catalog, calibration_targets, naming_conventions, ...}` — investigation-wide rules every member study respects.
 - `inputs: {datasets: [{name, path, supports_claims}], references: [bibkeys], expert_docs: [{name, path}]}` — per-investigation owned inputs, rendered on the Inputs page. `references` bibkeys join the shared `references/papers.bib` for title/link/BibTeX. Dashboard uploads land under `investigations/<slug>/inputs/…` and append here.
 
-The `studies:` list still controls dashboard grouping/visibility; the DAG topology is computed from each member study's `pipeline_gate.prerequisites:` at render time.
+The `studies:` list still controls dashboard grouping/visibility; the DAG topology is computed from each member study's canonical `inputs[].from` edges at render time (falling back to the legacy `pipeline_gate.prerequisites:` / `parent_studies:` when a study has not yet migrated).
 
 ### Decide-phase follow-up proposals
 

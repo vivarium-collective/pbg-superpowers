@@ -438,7 +438,7 @@ For each phase/stage/section in the plan that represents a discrete implementati
 - `objective` — imperative present tense: "Simulate … and measure … to determine …".
 - `description` — two-to-four paragraphs.
 - `expected_behavior` — list of **behavior-grammar** `(given, measure, expect)` entries — `{name, en, measure: {kind, …}, expect: {op, …}, status: stub}` — from the plan's acceptance criteria, behavioral requirements, or success metrics for this phase. `status: stub` is correct before the Build phase (the acceptance band is filled when the test is built out). Use the DSL name convention: `<process>-<observable>-<condition>` (e.g., `dnaa-count-in-mass-spec-range`). Generate at least one entry per study. The flat `{observable, condition, rationale}` shape is **rejected by the dashboard loader** — do not emit it.
-- `parent_studies` — wire linearly by default (each study depends on the previous with `condition: tests-passed`). The user can edit dependencies after scaffolding.
+- `inputs` — wire the ordering DAG linearly by default: each study gets a top-level `inputs: [{artifact: <prev-slug>, from: <prev-slug>}]` naming the previous study (the canonical DAG-edge form; the edge set is the `from:` slugs). The user can edit dependencies after scaffolding. (The legacy `parent_studies` field still works as back-compat but the linter warns to migrate to `inputs.from`.)
 - `status: planned` for all generated studies.
 
 **Investigation acceptance_criteria:**
@@ -502,8 +502,8 @@ objective: |
 description: |
   <description>
 
-parent_studies:
-  - {study: <prev-slug>, condition: tests-passed}   # omit for the first study
+inputs:                                            # canonical DAG edges (edge set = the `from:` slugs)
+  - {artifact: <prev-slug>, from: <prev-slug>}      # omit for the first study
 
 expected_behavior:
   - name: <behavior-name>            # DSL slug: <process>-<observable>-<condition>
@@ -549,7 +549,7 @@ runs: []
 - If `--studies-prefix` is provided, all study slugs must start with it.
 - If phase numbers appear in the plan (Phase 1, Phase 2, …), reflect them as `01-`, `02-`, … in the slug.
 - For the `expert_docs` list on the investigation, scan `workspace.yaml.expert_docs[].name` values and include any that appear relevant. Do not invent names.
-- The first study in the linear chain has no `parent_studies` (or an empty list).
+- The first study in the linear chain has no `inputs` edges (omit the list or leave it empty).
 
 ---
 

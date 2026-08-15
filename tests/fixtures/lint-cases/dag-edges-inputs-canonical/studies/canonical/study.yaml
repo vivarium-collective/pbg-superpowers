@@ -1,0 +1,9 @@
+name: canonical
+baseline:
+  - name: b1
+    composite: pkg.composites.x
+inputs:
+  - {artifact: upstream-a, from: upstream-a}
+  - {artifact: upstream-b, from: upstream-b}
+# Canonical DAG edges via inputs.from only, no legacy fields →
+# NO dag-edge finding (this is the form v2ecoli conformance requires).
