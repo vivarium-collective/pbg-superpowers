@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 
 _GLYPH = {"within_tol": ".", "drift": "~", "mismatch": "F", "ungraded": "s"}
 _SUITE = {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}
