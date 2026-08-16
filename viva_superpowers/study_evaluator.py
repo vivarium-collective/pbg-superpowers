@@ -581,11 +581,19 @@ def evaluate_test(test: dict, reader: "RunReader", ws_root=None, config=None,
     if _is_empty_window(windowed):
         return _needs_rerun("empty or partial series data after windowing")
 
-    # 10. Reduce + predicate → outcome
+    # 10. Reduce + predicate → outcome, then attach the /v2 axis (best-effort).
     try:
-        return _apply_op(windowed, pass_if, kind, op, config=config)
+        outcome = _apply_op(windowed, pass_if, kind, op, config=config)
     except Exception as exc:  # noqa: BLE001
         return _agent(f"evaluation error: {exc}")
+    if outcome.get("evaluated_by") == "code":
+        try:
+            axis = _grade_axis_from_outcome(test, pass_if, op, outcome)
+            if axis is not None:
+                outcome["axis"] = axis
+        except Exception:  # noqa: BLE001 — grading is enrichment; never fail the test on it
+            pass
+    return outcome
 
 
 # ---------------------------------------------------------------------------

@@ -83,3 +83,33 @@ def test_soft_severity_flows_through():
 def test_unmapped_op_yields_no_axis():
     assert _grade_axis_from_outcome({"name": "x"}, {"op": "ratio_at_most", "value": 1},
                                     "ratio_at_most", _outcome("PASS", 0.5)) is None
+
+
+def test_evaluate_test_attaches_axis_and_preserves_result(monkeypatch):
+    import viva_superpowers.study_evaluator as se
+
+    # Stub the measurement layer so the test is pure: _apply_op returns a known
+    # code outcome; evaluate_test must attach the axis and keep result/measured_value.
+    def fake_apply_op(windowed, pass_if, kind, op, config=None):
+        return se._code_outcome("FAIL", 0.54, "derived/in_range", "0.54 below [0.6,0.8]")
+
+    monkeypatch.setattr(se, "_resolve_series", lambda path, reader: object())
+    monkeypatch.setattr(se, "_apply_window", lambda series, w: ("flat", object()))
+    monkeypatch.setattr(se, "_is_empty_window", lambda windowed: False)
+    monkeypatch.setattr(se, "_validate_window", lambda w: None)
+    monkeypatch.setattr(se, "_apply_op", fake_apply_op)
+
+    test = {"name": "atp", "description": "ATP fraction",
+            "measure": {"kind": "derived", "formula": "x", "window": "full_lineage_from_gen_0"},
+            "pass_if": {"op": "in_range", "low": 0.6, "high": 0.8}, "cites": ["Kurokawa 1999"]}
+    out = se.evaluate_test(test, reader=object())
+    assert out["result"] == "FAIL" and out["measured_value"] == 0.54   # unchanged
+    assert out["evaluated_by"] == "code"
+    assert out["axis"]["verdict"] == "mismatch"
+    assert abs(out["axis"]["margin"] - (-0.06)) < 1e-9
+
+
+def test_agent_bucket_has_no_axis(monkeypatch):
+    import viva_superpowers.study_evaluator as se
+    out = se.evaluate_test({"measure": {"kind": "totally_unknown"}}, reader=object())
+    assert out["evaluated_by"] == "agent" and "axis" not in out
