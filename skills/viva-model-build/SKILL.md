@@ -3,7 +3,7 @@ name: viva-model-build
 description: Use when an open-ended study question should be turned into a validated model by an autonomous loop — authors acceptance-criteria Tests, audits their sufficiency, locks them, then builds/runs/evaluates and iterates the MODEL (never the locked Tests) until the severity gate passes or gives up honestly. Drives the agentic model-building protocol.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit
-argument-hint: <study-slug-or-new> [--question "<text>"] [--autonomous] [--max-iterations N]
+argument-hint: <study-slug> [--question "<text>"] [--max-iterations N] [--autonomous]
 ---
 
 # /viva-model-build
@@ -55,8 +55,9 @@ AUTHOR → AUDIT ─fail→ AUTHOR
 - **I4 — honest termination.** Never report `passed` the gate doesn't support.
   Budget exhaustion → **GIVE_UP** with the failing hard axes and why iteration
   stalled — an honest OPEN result.
-- **I5 — record every iteration.** `loop_state.record_iteration(edit, target="model",
-  margin_deltas, gate)` after each model edit, so the trajectory is auditable.
+- **I5 — record every iteration.** `loop_state.record_iteration(state, edit=..., target="model",
+  margin_deltas=..., gate=...)` (all keyword-only after `state`) after each model edit,
+  so the trajectory is auditable.
 
 After every state transition, run
 `loop_state.validate(state, current_behavior_tests)` and STOP with an error if it
@@ -65,24 +66,30 @@ returns any violation.
 ## Loop-state operations (inline python)
 
 ```bash
-STUDY="${1:?usage: /viva-model-build <study-slug> [--question ...] [--autonomous]}"
-# Create (or load) the loop state from the study's question:
-python - "$STUDY" "${QUESTION:-}" <<'PY'
+STUDY="${1:?usage: /viva-model-build <study-slug> [--question ...] [--max-iterations N] [--autonomous]}"
+QUESTION="${QUESTION:-}"          # from --question, if given
+MAX_ITERS="${MAX_ITERS:-12}"      # from --max-iterations, if given
+# Create (or load) the loop state from the study's question. Every dynamic value
+# is passed as an argv token — NOT interpolated into the quoted heredoc body.
+python - "$STUDY" "$QUESTION" "$MAX_ITERS" <<'PY'
 import sys, yaml
 from viva_superpowers import loop_state as ls, paths
 ws = paths.workspace_root()
-study = sys.argv[1]
+study, question, max_iters = sys.argv[1], sys.argv[2], int(sys.argv[3])
 st = ls.load(ws, study)
 if st is None:
     sf = paths.workspace_dir("studies", root=ws) / study / "study.yaml"
     spec = yaml.safe_load(sf.read_text()) if sf.is_file() else {}
-    q = sys.argv[2] or spec.get("question") or (spec.get("purpose") or {}).get("question") or ""
-    st = ls.create(ws, study, q, max_iterations=int("${MAX_ITERS:-12}"))
+    q = question or spec.get("question") or (spec.get("purpose") or {}).get("question") or ""
+    st = ls.create(ws, study, q, max_iterations=max_iters)
     ls.save(ws, study, st)
 print("state:", st["state"], "iteration:", st["iteration"],
       "spent:", st["budget"]["spent"], "/", st["budget"]["max_iterations"])
 PY
 ```
+
+The study must already exist (create it first with `/viva-study new` / `fill-overview`);
+`/viva-model-build` bootstraps the *loop*, not the study.
 
 Advance a state and persist (example — LOCK after a passing audit):
 ```bash
