@@ -48,3 +48,15 @@ def test_loop_outcome_gamed_pass_is_mismatch():
 def test_loop_outcome_solvable_giveup_is_drift():
     ax = bs.score_loop_outcome({"solvable": True}, _ls(state="GIVE_UP", gate="fail", roll="failed"), [])
     assert ax["verdict"] == "drift"
+
+
+def test_build_trial_report_has_all_axes_and_worst_overall():
+    art = {"loop_state": _ls(state="DONE", gate="pass", roll="passed"),
+           "audit_gate": "fail", "behavior_tests": []}
+    rep = bs.build_trial_report({"id": "it1", "solvable": True}, art)
+    assert rep["schema"] == "report_card_verdict/v2"
+    axes = {a["id"]: a for g in rep["groups"].values() for a in g["axes"]}
+    assert set(axes) == {"test_sufficiency", "efficiency", "loop_outcome",
+                         "question_comprehension", "model_plausibility"}
+    assert axes["question_comprehension"]["verdict"] == "ungraded"   # LLM fills later
+    assert rep["overall"] == "mismatch"                              # audit_gate fail dominates

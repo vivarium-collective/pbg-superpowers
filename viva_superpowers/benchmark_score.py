@@ -8,7 +8,7 @@ The LLM axes (question_comprehension, model_plausibility) are filled by the
 from __future__ import annotations
 
 from viva_superpowers import loop_state
-from viva_superpowers.test_contract import check, value
+from viva_superpowers.test_contract import TestBuilder, check, value
 
 
 def score_test_sufficiency(audit_gate: str) -> dict:
@@ -61,3 +61,23 @@ def score_loop_outcome(item: dict, ls: dict, behavior_tests: list) -> dict:
         v = "within_tol" if state == "GIVE_UP" else "mismatch"
     return check("loop_outcome", "Loop outcome (valid pass / honest give-up)",
                  None, value(1.0, op=">="), severity="hard", verdict=v, detail=detail)
+
+
+_LLM_AXES = (("question_comprehension", "Question comprehension"),
+             ("model_plausibility", "Model plausibility"))
+
+
+def build_trial_report(item: dict, artifacts: dict) -> dict:
+    """A trial's rubric as a report_card_verdict/v2 doc. Deterministic axes are
+    scored here; the LLM axes are placeholders (`ungraded`) the /viva-benchmark
+    skill overwrites."""
+    ls = artifacts.get("loop_state") or {}
+    tb = TestBuilder(model_ref=str(item.get("id") or ""))
+    tb.add("rubric", score_test_sufficiency(artifacts.get("audit_gate")))
+    tb.add("rubric", score_efficiency(ls))
+    tb.add("rubric", score_loop_outcome(item, ls, artifacts.get("behavior_tests") or []))
+    for aid, label in _LLM_AXES:
+        tb.add("rubric", check(aid, label, None, value(1.0, op=">="),
+                               severity="soft", verdict="ungraded",
+                               detail={"filled_by": "llm-judge"}))
+    return tb.build()
