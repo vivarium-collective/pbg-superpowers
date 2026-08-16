@@ -77,3 +77,30 @@ def advance(state: dict, to_state: str, **fields) -> dict:
     state["state"] = to_state
     state.update(fields)
     return state
+
+
+def record_iteration(state: dict, *, edit: str, target: str,
+                     margin_deltas: dict, gate: str) -> dict:
+    state = dict(state)
+    state["iteration"] = int(state.get("iteration", 0)) + 1
+    budget = dict(state.get("budget") or {})
+    budget["spent"] = int(budget.get("spent", 0)) + 1
+    state["budget"] = budget
+    state["history"] = list(state.get("history") or []) + [{
+        "iteration": state["iteration"], "edit": edit, "target": target,
+        "margin_deltas": margin_deltas or {}, "gate": gate,
+    }]
+    return state
+
+
+def validate(state: dict, current_tests: list, *, is_reopen: bool = False) -> list:
+    """Invariant violations (empty = clean). I1: after LOCK the tests are frozen
+    (a change is only legal on a reopen). I4: no `passed` roll-up the gate rejects."""
+    out = []
+    locked = state.get("locked_tests_hash")
+    if locked and not is_reopen and tests_hash(current_tests) != locked:
+        out.append("I1: locked behavior_tests changed outside a re-open→AUDIT round")
+    lv = state.get("last_verdict") or {}
+    if str(lv.get("roll_up")) == "passed" and str(lv.get("gate")) == "fail":
+        out.append("I4: roll_up 'passed' contradicts a failing severity gate")
+    return out

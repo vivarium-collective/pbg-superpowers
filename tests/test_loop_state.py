@@ -46,3 +46,29 @@ def test_advance_rejects_unknown_state():
     import pytest
     with pytest.raises(ValueError):
         ls.advance(ls.create(".", "s", "q"), "NONSENSE")
+
+
+def test_record_iteration_appends_history_and_spends_budget():
+    st = ls.create(".", "s", "q")
+    st = ls.record_iteration(st, edit="raised rate 1.3x", target="model",
+                             margin_deltas={"t1": 0.03}, gate="fail")
+    assert st["iteration"] == 1 and st["budget"]["spent"] == 1
+    h = st["history"][-1]
+    assert h["edit"] == "raised rate 1.3x" and h["target"] == "model"
+    assert h["margin_deltas"] == {"t1": 0.03} and h["gate"] == "fail"
+
+
+def test_validate_flags_locked_test_change_without_reopen():
+    tests = [{"name": "t1", "pass_if": {"op": "<=", "value": 5}}]
+    st = ls.lock_tests(ls.create(".", "s", "q"), tests)
+    weakened = [{"name": "t1", "pass_if": {"op": "<=", "value": 500}}]  # loosened
+    viol = ls.validate(st, weakened)
+    assert any("I1" in v for v in viol)                    # locked tests changed
+    assert ls.validate(st, tests) == []                    # unchanged → clean
+    assert ls.validate(st, weakened, is_reopen=True) == [] # reopen path allowed
+
+
+def test_validate_flags_unsupported_pass_verdict():
+    st = ls.create(".", "s", "q")
+    st["last_verdict"] = {"roll_up": "passed", "gate": "fail"}   # I4 violation
+    assert any("I4" in v for v in ls.validate(st, []))
