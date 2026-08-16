@@ -35,3 +35,51 @@ def test_categorical_ops_map_to_predicate():
 
 def test_unknown_op_returns_none():
     assert _expected_from_pass_if({"op": "ratio_at_most", "value": 1}, "ratio_at_most") is None
+
+
+from viva_superpowers.study_evaluator import _grade_axis_from_outcome
+
+
+def _outcome(result, measured_value):
+    return {"result": result, "measured_value": measured_value, "evaluated_by": "code"}
+
+
+def test_scalar_band_axis_has_signed_margin():
+    test = {"name": "atp", "description": "ATP fraction", "cites": ["Kurokawa 1999"],
+            "measure": {"units": "fraction"}}
+    ax = _grade_axis_from_outcome(test, {"op": "in_range", "low": 0.6, "high": 0.8}, "in_range",
+                                  _outcome("FAIL", 0.54))
+    assert ax["verdict"] == "mismatch"
+    assert ax["margin"] == -0.06 or abs(ax["margin"] - (-0.06)) < 1e-9   # 0.54 - 0.6
+    assert ax["severity"] == "hard" and ax["citation"] == "Kurokawa 1999"
+    assert ax["units"] == "fraction" and ax["value"] == 0.54
+
+
+def test_per_generation_keeps_worst_generation():
+    test = {"name": "band_every_gen"}
+    ax = _grade_axis_from_outcome(test, {"op": "in_range_every_generation", "low": 0.6, "high": 0.8},
+                                  "in_range_every_generation",
+                                  _outcome("FAIL", {"0": 0.7, "1": 0.5, "2": 0.72}))
+    assert ax["verdict"] == "mismatch"                 # gen 1 (0.5) fails
+    assert ax["value"] == 0.5                           # worst generation's value
+    assert ax["detail"]["per_generation"] == {"0": 0.7, "1": 0.5, "2": 0.72}
+    assert ax["detail"]["worst_generation"] == "1"
+
+
+def test_predicate_axis_verdict_from_result():
+    test = {"name": "seeds"}
+    ok = _grade_axis_from_outcome(test, {"op": "in_set", "set": [4]}, "in_set", _outcome("PASS", 4))
+    assert ok["verdict"] == "within_tol" and ok["margin"] is None
+    bad = _grade_axis_from_outcome(test, {"op": "in_set", "set": [4]}, "in_set", _outcome("FAIL", 3))
+    assert bad["verdict"] == "mismatch"
+
+
+def test_soft_severity_flows_through():
+    test = {"name": "s", "severity": "soft"}
+    ax = _grade_axis_from_outcome(test, {"op": "<=", "value": 5}, "<=", _outcome("PASS", 3))
+    assert ax["severity"] == "soft" and ax["verdict"] == "within_tol"
+
+
+def test_unmapped_op_yields_no_axis():
+    assert _grade_axis_from_outcome({"name": "x"}, {"op": "ratio_at_most", "value": 1},
+                                    "ratio_at_most", _outcome("PASS", 0.5)) is None

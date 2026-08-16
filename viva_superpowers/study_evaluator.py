@@ -98,6 +98,48 @@ def _expected_from_pass_if(pass_if: dict, op: str) -> Expected | None:
     return None
 
 
+def _grade_axis_from_outcome(test: dict, pass_if: dict, op: str, outcome: dict) -> dict | None:
+    """Build a report_card_verdict/v2 axis from a code outcome by grading its
+    measured_value through test_contract.check. Returns None when the op has no
+    scalar expectation (Task 2) — the outcome then simply carries no axis."""
+    expected = _expected_from_pass_if(pass_if, op)
+    if expected is None:
+        return None
+    name = test.get("name", "test")
+    label = test.get("description") or name
+    cites = test.get("cites") or []
+    cite = "; ".join(str(c) for c in cites) or None
+    units = (test.get("measure") or {}).get("units")
+    common = dict(severity=test.get("severity", "hard"), cite=cite, units=units)
+    mv = outcome.get("measured_value")
+
+    if expected.kind == "predicate":
+        # categorical: verdict comes from the code result, no numeric margin.
+        v = "within_tol" if outcome.get("result") == "PASS" else "mismatch"
+        return check(name, label, mv, expected, verdict=v, **common)
+
+    if isinstance(mv, dict):
+        # per-generation: grade each generation, keep the worst.
+        graded = [(g, check(name, label, val, expected, **common))
+                  for g, val in mv.items() if isinstance(val, (int, float))]
+        if not graded:
+            return None
+
+        def _severity_key(ga):
+            ax = ga[1]
+            m = ax.get("margin")
+            return (RANK.get(ax.get("verdict", "ungraded"), 0), -(m if m is not None else 0.0))
+
+        g_worst, ax = max(graded, key=_severity_key)
+        ax = dict(ax)
+        ax["detail"] = {"per_generation": mv, "worst_generation": g_worst}
+        return ax
+
+    if isinstance(mv, (int, float)):
+        return check(name, label, mv, expected, **common)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Closed set: run-data-evaluable measure kinds
 # ---------------------------------------------------------------------------
