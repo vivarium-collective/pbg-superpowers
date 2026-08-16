@@ -59,6 +59,27 @@ def test_unknown_criterion_is_ungraded():
     assert grade_axis({"mean": 1.0}, {"type": "nope"})["verdict"] == "ungraded"
 
 
+def test_threshold_linear_matches_reference_curve():
+    # Model rises linearly above a threshold, tracking the reference slope.
+    ref = {"ref_x": [0, 1, 2, 3, 4], "ref_y": [0, 0, 0.1, 0.2, 0.3]}
+    crit = {"type": "threshold_linear", **ref, "active_eps": 5e-3}
+    g = grade_axis({"x": [0, 1, 2, 3, 4], "y": [0, 0, 0.1, 0.2, 0.3]}, crit)
+    assert g["verdict"] == "within_tol"
+    assert g["detail"]["onset_gating"] is False   # threshold is reported, never gates
+
+
+def test_threshold_linear_flat_model_is_mismatch():
+    # Reference rises but the model stays flat across the whole sweep → wrong shape.
+    crit = {"type": "threshold_linear", "ref_x": [0, 1, 2, 3, 4],
+            "ref_y": [0, 0, 0.1, 0.2, 0.3], "active_eps": 5e-3}
+    g = grade_axis({"x": [0, 1, 2, 3, 4], "y": [0, 0, 0, 0, 0]}, crit)
+    assert g["verdict"] == "mismatch"
+
+
+def test_threshold_linear_missing_data_is_ungraded():
+    assert grade_axis(None, {"type": "threshold_linear"})["verdict"] == "ungraded"
+
+
 # --- grade_card: rolls up the worst axis verdict ---------------------------
 
 def test_grade_card_rolls_up_worst_verdict():
