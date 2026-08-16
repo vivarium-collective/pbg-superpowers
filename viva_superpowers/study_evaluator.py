@@ -78,20 +78,26 @@ def _expected_from_pass_if(pass_if: dict, op: str) -> Expected | None:
     # approx / tolerance
     if o in ("==", "eq", "equals"):
         t = _num(pass_if, "value", "target")
+        if t is None:
+            return None
+        # Mirror _apply_op's _equals_ok precedence: tolerance_fraction (relative)
+        # wins over tolerance (absolute) when both are present.
+        tolf = _num(pass_if, "tolerance_fraction")
+        if tolf is not None:
+            return value(t, op="~=", tol=tolf)
         tol = _num(pass_if, "tolerance")
-        return value(t, op="~=", tol=tol if tol is not None else 0.05) if t is not None else None
+        if tol is not None:
+            return band(t - tol, t + tol)
+        return value(t, op="==")
     if o == "median_within_tolerance":
         t, tol = _num(pass_if, "target", "value"), _num(pass_if, "tolerance_fraction", "tolerance")
         return value(t, op="~=", tol=tol if tol is not None else 0.05) if t is not None else None
     if o == "periodic_doubling_every_generation":
         tol = _num(pass_if, "tolerance")
-        return value(2.0, op="~=", tol=tol if tol is not None else 0.05)
+        return value(2.0, op="~=", tol=tol if tol is not None else 0.2)
     if o == "cv_below":
         t = _num(pass_if, "cv_threshold", "value")
         return value(t, op="<=") if t is not None else None
-    if o == "rises_within_cycle":
-        t = _num(pass_if, "min_fraction")
-        return value(t, op=">=") if t is not None else None
     # categorical -> predicate (verdict only, no numeric margin)
     if o in ("in_set", "!=", "exactly_one_initiation_per_generation"):
         return predicate(o)

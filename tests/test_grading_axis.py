@@ -17,13 +17,44 @@ def test_comparator_ops_map_to_value():
 
 
 def test_tolerance_ops_map_to_value_approx():
+    # `==` with an absolute `tolerance` matches _apply_op's _equals_ok (absolute
+    # bound: abs(m-t) <= tol) -> a band [target-tol, target+tol], not a relative ~=.
     e = _expected_from_pass_if({"op": "==", "value": 2.0, "tolerance": 0.1}, "==")
-    assert e.kind == "value" and e.op == "~=" and e.value == 2.0 and e.tol == 0.1
+    assert e.kind == "band" and e.low == 1.9 and e.high == 2.1
+    # `tolerance_fraction` is the RELATIVE option _equals_ok honors separately,
+    # and takes precedence over `tolerance` when both are present.
+    ef = _expected_from_pass_if({"op": "==", "value": 2.0, "tolerance_fraction": 0.1}, "==")
+    assert ef.kind == "value" and ef.op == "~=" and ef.value == 2.0 and ef.tol == 0.1
+    efboth = _expected_from_pass_if(
+        {"op": "==", "value": 2.0, "tolerance": 0.1, "tolerance_fraction": 0.25}, "==")
+    assert efboth.kind == "value" and efboth.op == "~=" and efboth.tol == 0.25   # fraction wins
+    # No tolerance at all -> exact equality.
+    exact = _expected_from_pass_if({"op": "==", "value": 2.0}, "==")
+    assert exact.kind == "value" and exact.op == "==" and exact.value == 2.0
+
     m = _expected_from_pass_if({"op": "median_within_tolerance", "target": 60, "tolerance_fraction": 0.1},
                                "median_within_tolerance")
     assert m.op == "~=" and m.value == 60 and m.tol == 0.1
     cv = _expected_from_pass_if({"op": "cv_below", "cv_threshold": 0.2}, "cv_below")
     assert cv.op == "<=" and cv.value == 0.2
+
+
+def test_periodic_doubling_default_tolerance_matches_apply_op():
+    # _apply_op defaults the missing `tolerance` to 0.2 (not 0.05).
+    e = _expected_from_pass_if({"op": "periodic_doubling_every_generation"},
+                               "periodic_doubling_every_generation")
+    assert e.kind == "value" and e.op == "~=" and e.value == 2.0 and e.tol == 0.2
+    e2 = _expected_from_pass_if({"op": "periodic_doubling_every_generation", "tolerance": 0.05},
+                                "periodic_doubling_every_generation")
+    assert e2.tol == 0.05
+
+
+def test_rises_within_cycle_unmapped():
+    # measured_value for rises_within_cycle is a per-generation rise-delta dict
+    # (peak - early), not the pass-fraction -- grading it against min_fraction
+    # would contradict `result`. Left unmapped -> no axis (coverage-safe).
+    assert _expected_from_pass_if({"op": "rises_within_cycle", "min_fraction": 0.6},
+                                  "rises_within_cycle") is None
 
 
 def test_categorical_ops_map_to_predicate():
