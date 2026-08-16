@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import re
 
-from viva_superpowers import rigor
 from viva_superpowers.test_contract import TestBuilder, check, value
 from viva_superpowers import band_provenance
 
@@ -19,10 +18,9 @@ def _tests(spec: dict) -> list:
     """Every behavior_tests[] / expected_behavior[] / tests[] entry (dicts only).
 
     Mirrors rigor._study_test_entries's section merge (behavior_tests + tests,
-    concatenated — not an ``or`` fallback) so a study authored under the
-    `tests:` section (see report_linter.py, band_provenance.py) isn't invisible
-    to redundant_paths/uncovered_mechanisms/has_discriminating_control while
-    still being checked by band_too_wide (which delegates to rigor).
+    concatenated — not an ``or`` fallback), plus expected_behavior (the section
+    scaffold.py emits by default), so a study authored under any one of these
+    sections is visible to every check in this module — band_too_wide included.
     """
     out = []
     for section in ("behavior_tests", "expected_behavior", "tests"):
@@ -39,9 +37,17 @@ def _measure_path(t: dict) -> str:
 
 def band_too_wide(spec: dict, *, frac: float = 0.5) -> list:
     """Numeric-band tests whose half-width exceeds `frac` of the band midpoint's
-    magnitude — a band so wide a wrong model likely also passes."""
+    magnitude — a band so wide a wrong model likely also passes.
+
+    Filters `_tests(spec)` itself (behavior_tests + expected_behavior + tests)
+    rather than delegating to `rigor._numeric_band_tests` (which only reads
+    behavior_tests + tests) — otherwise a wide band authored under
+    `expected_behavior:` (the section `scaffold.py` emits by default) would
+    escape this check even though redundant_paths/uncovered_mechanisms/
+    has_discriminating_control already see it via `_tests`.
+    """
     out = []
-    for t in rigor._numeric_band_tests(spec):
+    for t in _tests(spec):
         pi = t.get("pass_if") or {}
         lo, hi = pi.get("low"), pi.get("high")
         if not (isinstance(lo, (int, float)) and isinstance(hi, (int, float))):
@@ -51,6 +57,27 @@ def band_too_wide(spec: dict, *, frac: float = 0.5) -> list:
         ref = abs(mid) if mid != 0 else 1.0
         if half > frac * ref:
             out.append({"name": t.get("name"), "half_width": half, "midpoint": mid})
+    return out
+
+
+def one_sided_loose_primary(spec: dict) -> list:
+    """PRIMARY tests whose `pass_if` is a one-sided comparator (`<=`/`<`/`>=`/`>`
+    with a `value`/`threshold`, no `low`/`high` band) — a bound this audit's
+    band-width check can't grade for looseness since it has no stated interval,
+    so a trivially-loose one-sided threshold (e.g. `<= 1e12`) would otherwise
+    pass `band_too_wide` silently. Flagged as unverifiable tightness."""
+    out = []
+    for t in _tests(spec):
+        if str(t.get("classification", "")) != "primary":
+            continue
+        pi = t.get("pass_if") or {}
+        has_band = isinstance(pi.get("low"), (int, float)) and isinstance(pi.get("high"), (int, float))
+        if has_band:
+            continue
+        op = str(pi.get("op") or "")
+        val = pi.get("value") if "value" in pi else pi.get("threshold")
+        if op in ("<=", "<", ">=", ">") and isinstance(val, (int, float)):
+            out.append({"name": t.get("name"), "op": op, "value": val})
     return out
 
 
@@ -110,13 +137,26 @@ def _axis(axis_id, label, ok: bool, severity, detail):
 def build_audit_report(spec: dict) -> dict:
     spec = spec if isinstance(spec, dict) else {}
     wide = band_too_wide(spec)
+    loose = one_sided_loose_primary(spec)
     uncovered = uncovered_mechanisms(spec)
     dupes = redundant_paths(spec)
     missing_prov = band_provenance.bands_missing_provenance(spec)
+    # Discrimination is 3-state, not the boolean-axis pattern: mismatch (hard)
+    # if any band is outright too wide; else drift (soft signal on a hard axis,
+    # which audit_gate turns into an overall "warn" — lockable but flagged, not
+    # a silent pass) if any primary test has an unverifiable one-sided
+    # threshold; else within_tol.
+    if wide:
+        disc_verdict = "mismatch"
+    elif loose:
+        disc_verdict = "drift"
+    else:
+        disc_verdict = "within_tol"
     tb = TestBuilder(model_ref=str(spec.get("name") or ""))
-    tb.add("sufficiency", _axis(
-        "discrimination", "Discrimination (bands not trivially wide)",
-        not wide, "hard", {"wide_bands": wide}))
+    tb.add("sufficiency", check(
+        "discrimination", "Discrimination (bands not trivially wide)", None,
+        value(1.0, op=">="), severity="hard", verdict=disc_verdict,
+        detail={"wide_bands": wide, "one_sided_loose_primary": loose}))
     tb.add("sufficiency", _axis(
         "objective_coverage", "Objective coverage (mechanisms tested)",
         not uncovered, "hard", {"uncovered_mechanisms": uncovered}))

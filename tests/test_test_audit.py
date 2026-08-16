@@ -95,3 +95,35 @@ def test_tests_section_not_blind_spot_for_redundancy_and_coverage():
     rep = ta.build_audit_report(spec)
     axes = {ax["id"]: ax for g in rep["groups"].values() for ax in g["axes"]}
     assert axes["objective_coverage"]["verdict"] == "within_tol"
+
+
+def test_one_sided_loose_primary_flags_discrimination_drift_not_silent_pass():
+    # A primary test with a trivially-loose one-sided threshold has no stated
+    # band, so band_too_wide can't grade it — but a silent "pass" on a
+    # gameable suite is exactly what the discrimination axis must not do.
+    spec = _spec(
+        [{"name": "loose", "classification": "primary", "measure": {"path": "x"},
+          "pass_if": {"op": "<=", "value": 1e12}}])
+    flags = ta.one_sided_loose_primary(spec)
+    assert flags and flags[0]["name"] == "loose"
+    rep = ta.build_audit_report(spec)
+    axes = {ax["id"]: ax for g in rep["groups"].values() for ax in g["axes"]}
+    assert axes["discrimination"]["verdict"] == "drift"
+    assert ta.audit_gate(rep) == "warn"                          # not a silent pass
+
+
+def test_band_too_wide_sees_expected_behavior_section():
+    # A study authored under expected_behavior: (scaffold.py's default section
+    # name) must not escape the discrimination check.
+    spec = {
+        "question": "",
+        "expected_behavior": [
+            {"name": "wide_eb", "classification": "primary", "measure": {"path": "z"},
+             "pass_if": {"op": "in_range", "low": 0.1, "high": 10.0}},
+        ],
+    }
+    flags = ta.band_too_wide(spec)
+    assert flags and flags[0]["name"] == "wide_eb"
+    rep = ta.build_audit_report(spec)
+    axes = {ax["id"]: ax for g in rep["groups"].values() for ax in g["axes"]}
+    assert axes["discrimination"]["verdict"] == "mismatch"
