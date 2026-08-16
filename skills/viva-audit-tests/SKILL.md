@@ -1,6 +1,6 @@
 ---
 name: viva-audit-tests
-description: Use before locking a study's acceptance-criteria Tests for an autonomous model-building loop — audits whether the Tests are SUFFICIENT (discriminating, covering the question, independent, with a discriminating control) so a wrong model can't pass them. Gates the pre-registration lock.
+description: Use when a study's acceptance-criteria Tests must be audited for SUFFICIENCY before they are locked for an autonomous model-building loop — checks that the Tests are discriminating, cover the question, are independent, and include a discriminating control so a wrong model can't pass them. Gates the pre-registration lock.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit
 argument-hint: <study-slug>
