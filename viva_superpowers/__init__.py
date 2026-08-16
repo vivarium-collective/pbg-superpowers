@@ -7,6 +7,12 @@ from viva_superpowers.test_contract import (  # noqa: E402,F401
 )
 from viva_superpowers.test_diff import diff_reports  # noqa: E402,F401
 from viva_superpowers import test_vocab  # noqa: E402,F401
+# Reference-driven card grading (typed criteria → report_card_verdict/v1).
+# Light: stdlib + scipy-at-call-time only, no process_bigraph.
+from viva_superpowers.card_criteria import grade_axis  # noqa: E402,F401
+from viva_superpowers.card_grade import (  # noqa: E402,F401
+    dig, grade_card, verdict_json, render_verdict_html,
+)
 
 # Heavy post_sim family (pulls process_bigraph): lazy, so a pure consumer
 # (e.g. study_audit importing `check`) doesn't drag the simulation stack in.
