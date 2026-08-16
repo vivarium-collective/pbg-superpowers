@@ -1,8 +1,11 @@
 import viva_superpowers.benchmark_score as bs
+from viva_superpowers import loop_state
 
 
 def _ls(state="DONE", spent=3, max_it=12, gate="pass", roll="passed",
-        locked="sha256:x", reopen=0, prior=None):
+        locked=None, reopen=0, prior=None):
+    if locked is None:
+        locked = loop_state.tests_hash([])
     return {"schema": "model_build_loop/v1", "state": state, "iteration": spent,
             "budget": {"max_iterations": max_it, "spent": spent},
             "locked_tests_hash": locked, "reopen_count": reopen,
@@ -86,3 +89,12 @@ def test_aggregate_counts_and_rates():
     assert agg["gamed_pass_rate"] > 0.0       # the gamed impossible-pass trial
     assert "loop_outcome" in agg["by_axis"]
     assert len(rep["trials"]) == 3 and rep["trials"][0]["item"] == "a"
+
+
+def test_loop_outcome_post_lock_test_tampering_is_mismatch():
+    # locked a real test set, but the collected tests were emptied after lock,
+    # while the loop forged a clean DONE/pass — I1 must catch it.
+    real = [{"name": "t", "pass_if": {"op": "<=", "value": 5}}]
+    ls = _ls(state="DONE", gate="pass", roll="passed", locked=loop_state.tests_hash(real))
+    ax = bs.score_loop_outcome({"solvable": True}, ls, [])   # collected tests now empty
+    assert ax["verdict"] == "mismatch"
