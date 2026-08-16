@@ -62,10 +62,23 @@ def tests_hash(tests: list) -> str:
 
 
 def lock_tests(state: dict, tests: list) -> dict:
+    """Pre-register (freeze) the Test set. A RE-lock (an existing locked hash that
+    differs — i.e. the loop re-opened → re-audited → re-locked a changed Test set)
+    records the anti-gaming trail: the prior hash is retained in
+    ``prereg_record.prior_hashes`` and ``reopen_count`` is bumped. So every
+    change to a locked Test set is visible post-hoc — you cannot weaken a Test to
+    pass without it showing up as a recorded reopen (spec §7)."""
     state = dict(state)
-    state["locked_tests_hash"] = tests_hash(tests)
-    state["prereg_record"] = dict(state.get("prereg_record") or {})
-    state["prereg_record"]["locked_at_iteration"] = state.get("iteration", 0)
+    new_hash = tests_hash(tests)
+    prev = state.get("locked_tests_hash")
+    prereg = dict(state.get("prereg_record") or {})
+    prereg["prior_hashes"] = list(prereg.get("prior_hashes") or [])
+    if prev and prev != new_hash:
+        prereg["prior_hashes"].append(prev)
+        state["reopen_count"] = int(state.get("reopen_count", 0)) + 1
+    prereg["locked_at_iteration"] = state.get("iteration", 0)
+    state["locked_tests_hash"] = new_hash
+    state["prereg_record"] = prereg
     state["state"] = "LOCK"
     return state
 
@@ -100,6 +113,14 @@ def validate(state: dict, current_tests: list, *, is_reopen: bool = False) -> li
     locked = state.get("locked_tests_hash")
     if locked and not is_reopen and tests_hash(current_tests) != locked:
         out.append("I1: locked behavior_tests changed outside a re-open→AUDIT round")
+    # I1b — reopen-trail integrity: reopen_count must equal the number of retained
+    # prior hashes. A change to a locked Test set is only legitimate through a
+    # re-lock (lock_tests records both together); a mismatch means the trail was
+    # tampered with (or a weakening was slipped in without a recorded reopen).
+    prereg = state.get("prereg_record") or {}
+    n_prior = len(prereg.get("prior_hashes") or [])
+    if int(state.get("reopen_count", 0)) != n_prior:
+        out.append("I1b: reopen_count does not match the retained prior-hash trail")
     lv = state.get("last_verdict") or {}
     if str(lv.get("roll_up")) == "passed" and str(lv.get("gate")) == "fail":
         out.append("I4: roll_up 'passed' contradicts a failing severity gate")

@@ -72,3 +72,28 @@ def test_validate_flags_unsupported_pass_verdict():
     st = ls.create(".", "s", "q")
     st["last_verdict"] = {"roll_up": "passed", "gate": "fail"}   # I4 violation
     assert any("I4" in v for v in ls.validate(st, []))
+
+
+# --- reopen trail (anti-gaming visibility, spec §7) ---
+
+def test_relock_records_reopen_trail():
+    t1 = [{"name": "t", "pass_if": {"op": "<=", "value": 5}}]
+    t2 = [{"name": "t", "pass_if": {"op": "<=", "value": 500}}]   # weakened
+    st = ls.lock_tests(ls.create(".", "s", "q"), t1)
+    assert st["reopen_count"] == 0 and st["prereg_record"]["prior_hashes"] == []
+    st = ls.lock_tests(st, t2)                                     # re-lock a changed set
+    assert st["reopen_count"] == 1
+    assert st["prereg_record"]["prior_hashes"] == [ls.tests_hash(t1)]   # prior retained
+    assert st["locked_tests_hash"] == ls.tests_hash(t2)
+
+
+def test_relock_same_tests_is_not_a_reopen():
+    t1 = [{"name": "t", "pass_if": {"op": "<=", "value": 5}}]
+    st = ls.lock_tests(ls.lock_tests(ls.create(".", "s", "q"), t1), t1)   # lock twice, same
+    assert st["reopen_count"] == 0 and st["prereg_record"]["prior_hashes"] == []
+
+
+def test_validate_flags_tampered_reopen_trail():
+    st = ls.lock_tests(ls.create(".", "s", "q"), [{"name": "t", "pass_if": {"op": "<=", "value": 5}}])
+    st["reopen_count"] = 2                        # claims 2 reopens but no prior hashes
+    assert any("I1b" in v for v in ls.validate(st, [{"name": "t", "pass_if": {"op": "<=", "value": 5}}]))
