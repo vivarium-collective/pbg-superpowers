@@ -127,3 +127,15 @@ def test_band_too_wide_sees_expected_behavior_section():
     rep = ta.build_audit_report(spec)
     axes = {ax["id"]: ax for g in rep["groups"].values() for ax in g["axes"]}
     assert axes["discrimination"]["verdict"] == "mismatch"
+
+
+def test_pass_if_provenance_counts_as_provenance():
+    # A band with pass_if.provenance but NO cites is NOT missing provenance
+    # (band_provenance flags it on cites; the audit accepts provenance too).
+    spec = _spec([{"name": "ctl", "classification": "diagnostic", "control": "negative",
+                   "measure": {"path": "x.ko"},
+                   "pass_if": {"op": "<=", "value": 0.1, "provenance": {"kind": "first_principles"}}}])
+    assert ta._bands_missing_provenance(spec) == []
+    rep = ta.build_audit_report(spec)
+    axes = {a["id"]: a for g in rep["groups"].values() for a in g["axes"]}
+    assert axes["band_provenance"]["verdict"] == "within_tol"     # not flagged

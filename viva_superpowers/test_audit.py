@@ -115,6 +115,20 @@ def uncovered_mechanisms(spec: dict) -> list:
     return [m for m in objective_mechanisms(spec) if m.lower() not in haystack]
 
 
+def _bands_missing_provenance(spec: dict) -> list:
+    """Band-bearing tests with NO provenance source at all. `band_provenance`
+    flags bands lacking `cites`; a `pass_if.provenance` is an equally-valid source
+    (matching `rigor._test_threshold_sourced`), so a band that carries one is NOT
+    missing provenance. Keep only the bands that have neither."""
+    by_name = {str(t.get("name")): t for t in _tests(spec)}
+    out = []
+    for m in band_provenance.bands_missing_provenance(spec):
+        t = by_name.get(str(m.get("name"))) or {}
+        if not (t.get("pass_if") or {}).get("provenance"):
+            out.append(m)
+    return out
+
+
 def has_discriminating_control(spec: dict) -> bool:
     """A test that acts as a negative control — the correct model should FAIL it
     if the mechanism were absent (`control: negative` or a diagnostic classification)."""
@@ -140,7 +154,7 @@ def build_audit_report(spec: dict) -> dict:
     loose = one_sided_loose_primary(spec)
     uncovered = uncovered_mechanisms(spec)
     dupes = redundant_paths(spec)
-    missing_prov = band_provenance.bands_missing_provenance(spec)
+    missing_prov = _bands_missing_provenance(spec)
     # Discrimination is 3-state, not the boolean-axis pattern: mismatch (hard)
     # if any band is outright too wide; else drift (soft signal on a hard axis,
     # which audit_gate turns into an overall "warn" — lockable but flagged, not
