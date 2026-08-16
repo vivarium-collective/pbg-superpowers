@@ -52,3 +52,13 @@ def agent_status(verdict):
 
 def display_status(verdict):
     return _DISPLAY[normalize_verdict(verdict)]
+
+
+_RESULT = {"within_tol": "PASS", "drift": "PASS", "mismatch": "FAIL", "ungraded": "SKIP"}
+
+
+def verdict_to_result(verdict) -> str:
+    """Project a canonical verdict to the PASS/FAIL/SKIP a study test carries.
+    ``drift`` (a soft/directional warning) still PASSES the gate; ``ungraded``
+    (no gradable data) is SKIP."""
+    return _RESULT[normalize_verdict(verdict)]

@@ -31,3 +31,12 @@ def test_agent_and_display_status():
     assert v.display_status("mismatch") == "not met"
     assert v.display_status("drift") == "conditional-pass"
     assert v.display_status("ungraded") == "not assessable"
+
+def test_verdict_to_result_maps_all_verdicts():
+    from viva_superpowers.test_vocab import verdict_to_result
+    assert verdict_to_result("within_tol") == "PASS"
+    assert verdict_to_result("drift") == "PASS"        # a soft/directional warning still passes the gate
+    assert verdict_to_result("mismatch") == "FAIL"
+    assert verdict_to_result("ungraded") == "SKIP"
+    assert verdict_to_result("pass") == "PASS"          # aliases normalize first
+    assert verdict_to_result(None) == "SKIP"
