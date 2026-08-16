@@ -16,8 +16,20 @@ from viva_superpowers import band_provenance
 
 
 def _tests(spec: dict) -> list:
-    return [t for t in (spec.get("behavior_tests") or spec.get("expected_behavior") or [])
-            if isinstance(t, dict)]
+    """Every behavior_tests[] / expected_behavior[] / tests[] entry (dicts only).
+
+    Mirrors rigor._study_test_entries's section merge (behavior_tests + tests,
+    concatenated — not an ``or`` fallback) so a study authored under the
+    `tests:` section (see report_linter.py, band_provenance.py) isn't invisible
+    to redundant_paths/uncovered_mechanisms/has_discriminating_control while
+    still being checked by band_too_wide (which delegates to rigor).
+    """
+    out = []
+    for section in ("behavior_tests", "expected_behavior", "tests"):
+        for t in (spec or {}).get(section) or []:
+            if isinstance(t, dict):
+                out.append(t)
+    return out
 
 
 def _measure_path(t: dict) -> str:
@@ -87,11 +99,11 @@ def has_discriminating_control(spec: dict) -> bool:
     return False
 
 
-def _axis(id, label, ok: bool, severity, detail):
+def _axis(axis_id, label, ok: bool, severity, detail):
     # A boolean sufficiency dimension → a predicate-style axis: within_tol when ok,
     # else mismatch (hard) / drift (soft), carrying a human detail.
     verdict = "within_tol" if ok else ("mismatch" if severity == "hard" else "drift")
-    return check(id, label, None, value(1.0, op=">="), severity=severity,
+    return check(axis_id, label, None, value(1.0, op=">="), severity=severity,
                  verdict=verdict, detail=detail)
 
 

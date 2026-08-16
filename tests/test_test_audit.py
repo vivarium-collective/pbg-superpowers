@@ -68,3 +68,30 @@ def test_build_audit_report_passes_a_sound_suite():
         purpose={"mechanism": "dnaA_atp_titration"})
     rep = ta.build_audit_report(spec)
     assert ta.audit_gate(rep) in ("pass", "warn")
+
+
+def test_tests_section_not_blind_spot_for_redundancy_and_coverage():
+    # Study authored under `tests:` (not `behavior_tests:`) — band_too_wide
+    # already sees it via rigor._numeric_band_tests/_study_test_entries; this
+    # regression-tests that redundant_paths/uncovered_mechanisms/
+    # has_discriminating_control see it too (previously a false hard-fail of
+    # objective_coverage since _tests() only read behavior_tests/expected_behavior).
+    spec = {
+        "question": "",
+        "purpose": {"mechanism": "dnaA_atp_titration"},
+        "tests": [
+            {"name": "atp", "classification": "primary",
+             "measure": {"path": "dnaA_atp_titration.fraction"},
+             "pass_if": {"op": "in_range", "low": 0.6, "high": 0.8}},
+            {"name": "atp2", "classification": "primary",
+             "measure": {"path": "dnaA_atp_titration.fraction"},
+             "pass_if": {"op": "in_range", "low": 0.5, "high": 0.9}},
+        ],
+    }
+    dupes = ta.redundant_paths(spec)
+    assert dupes and dupes[0]["path"] == "dnaA_atp_titration.fraction"
+    assert set(dupes[0]["tests"]) == {"atp", "atp2"}
+    assert ta.uncovered_mechanisms(spec) == []
+    rep = ta.build_audit_report(spec)
+    axes = {ax["id"]: ax for g in rep["groups"].values() for ax in g["axes"]}
+    assert axes["objective_coverage"]["verdict"] == "within_tol"
