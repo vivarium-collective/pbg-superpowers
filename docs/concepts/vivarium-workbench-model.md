@@ -61,7 +61,7 @@ Studies move through five phases. Each phase has a distinct deliverable, distinc
 | **Design** | The spec: purpose, pipeline_gate, simulation_set, model_change, key_assumptions, readouts, behavior_tests, conclusion_logic, limitations, implementation_requirements, bibliography | `/pbg-study new`, `/pbg-study fill-overview`, `/pbg-study set-objective`, baseline/variant/intervention `*-add` subcommands, `/pbg-investigation new`, `/pbg-investigation scaffold-from-plan` |
 | **Build** | The executable code: Process classes, listeners, composites that make the spec runnable against the workspace's simulator | `/pbg-expert` (sibling repo) or `/pbg-expert --lightweight` (in-workspace, single-tool or composite form), plus manual code in `pbg_<workspace>/processes/`. Gap-listed listeners + sim_data calibration also happen here. |
 | **Simulate** | The runs: `runs.db` populated with trajectories | `/pbg-study run-baseline`, `/pbg-study run-variant`, `/pbg-study run-script` (bespoke runners declared in `canonical_runs:`) |
-| **Evaluate** | The verdict: behavioral test results, rendered visualizations, observations against `behavior_tests` | `POST /api/study-tests-run` (Tests tab), `/pbg-viz` (Visualizations tab) |
+| **Evaluate** | The verdict: behavioral test results, rendered visualizations, observations against `behavior_tests` | `POST /api/study-tests-run` (Assurance › Tests tab), `/pbg-viz` (Evidence › Visualizations tab, with generated artifacts also under Evidence › Analyses) |
 | **Decide** | The conclusion: what we learned + next steps | `/pbg-study set-conclusion` |
 
 The phases are sequential at a coarse level but **iterative in practice**: Evaluate often surfaces a Build issue → return to Build → Simulate again → re-Evaluate. The `phase:` field reflects the study's *current* phase, not its history.
@@ -267,6 +267,64 @@ conclusion: null
 > Purpose · Pipeline Gate · Simulations · Model Change · Assumptions · Readouts · Tests · Conclusion · Limitations · Requirements · References
 
 Report-generation code that mirrors the dashboard layout should emit headings in that order so authors can navigate report and dashboard interchangeably.
+
+### Study-detail dashboard spine {#study-detail-dashboard-spine}
+
+The study-detail page groups its tabs into five **acts** (`data-act` on
+`vivarium_workbench/templates/study-detail.html`), each holding one or more
+pillars (`data-kind`). The organizing rule: **Design = everything you specify
+· Evidence = everything that came out.**
+
+| Act | Tabs (`data-kind`) | Holds |
+|---|---|---|
+| **Study** | Overview (`overview`) | The narrative summary. |
+| **Design** | Model (`compose`) · Readouts (`readouts`) · Simulations (`simulate`) | What you author before a run: the composite(s), the emit contract, the run recipes. |
+| **Evidence** | Results (`results`) · Analyses (`analyses`) · Visualizations (`visualize`) | What came back: raw trajectories, derived artifacts, curated figures. |
+| **Assurance** | Tests (`tests`) · Audit (`audit`) · Build (`build`) | Grades it: does it pass, is the bar high enough to trust, was the pass earned honestly. |
+| **Decision** | Decide (`conclusions`) | The conclusion + follow-ups. |
+
+**Model** (`compose`) renders the study's actual composite(s) — baseline plus
+variants — as the same rich, Full-semantic-detail cards the Modules/Composites
+registry view uses (input/output ports, types, contract, full config schema),
+not a bare composite name with an explore link.
+
+**Readouts** (`readouts`) is the Design-time emit *contract*, not observed
+values: emitter identity + config (class, module, emit interval, buffer,
+output dir, emit scope) from `emitters.default_emitter`/`label_for_run`; the
+declared emitted store paths (from `observables_views.build_observables`,
+each paired with its authored `readouts[]` name/description/units when
+present); and an outputs-&-shapes table (store path · dtype · shape · units ·
+bytes). Observed values live in Evidence › Results, not here.
+
+**Evidence** splits what used to be one crowded Simulations panel into three:
+**Results** — a per-store preview of the latest run's emitted trajectory
+(sparkline + first/last/min/max) plus downloads; **Analyses** — one card per
+`AnalysisStep`/output group, listing its artifacts (png/json/csv/md) with
+per-file download plus an all-artifacts zip; **Visualizations** — the curated
+figures added via `/viva-viz`, unchanged.
+
+**Assurance** is a trio, and the boundary between the first two is load-bearing:
+a **report card GRADES (carries a verdict) → Tests**; an **analysis DERIVES**
+(an artifact, no verdict) **→ Evidence › Analyses**. Concretely:
+- **Tests** — the COMPLETE set of the study's report cards: every
+  `TEST_REGISTRY`/v2ecoli card under `viz/report_card/`, each rendered with
+  its `verdict.json` (overall + per-axis). Splitting rigor/reproducibility out
+  to Audit never drops a card from this panel.
+- **Audit** — "is the bar high enough to trust?": sufficiency
+  (`viva_superpowers.test_audit.build_audit_report`/`audit_gate` — the
+  discrimination, objective coverage, redundancy, discriminating control, and
+  band provenance axes), the rigor scorecard (`/api/study-rigor`, moved here
+  from Tests), and L0–L5 reproducibility (`/api/study-audit`, moved here from
+  Tests).
+- **Build** — "was the pass earned honestly?": model-build loop provenance
+  read from `.pbg/loop/<study>.json` (`viva_superpowers.loop_state`) — the
+  locked-tests hash, the reopen trail, iteration history, and the DONE/honest
+  give-up outcome. Studies not built via `/viva-model-build` show a graceful
+  "not built via the loop" note, not an error.
+
+Design spec: `docs/superpowers/specs/2026-08-16-study-spine-reorg-design.md`
+(cross-repo — `vivarium-workbench` renders + persists, `viva-superpowers`
+skills fill it).
 
 ### v4 narrative spine (canonical-optional extensions) {#v4-narrative-spine}
 
@@ -607,9 +665,9 @@ Skills that read dashboard state do so via these HTTP endpoints:
 | (maintainer) `scripts/audit-pbg-repo.py <repo>` | External pbg-* repo | — | Audits packaging/discovery conventions. Replaces v0.8 `/pbg-package`. |
 | `/pbg-explore` | Composite | Dashboard view | Opens composite in dashboard. |
 | `/pbg-run` | Composite | Run record | Runs a composite directly (no Study). |
-| `/pbg-study` | Study | Study | **All Study CRUD + runs.** See subcommand table above. |
+| `/pbg-study` | Study | Study | **All Study CRUD + runs.** See subcommand table above. `check-observables`/run-* record the emitter + emit paths that render in the study-detail Design › Readouts panel and the values that render in Evidence › Results — see [Study-detail dashboard spine](#study-detail-dashboard-spine). |
 | `/pbg-investigation` | Investigation | Investigation YAML | **All Investigation CRUD + scaffold-from-plan.** Writes YAML directly (no write endpoints yet). |
-| `/pbg-viz` | Visualization | Visualization | Adds a viz to a study. |
+| `/pbg-viz` | Visualization | Visualization | Adds a viz to a study; renders in Evidence › Visualizations, with generated artifacts also listed under Evidence › Analyses. |
 | `/pbg-report` | Study | Report file | Renders study summary to markdown. |
 | `/pbg-workspace` | Workspace | Workspace state | Workspace-level commands. |
 

@@ -11,6 +11,10 @@ argument-hint: <visualization-name>
 This skill turns a natural-language visualization request into a committed
 Visualization v2 class inside the workspace's Python package.
 
+Rendered figures surface in the study-detail page's Evidence › Visualizations
+tab; their underlying chart/analysis artifacts also list under Evidence ›
+Analyses (one card per analysis, downloadable individually or as a zip).
+
 **Push for the most creative, interactive, and informative figure the data
 supports — not a default line chart.** Take the initiative to build a
 visualization whenever one would make a finding clearer, rather than waiting

@@ -23,6 +23,10 @@ The loop's state lives in `.pbg/loop/<study>.json` (`model_build_loop/v1`), mana
 by `viva_superpowers.loop_state`. Advance ONE state per step; after each, persist +
 `validate`. Never skip a gate.
 
+This state — locked-tests hash, reopen trail, iteration history, DONE/give-up
+outcome — surfaces in the study's Assurance › Build tab (a graceful "not built
+via the loop" note when no loop file exists yet).
+
 ```
 AUTHOR → AUDIT ─fail→ AUTHOR
    AUDIT ─pass/warn→ LOCK → BUILD ─verify-gate→ RUN → EVALUATE → DECIDE

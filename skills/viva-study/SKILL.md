@@ -298,10 +298,10 @@ A study can be scientifically complete and still render with empty tabs because 
 field the UI reads is absent. When building a study, fill these so nothing shows
 blank — prompt the expert for each rather than shipping an empty section:
 
-- **`conditions:`** — the study-detail **Build tab renders from
+- **`conditions:`** — the study-detail **Design › Model tab renders from
   `conditions.{baseline,variants,model_settings}`**, NOT from the top-level
   `baseline:`/`variants:`. A study with a populated `baseline:` but no
-  `conditions:` block shows a **BLANK Build tab** (`report_linter` flags
+  `conditions:` block shows a **BLANK Model tab** (`report_linter` flags
   `missing_conditions_block`). Mirror the baseline into `conditions.baseline`
   (a mapping with a `composite:` — note the strict v4 validator requires
   `composite`, so a `step:`/`process:`-only baseline needs its dotted path there
@@ -309,11 +309,16 @@ blank — prompt the expert for each rather than shipping an empty section:
   **`model_settings` is read only as `conditions.model_settings`, and only on
   a v4 study** (`schema_version: 4`, what `/viva-study new` scaffolds) — a
   top-level `model_settings:` on a v3 study is authored-but-inert, not
-  surfaced by the Build tab. Author calibrated params under v4
-  `conditions.model_settings`, or migrate the study to v4 first.
+  surfaced by the Model tab. Author calibrated params under v4
+  `conditions.model_settings`, or migrate the study to v4 first. (Not to be
+  confused with the Assurance › Build tab, which renders `/viva-model-build`
+  loop provenance, not composite conditions.)
 - **`readouts:`** — the observables the run reports; without them the readouts
   section is empty. Validate every entry against the real composite output with
-  `check-observables <slug>` (never fabricate an observable).
+  `check-observables <slug>` (never fabricate an observable). This is the
+  Design-time emit contract rendered in Design › Readouts (emitter + config +
+  emitted paths + shapes); the values a run actually produced render in
+  Evidence › Results, not here.
 - **`visualizations:` / `embed_visualizations:`** — at least one figure or an
   embedded viewer, or the report has nothing to look at. Add via `/viva-viz`.
 - **v4 narrative spine** — the 15 narrative sections (`behavior_tests`,
