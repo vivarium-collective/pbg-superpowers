@@ -25,8 +25,77 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import polars as pl
 
+from viva_superpowers.test_contract import Expected, band, check, predicate, value
+from viva_superpowers.test_vocab import RANK
+
 if TYPE_CHECKING:
     from viva_emitters import RunReader
+
+
+# ---------------------------------------------------------------------------
+# pass_if -> test_contract.Expected (the unified grading vocabulary)
+# ---------------------------------------------------------------------------
+
+def _num(pass_if: dict, *keys):
+    """First present numeric among keys, or None."""
+    for k in keys:
+        v = pass_if.get(k)
+        if isinstance(v, (int, float)):
+            return float(v)
+    return None
+
+
+def _expected_from_pass_if(pass_if: dict, op: str) -> Expected | None:
+    """Map a pass_if block to a test_contract.Expected, or None when the op has
+    no scalar expectation this slice grades (it then yields no /v2 axis).
+
+    Pure synonyms are folded in: at_most->'<=', at_least->'>=', and the
+    ``operator: greater-than/less-than`` spelling. Aliases that need a new
+    *measure* (e.g. ratio_at_most) are intentionally unmapped -> None."""
+    o = (op or "").strip()
+    # band
+    if o in ("range", "in_range", "in_range_every_generation", "generation_average_in_range"):
+        lo, hi = _num(pass_if, "low"), _num(pass_if, "high")
+        return band(lo, hi) if lo is not None and hi is not None else None
+    # comparators (+ extrema + pure synonyms + operator spelling)
+    _LE = {"<=", "max_le", "at_most", "less-than-or-equal"}
+    _LT = {"<", "max_lt", "less-than"}
+    _GE = {">=", "min_ge", "at_least", "greater-than-or-equal", "greater-than"}
+    _GT = {">", "min_gt"}
+    spelled = pass_if.get("operator")
+    if o in _LE or spelled in _LE:
+        t = _num(pass_if, "value", "threshold")
+        return value(t, op="<=") if t is not None else None
+    if o in _LT or spelled in _LT:
+        t = _num(pass_if, "value", "threshold")
+        return value(t, op="<") if t is not None else None
+    if o in _GE or spelled in _GE:
+        t = _num(pass_if, "value", "threshold")
+        return value(t, op=">=") if t is not None else None
+    if o in _GT or spelled in _GT:
+        t = _num(pass_if, "value", "threshold")
+        return value(t, op=">") if t is not None else None
+    # approx / tolerance
+    if o in ("==", "eq", "equals"):
+        t = _num(pass_if, "value", "target")
+        tol = _num(pass_if, "tolerance")
+        return value(t, op="~=", tol=tol if tol is not None else 0.05) if t is not None else None
+    if o == "median_within_tolerance":
+        t, tol = _num(pass_if, "target", "value"), _num(pass_if, "tolerance_fraction", "tolerance")
+        return value(t, op="~=", tol=tol if tol is not None else 0.05) if t is not None else None
+    if o == "periodic_doubling_every_generation":
+        tol = _num(pass_if, "tolerance")
+        return value(2.0, op="~=", tol=tol if tol is not None else 0.05)
+    if o == "cv_below":
+        t = _num(pass_if, "cv_threshold", "value")
+        return value(t, op="<=") if t is not None else None
+    if o == "rises_within_cycle":
+        t = _num(pass_if, "min_fraction")
+        return value(t, op=">=") if t is not None else None
+    # categorical -> predicate (verdict only, no numeric margin)
+    if o in ("in_set", "!=", "exactly_one_initiation_per_generation"):
+        return predicate(o)
+    return None
 
 
 # ---------------------------------------------------------------------------
