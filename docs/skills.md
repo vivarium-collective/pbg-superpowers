@@ -1,6 +1,6 @@
 # Skills catalog
 
-16 user-facing skills (plus `/viva-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects).
+17 user-facing skills (plus `/viva-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects).
 
 ## Wrap & compose
 
@@ -48,6 +48,7 @@ from a pbg-superpowers checkout. (Replaces the v0.8 `/pbg-package` skill.)
 | [`/viva-study <subcmd> …`](../skills/viva-study/SKILL.md) | Full CRUD for **Studies** — baseline composites, variants, interventions, runs, behavior tests, follow-up proposals. Organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). |
 | [`/viva-tests <author\|enrich\|run> <study> …`](../skills/viva-tests/SKILL.md) | Author/enrich/run a study's **graded Tests** — the report cards that compile a run into a pass/fail verdict AND a signed `margin` (distance-to-pass) + a cross-iteration diff, the feedback signal for agent-driven model building. Uses `viva_superpowers.check()`/`TestBuilder`; bands over magic numbers. |
 | [`/viva-audit-tests <study-slug>`](../skills/viva-audit-tests/SKILL.md) | Audit whether a study's `behavior_tests[]` are SUFFICIENT (discriminating, covering the question, independent, with a discriminating control) BEFORE they are pre-registered/locked — the AUDIT gate of the agentic model-building loop. Uses `viva_superpowers.test_audit.build_audit_report`/`audit_gate` plus AI reasoning (null-model plausibility, semantic coverage). |
+| [`/viva-model-build <study> [--autonomous]`](../skills/viva-model-build/SKILL.md) | Drive the agentic model-building loop: an open-ended question → author Tests → AUDIT → LOCK → build/run/evaluate → iterate the MODEL (never the locked Tests) until the severity gate passes or gives up honestly. Orchestration + invariant enforcement over `loop_state` (`.pbg/loop/<study>.json`); supervised by default, `--autonomous` for hands-off. |
 | [`/viva-investigation <subcmd> …`](../skills/viva-investigation/SKILL.md) | Manage **Investigations** — named collections of Studies grouped under a shared research question, with a cross-study dependency DAG. |
 | [`/viva-harden-investigation [slug]`](../skills/viva-harden-investigation/SKILL.md) | Make an existing **Investigation** rigorous — verify canonical source first, triage to the single load-bearing claim↔evidence gap, classify the hardening mode, root-cause failing report-card gates, and resolve open decisions. |
 | [`/viva-viz <study> <viz-name> '<description>'`](../skills/viva-viz/SKILL.md) | Generate a `Visualization` subclass from a natural-language description and attach it to a Study. |

@@ -6,7 +6,7 @@ This is the Claude Code plugin that drives the [vivarium-workbench](https://gith
 
 1. **Concept map: [`docs/concepts/vivarium-workbench-model.md`](docs/concepts/vivarium-workbench-model.md)** — canonical vocabulary (Workspace · Study · Baseline · Variant · Intervention · Run · Visualization), the 8-section canonical `study.yaml` (Pass 7), Decide-phase follow-up proposals (Pass 8), on-disk shapes, the dashboard API surface, and which skill controls which concept. **Read this before invoking any Study/Baseline/Variant skill.**
 2. **Conventions: [`docs/conventions/`](docs/conventions/)** — authoritative specs for composites, composite generators, discovery, distribution, visualizations, and bespoke runner scripts.
-3. **Skills catalog: [`docs/skills.md`](docs/skills.md)** — all 16 user-invocable `/viva-*` skills with one-line descriptions.
+3. **Skills catalog: [`docs/skills.md`](docs/skills.md)** — all 17 user-invocable `/viva-*` skills with one-line descriptions.
 4. **README: [`README.md`](README.md)** — install + quick start for humans.
 
 ## Working preconditions
@@ -49,6 +49,7 @@ If either is missing, the skill should fail with a clear actionable error pointi
 | Wipe runtime output for a from-scratch rerun | `/viva-study clean <study> [--dry-run] [--include-out-paths]` (refuses to touch git-tracked files) |
 | Record a textual intervention | `/viva-study intervention-add <study> --name <n> --description '<text>'` |
 | Audit a study's Tests before locking (agentic loop) | `/viva-audit-tests <study-slug>` |
+| Drive the agentic model-building loop (question → validated model) | `/viva-model-build <study> [--autonomous]` |
 | Add a visualization | `/viva-viz <study> <viz-name> '<description>'` |
 | Render a study report | `/viva-report <study>` |
 | Run a composite directly (no Study) | `/viva-run <composite-id> [--steps N]` |
