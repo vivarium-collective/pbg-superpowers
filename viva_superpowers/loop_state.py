@@ -52,3 +52,28 @@ def load(ws_root, study: str) -> "dict | None":
     if not p.is_file():
         return None
     return json.loads(p.read_text(encoding="utf-8"))
+
+
+def tests_hash(tests: list) -> str:
+    """Content hash of the behavior_tests set, stable to ordering (the set is
+    what's locked, not its order). Canonicalized via sorted-keys JSON."""
+    canon = sorted(json.dumps(t, sort_keys=True) for t in (tests or []))
+    return "sha256:" + hashlib.sha256("\n".join(canon).encode("utf-8")).hexdigest()
+
+
+def lock_tests(state: dict, tests: list) -> dict:
+    state = dict(state)
+    state["locked_tests_hash"] = tests_hash(tests)
+    state["prereg_record"] = dict(state.get("prereg_record") or {})
+    state["prereg_record"]["locked_at_iteration"] = state.get("iteration", 0)
+    state["state"] = "LOCK"
+    return state
+
+
+def advance(state: dict, to_state: str, **fields) -> dict:
+    if to_state not in STATES:
+        raise ValueError(f"unknown loop state {to_state!r}")
+    state = dict(state)
+    state["state"] = to_state
+    state.update(fields)
+    return state
