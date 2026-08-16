@@ -10,8 +10,6 @@ LLM, no process_bigraph/workbench import.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 import yaml
 
 from viva_superpowers import benchmark_score, loop_state, paths, test_audit
