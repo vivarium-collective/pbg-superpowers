@@ -34,7 +34,7 @@ Draft the `question`, `hypothesis`, `objective`, and/or `description` fields of 
 - `<slug>` (required) — study slug under `studies/<slug>/`. Abort with a clear error pointing at `/viva-study new` if the directory or `study.yaml` is absent.
 - `--from-plan <path>` (optional) — path to a planning PDF or markdown that decomposes the study's intent. If absent, look inside `references/expert/` for a file whose name matches `<slug>` or contains the word "plan".
 - `--from-expert <path>` (optional, repeatable) — additional expert-knowledge PDFs or markdown files. If absent, consult `workspace.yaml.expert_docs` and use any entry whose `claims_supported` list overlaps with the study's `parent_studies` or `id`.
-- `--fields <comma-list>` (optional) — restrict drafting to a subset. Default fields: `question,hypothesis,objective,description`. v4 narrative fields are opt-in via `--include-narrative` (see below) or by naming them explicitly: `report,study_card,biological_summary`.
+- `--fields <comma-list>` (optional) — restrict drafting to a subset. Default fields: `claim,experiment,result,question` — the study Overview is a **Claim → Test → Result** spine (plus the `question` that heads the page). The legacy `hypothesis`/`objective`/`description` fields are DEPRECATED (superseded by `claim`/`experiment`/`result`); draft them only if named explicitly. v4 narrative fields are opt-in via `--include-narrative` (see below) or by naming them explicitly: `report,study_card,biological_summary`.
 - `--include-narrative` (optional) — extend the default draft set with the v4 narrative-spine fields: `report` (verdict + confidence + evidence_quality + main_insight + caveat), `study_card` (goal + mechanism + why_before_next + expected_result + main_expert_question), `biological_summary` (multi-paragraph mechanism prose). Drafted from the same plan + expert PDFs.
 - `--dry-run` (optional) — print the proposed diff and stop without writing anything.
 
@@ -51,13 +51,17 @@ Draft the `question`, `hypothesis`, `objective`, and/or `description` fields of 
 
 4. **Draft each requested field.** For each field in `--fields`:
 
-   - `question:` — One paragraph (at most four sentences), scientifically framed as a measurable prediction, ending with `?`. When the plan names a specific section or heading that motivates the question, cite it parenthetically (e.g., "per §3.2 of the plan"). Keep it concise.
+   The study Overview renders **Claim → Test → Result** (each a single, direct statement); draft those first.
 
-   - `hypothesis:` — One paragraph stating the predicted outcome. Include quantitative thresholds (counts, fractions, timescales) **only when they appear explicitly in the source documents**. If the source is qualitative, write "approximately X to Y, per <citation>" rather than fabricating precision. Do not inflate specificity.
+   - `claim:` — One sentence. The compositional idea this study tests, stated direct and concise, no hedging: what we claim can be done or is true (e.g. "One metabolic interface can be realized by many mechanisms without changing what the interface exposes."). This is the **Claim** at the top of the Overview and the investigation-graph node's "Finds" line.
 
-   - `objective:` — One paragraph in imperative present tense naming what the study will build, measure, or test (e.g., "Simulate … and measure … to determine …").
+   - `experiment:` — One paragraph. What was built and run to test the claim — the **Test** in the Overview. Name the mechanism/composite installed behind the interface and what is measured; concrete and imperative (e.g. "Install three handlers behind the same interface and run each as a closed-loop batch…").
 
-   - `description:` — Two to four paragraphs providing scientific context, citing source sections by their heading names. Structure: background, mechanism of interest, why this study, expected outcome.
+   - `result:` — One paragraph. What happened and what it establishes — the **Result** in the Overview. State the outcome and the conservation/invariant it confirms; the `findings` supply the measured evidence.
+
+   - `question:` — One paragraph (at most four sentences), scientifically framed as a measurable prediction, ending with `?`. Still heads the study page above the Overview. When the plan names a specific section or heading that motivates the question, cite it parenthetically (e.g., "per §3.2 of the plan"). Keep it concise.
+
+   - `hypothesis:` / `objective:` / `description:` (DEPRECATED — draft only if named explicitly) — superseded by `claim` / `experiment` / `result`. If drafted: `hypothesis` = predicted outcome (quantitative thresholds only when in the source docs); `objective` = imperative statement of what the study builds/measures; `description` = two-to-four paragraphs of scientific context.
 
    **v4 narrative-spine fields** (drafted only when `--include-narrative` or named explicitly in `--fields`; written via `POST /api/study-narrative-set` — `report`, `study_card`, and `biological_summary` are canonical narrative roots the endpoint accepts as dotted-path leaf writes):
 

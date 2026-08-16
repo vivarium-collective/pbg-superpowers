@@ -334,7 +334,7 @@ compact index only; nothing here is the authoritative spec.
 | Subcommand | Purpose |
 |---|---|
 | `new <composite-id>` | Create a new Study seeded with one baseline composite (writes v4-shape `study.yaml`). |
-| `fill-overview <slug> [--from-plan <path>] [--from-expert <path>...] [--fields <list>] [--include-narrative] [--dry-run]` | Draft `question`/`hypothesis`/`objective`/`description` (+ optional v4 narrative fields) from plan/expert docs. |
+| `fill-overview <slug> [--from-plan <path>] [--from-expert <path>...] [--fields <list>] [--include-narrative] [--dry-run]` | Draft the study Overview's **Claim → Test → Result** (`claim`/`experiment`/`result`) + `question` from plan/expert docs (legacy `hypothesis`/`objective`/`description` deprecated). |
 | `set-objective <study-name> '<text>'` | Replace the Study's objective. |
 | `baseline-add <study-name> --name <n> --composite <id> [--params '<json>']` | Append a composite to the Study's baseline list. |
 | `baseline-remove <study-name> --name <n>` | Remove a baseline composite (blocked if variants depend on it). |
