@@ -54,6 +54,9 @@ viva-migrate-nested = "viva_superpowers.migrate_nested:main"
 viva-migrate-inputs = "viva_superpowers.migrate_inputs:main"
 viva-backfill-runs = "viva_superpowers.backfill_runs:main"
 viva-compute-outcomes = "viva_superpowers.study_evaluator:compute_outcomes_cli"
+# Agent/CI-facing: run a study's Tests, print a pytest-style summary, exit 0/1
+# on the severity gate. Reads the shipped test_report/v1 (viz/tests/report.json).
+viva-test = "viva_superpowers.test_cli:main"
 viva-sync-runs = "viva_superpowers.study_outcomes:main"
 # viva-citation-gaps removed: the citation-gap compute moved to the workbench
 # server (`GET /api/citation-gaps`); there is no `viva_superpowers.citation_gaps`
