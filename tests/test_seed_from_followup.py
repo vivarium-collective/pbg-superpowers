@@ -595,13 +595,30 @@ def test_write_child_study_creates_child_and_stamps_parent_finding(tmp_path):
     assert child["seeded_from"]["finding"] == "F-03"
     assert child["seeded_from"]["study"] == "dnaa-01"
     assert child["purpose"]["question"]
-    # pipeline_gate points back at the parent so the DAG draws the edge.
-    assert "dnaa-01" in child["pipeline_gate"]["prerequisites"]
+    # The DAG edge back to the parent is the CANONICAL inputs.from form
+    # (v2ecoli conformance requires it and rejects pipeline_gate.prerequisites).
+    assert {"artifact": "dnaa-01", "from": "dnaa-01"} in child["inputs"]
+    assert "prerequisites" not in child.get("pipeline_gate", {})
+    assert "parent_studies" not in child
 
     # Parent finding stamped with seeded_study.
     parent_after = yaml.safe_load(parent_yaml.read_text())
     f = next(f for f in parent_after["findings"] if f["id"] == "F-03")
     assert f["seeded_study"] == "dnaa-02"
+
+
+def test_child_scaffold_emits_canonical_inputs_from_not_prerequisites():
+    """The generated scaffold must declare its DAG edge via the canonical
+    top-level `inputs.from` list — NOT the legacy `pipeline_gate.prerequisites`
+    (which v2ecoli workspace conformance rejects)."""
+    child = sff._child_scaffold("dnaa-01", {"name": "dnaa-01"}, "dnaa-02")
+    # Canonical edge back to the parent.
+    assert child["inputs"] == [{"artifact": "dnaa-01", "from": "dnaa-01"}]
+    # No legacy DAG-edge fields anywhere on the scaffold.
+    assert "prerequisites" not in child["pipeline_gate"]
+    assert "parent_studies" not in child
+    # pipeline_gate is still present for non-edge fields (enables/proceed_condition).
+    assert child["pipeline_gate"] == {"enables": []}
 
 
 def test_write_child_study_stamps_existing_proposal_status(tmp_path):

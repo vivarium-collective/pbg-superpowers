@@ -707,8 +707,12 @@ def _investigation_from_wrapper_study_stub(
 
     today = _dt.date.today().isoformat()
     behavior_name = f"{slug}-behaves"
-    prerequisites = (
-        [{"study": prev_slug, "condition": "tests-passed"}] if prev_slug else []
+    # Canonical DAG edge: a top-level `inputs:` list ({artifact, from}); the
+    # edge set is the `from:` slugs. This is the form the report linter calls
+    # canonical and v2ecoli workspace conformance requires (it rejects the
+    # legacy `pipeline_gate.prerequisites` / `parent_studies` fields).
+    inputs = (
+        [{"artifact": prev_slug, "from": prev_slug}] if prev_slug else []
     )
     return {
         "schema_version": 4,
@@ -744,8 +748,8 @@ def _investigation_from_wrapper_study_stub(
             "pass_if": {"op": "<", "value": None},
             "requires_simulation": "baseline",
         }],
+        "inputs": inputs,
         "pipeline_gate": {
-            "prerequisites": prerequisites,
             "enables": [],
         },
         "canonical_runs": [{

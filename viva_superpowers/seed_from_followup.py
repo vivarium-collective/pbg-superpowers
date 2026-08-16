@@ -701,10 +701,18 @@ def resolve_seed_source(
 def _child_scaffold(parent_slug: str, parent_study: dict, new_slug: str) -> dict:
     """A minimal, valid child study.yaml dict pre-wired back to the parent.
 
+    The DAG edge back to the parent is declared via the CANONICAL top-level
+    ``inputs:`` list (``{artifact: <slug>, from: <slug>}`` — the edge set is
+    the ``from:`` slugs). This is the form the report linter calls canonical
+    and the v2ecoli workspace conformance test requires (it rejects the legacy
+    ``pipeline_gate.prerequisites`` / ``parent_studies`` fields).
+
     The ChildSeed (purpose / key_assumptions / seeded_from / pipeline_gate /
     behavior_tests / model_change) is merged onto this scaffold. Empty
     purpose / pipeline_gate.proceed_condition are left for the seed (or the
-    skill prose flow) to fill — ``merge_into`` is fill-absent.
+    skill prose flow) to fill — ``merge_into`` is fill-absent. The seed's
+    ``pipeline_gate`` only carries non-edge fields (``proceed_condition`` /
+    ``enables``), so it never re-introduces a legacy DAG edge.
     """
     import datetime
 
@@ -721,8 +729,9 @@ def _child_scaffold(parent_slug: str, parent_study: dict, new_slug: str) -> dict
             "params": {"seed": 0, "cache_dir": "out/cache"},
         }],
         "purpose": {},
+        # Canonical DAG edge to the parent (edge set = the `from:` slugs).
+        "inputs": [{"artifact": parent_slug, "from": parent_slug}],
         "pipeline_gate": {
-            "prerequisites": [parent_slug],
             "enables": [],
         },
         "key_assumptions": [],

@@ -59,7 +59,7 @@ def test_each_study_written_with_expected_shape(tmp_path):
         assert study["canonical_runs"][0]["default"] is True
 
 
-def test_pipeline_gate_is_a_linear_chain(tmp_path):
+def test_inputs_from_is_a_linear_chain(tmp_path):
     ws = _ws(tmp_path)
     result = scaffold_investigation_from_wrapper(ws, "demo-showcase", FAKE_GENERATORS)
 
@@ -69,15 +69,20 @@ def test_pipeline_gate_is_a_linear_chain(tmp_path):
         study = yaml.safe_load(Path(entry["path"]).read_text())
         studies_by_slug[entry["slug"]] = study
 
-    # First study has no prerequisites.
-    first = studies_by_slug[slugs[0]]
-    assert first["pipeline_gate"]["prerequisites"] == []
+    # The canonical DAG edge is inputs.from — no legacy pipeline_gate.prerequisites.
+    for study in studies_by_slug.values():
+        assert "prerequisites" not in study["pipeline_gate"]
+        assert "parent_studies" not in study
 
-    # Each subsequent study's prerequisite is the previous slug, with the
-    # tests-passed condition.
+    # First study has no inputs edge.
+    first = studies_by_slug[slugs[0]]
+    assert first["inputs"] == []
+
+    # Each subsequent study's edge is the previous slug, via inputs.from.
     for prev_slug, slug in zip(slugs, slugs[1:]):
-        prereqs = studies_by_slug[slug]["pipeline_gate"]["prerequisites"]
-        assert prereqs == [{"study": prev_slug, "condition": "tests-passed"}]
+        assert studies_by_slug[slug]["inputs"] == [
+            {"artifact": prev_slug, "from": prev_slug}
+        ]
 
 
 def test_acceptance_criteria_matches_study_behavior_names(tmp_path):
