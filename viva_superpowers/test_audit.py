@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 
 from viva_superpowers import rigor
+from viva_superpowers.test_contract import TestBuilder, check, value
+from viva_superpowers import band_provenance
 
 
 def _tests(spec: dict) -> list:
@@ -83,3 +85,48 @@ def has_discriminating_control(spec: dict) -> bool:
         if str(t.get("classification", "")) == "diagnostic":
             return True
     return False
+
+
+def _axis(id, label, ok: bool, severity, detail):
+    # A boolean sufficiency dimension → a predicate-style axis: within_tol when ok,
+    # else mismatch (hard) / drift (soft), carrying a human detail.
+    verdict = "within_tol" if ok else ("mismatch" if severity == "hard" else "drift")
+    return check(id, label, None, value(1.0, op=">="), severity=severity,
+                 verdict=verdict, detail=detail)
+
+
+def build_audit_report(spec: dict) -> dict:
+    spec = spec if isinstance(spec, dict) else {}
+    wide = band_too_wide(spec)
+    uncovered = uncovered_mechanisms(spec)
+    dupes = redundant_paths(spec)
+    missing_prov = band_provenance.bands_missing_provenance(spec)
+    tb = TestBuilder(model_ref=str(spec.get("name") or ""))
+    tb.add("sufficiency", _axis(
+        "discrimination", "Discrimination (bands not trivially wide)",
+        not wide, "hard", {"wide_bands": wide}))
+    tb.add("sufficiency", _axis(
+        "objective_coverage", "Objective coverage (mechanisms tested)",
+        not uncovered, "hard", {"uncovered_mechanisms": uncovered}))
+    tb.add("sufficiency", _axis(
+        "redundancy", "Independence (tests on distinct observables)",
+        not dupes, "soft", {"shared_paths": dupes}))
+    tb.add("sufficiency", _axis(
+        "discriminating_control", "Discriminating control present",
+        has_discriminating_control(spec), "soft", {}))
+    tb.add("provenance", _axis(
+        "band_provenance", "Bands carry citation/provenance",
+        not missing_prov, "soft", {"missing": missing_prov}))
+    return tb.build()
+
+
+def audit_gate(report: dict) -> str:
+    hard_mismatch = soft_issue = False
+    for g in (report.get("groups") or {}).values():
+        for ax in g.get("axes") or []:
+            v, sev = ax.get("verdict"), ax.get("severity", "hard")
+            if v == "mismatch" and sev == "hard":
+                hard_mismatch = True
+            elif v in ("mismatch", "drift"):
+                soft_issue = True
+    return "fail" if hard_mismatch else ("warn" if soft_issue else "pass")

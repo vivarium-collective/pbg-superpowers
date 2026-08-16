@@ -41,3 +41,30 @@ def test_has_discriminating_control():
           "control": "negative", "measure": {"path": "x"}}])) is True
     assert ta.has_discriminating_control(_spec(
         [{"name": "p", "classification": "primary", "measure": {"path": "x"}}])) is False
+
+
+def test_build_audit_report_fails_on_wide_band_and_uncovered_mechanism():
+    spec = _spec(
+        [{"name": "w", "classification": "primary", "measure": {"path": "b"},
+          "pass_if": {"op": "in_range", "low": 0.1, "high": 10.0}}],
+        purpose={"mechanism": "dnaA_atp_titration"})
+    rep = ta.build_audit_report(spec)
+    assert rep["schema"] == "report_card_verdict/v2"
+    axes = {ax["id"]: ax for g in rep["groups"].values() for ax in g["axes"]}
+    assert axes["discrimination"]["verdict"] == "mismatch"       # wide band
+    assert axes["objective_coverage"]["verdict"] == "mismatch"   # uncovered mechanism
+    assert ta.audit_gate(rep) == "fail"                          # a hard axis mismatched
+
+
+def test_build_audit_report_passes_a_sound_suite():
+    spec = _spec(
+        [{"name": "atp", "classification": "primary",
+          "measure": {"path": "dnaA_atp_titration.fraction"}, "cites": ["Kurokawa1999"],
+          "pass_if": {"op": "in_range", "low": 0.6, "high": 0.8,
+                      "provenance": {"kind": "literature"}}},
+         {"name": "ctl", "classification": "diagnostic", "control": "negative",
+          "measure": {"path": "dnaA_atp_titration.knockout"},
+          "pass_if": {"op": "<=", "value": 0.1, "provenance": {"kind": "first_principles"}}}],
+        purpose={"mechanism": "dnaA_atp_titration"})
+    rep = ta.build_audit_report(spec)
+    assert ta.audit_gate(rep) in ("pass", "warn")
