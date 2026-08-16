@@ -54,7 +54,7 @@ always means **workspace first**.
 |---|---|
 | **Wrap & compose** | `/viva-expert` (wrap a simulator as a Process, or compose several) |
 | **Workspace lifecycle** | `/viva-workspace` (scaffold), `/viva-workbench` (dashboard server), `/viva-init` (machine setup) |
-| **Studies & runs** | `/viva-study` (design→build→simulate→evaluate→decide), `/viva-tests` (author/enrich/run graded tests → margin + diff feedback), `/viva-run`, `/viva-investigation`, `/viva-report`, `/viva-viz` |
+| **Studies & runs** | `/viva-study` (design→build→simulate→evaluate→decide), `/viva-tests` (author/enrich/run graded tests → margin + diff feedback), `/viva-audit-tests` (audit Tests are sufficient before pre-registration lock), `/viva-run`, `/viva-investigation`, `/viva-report`, `/viva-viz` |
 | **Navigate & status** | `/viva-catalog`, `/viva-navigate` (read-only graph queries + "decisions needed"), `/viva-status` |
 | **Evidence & rigor** | `/viva-cite-bands`, `/viva-biology-forward`, `/viva-harden-investigation` |
 
