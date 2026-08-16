@@ -1,0 +1,7 @@
+id: glycolysis-overflow
+question: "Does the acetate overflow phenotype emerge from a glucose-uptake vs respiration-capacity imbalance?"
+domain: metabolism
+difficulty: hard
+expected_mechanisms: [glucose_uptake_rate, respiration_capacity]
+solvable: true
+notes: "Two coupled mechanisms; a sufficient Test suite must cover both and include a discriminating control (no overflow at low uptake)."

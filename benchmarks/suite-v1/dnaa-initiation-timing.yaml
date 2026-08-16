@@ -1,0 +1,7 @@
+id: dnaa-initiation-timing
+question: "Does DnaA-ATP titration explain the timing of replication initiation in E. coli?"
+domain: replication
+difficulty: medium
+expected_mechanisms: [dnaA_atp_titration]
+solvable: true
+notes: "A well-studied mechanism with literature bands (Kurokawa 1999); the loop should author a discriminating ATP-fraction test and reach a passing model."
