@@ -205,6 +205,23 @@ custom listener Step. Returns `None` on any access miss.
 
 ---
 
+### Graded feedback (report_card_verdict/v2)
+
+Ops in the closed set now grade to a **signed margin + severity** (a `/v2` axis
+attached to the outcome as `axis`), not just PASS/FAIL — an agent sees *how far*
+a test is from passing. Band + comparator + tolerance ops (`in_range`, `<=`,
+`>=`, `==`, `max_le`, `min_ge`, `cv_below`, `median_within_tolerance`,
+`periodic_doubling_every_generation`, `rises_within_cycle`) carry a numeric
+margin; categorical ops (`in_set`, `!=`, `exactly_one_initiation_per_generation`)
+carry a verdict only (`margin: null`). Per-generation ops report the **worst
+generation's** margin, with the per-generation breakdown under `axis.detail`.
+
+Ops/kinds outside the closed set (e.g. `ratio_at_most`, `xy_correlation`) still
+fall to the agent bucket and carry no `axis` — implementing them is a later
+(measurement-layer) slice.
+
+---
+
 ## requires vocabulary
 
 | Key | Meaning |

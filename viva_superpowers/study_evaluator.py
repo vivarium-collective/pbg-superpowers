@@ -25,8 +25,125 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import polars as pl
 
+from viva_superpowers.test_contract import Expected, band, check, predicate, value
+from viva_superpowers.test_vocab import RANK
+
 if TYPE_CHECKING:
     from viva_emitters import RunReader
+
+
+# ---------------------------------------------------------------------------
+# pass_if -> test_contract.Expected (the unified grading vocabulary)
+# ---------------------------------------------------------------------------
+
+def _num(pass_if: dict, *keys):
+    """First present numeric among keys, or None."""
+    for k in keys:
+        v = pass_if.get(k)
+        if isinstance(v, (int, float)):
+            return float(v)
+    return None
+
+
+def _expected_from_pass_if(pass_if: dict, op: str) -> Expected | None:
+    """Map a pass_if block to a test_contract.Expected, or None when the op has
+    no scalar expectation this slice grades (it then yields no /v2 axis).
+
+    Pure synonyms are folded in: at_most->'<=', at_least->'>=', and the
+    ``operator: greater-than/less-than`` spelling. Aliases that need a new
+    *measure* (e.g. ratio_at_most) are intentionally unmapped -> None."""
+    o = (op or "").strip()
+    # band
+    if o in ("range", "in_range", "in_range_every_generation", "generation_average_in_range"):
+        lo, hi = _num(pass_if, "low"), _num(pass_if, "high")
+        return band(lo, hi) if lo is not None and hi is not None else None
+    # comparators (+ extrema + pure synonyms + operator spelling)
+    _LE = {"<=", "max_le", "at_most", "less-than-or-equal"}
+    _LT = {"<", "max_lt", "less-than"}
+    _GE = {">=", "min_ge", "at_least", "greater-than-or-equal", "greater-than"}
+    _GT = {">", "min_gt"}
+    spelled = pass_if.get("operator")
+    if o in _LE or spelled in _LE:
+        t = _num(pass_if, "value", "threshold")
+        return value(t, op="<=") if t is not None else None
+    if o in _LT or spelled in _LT:
+        t = _num(pass_if, "value", "threshold")
+        return value(t, op="<") if t is not None else None
+    if o in _GE or spelled in _GE:
+        t = _num(pass_if, "value", "threshold")
+        return value(t, op=">=") if t is not None else None
+    if o in _GT or spelled in _GT:
+        t = _num(pass_if, "value", "threshold")
+        return value(t, op=">") if t is not None else None
+    # approx / tolerance
+    if o in ("==", "eq", "equals"):
+        t = _num(pass_if, "value", "target")
+        if t is None:
+            return None
+        # Mirror _apply_op's _equals_ok precedence: tolerance_fraction (relative)
+        # wins over tolerance (absolute) when both are present.
+        tolf = _num(pass_if, "tolerance_fraction")
+        if tolf is not None:
+            return value(t, op="~=", tol=tolf)
+        tol = _num(pass_if, "tolerance")
+        if tol is not None:
+            return band(t - tol, t + tol)
+        return value(t, op="==")
+    if o == "median_within_tolerance":
+        t, tol = _num(pass_if, "target", "value"), _num(pass_if, "tolerance_fraction", "tolerance")
+        return value(t, op="~=", tol=tol if tol is not None else 0.05) if t is not None else None
+    if o == "periodic_doubling_every_generation":
+        tol = _num(pass_if, "tolerance")
+        return value(2.0, op="~=", tol=tol if tol is not None else 0.2)
+    if o == "cv_below":
+        t = _num(pass_if, "cv_threshold", "value")
+        return value(t, op="<=") if t is not None else None
+    # categorical -> predicate (verdict only, no numeric margin)
+    if o in ("in_set", "!=", "exactly_one_initiation_per_generation"):
+        return predicate(o)
+    return None
+
+
+def _grade_axis_from_outcome(test: dict, pass_if: dict, op: str, outcome: dict) -> dict | None:
+    """Build a report_card_verdict/v2 axis from a code outcome by grading its
+    measured_value through test_contract.check. Returns None when the op has no
+    scalar expectation (Task 2) — the outcome then simply carries no axis."""
+    expected = _expected_from_pass_if(pass_if, op)
+    if expected is None:
+        return None
+    name = test.get("name", "test")
+    label = test.get("description") or name
+    cites = test.get("cites") or []
+    cite = "; ".join(str(c) for c in cites) or None
+    units = (test.get("measure") or {}).get("units")
+    common = dict(severity=test.get("severity", "hard"), cite=cite, units=units)
+    mv = outcome.get("measured_value")
+
+    if expected.kind == "predicate":
+        # categorical: verdict comes from the code result, no numeric margin.
+        v = "within_tol" if outcome.get("result") == "PASS" else "mismatch"
+        return check(name, label, mv, expected, verdict=v, **common)
+
+    if isinstance(mv, dict):
+        # per-generation: grade each generation, keep the worst.
+        graded = [(g, check(name, label, val, expected, **common))
+                  for g, val in mv.items() if isinstance(val, (int, float))]
+        if not graded:
+            return None
+
+        def _severity_key(ga):
+            ax = ga[1]
+            m = ax.get("margin")
+            return (RANK.get(ax.get("verdict", "ungraded"), 0), -(m if m is not None else 0.0))
+
+        g_worst, ax = max(graded, key=_severity_key)
+        ax = dict(ax)
+        ax["detail"] = {"per_generation": mv, "worst_generation": g_worst}
+        return ax
+
+    if isinstance(mv, (int, float)):
+        return check(name, label, mv, expected, **common)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -470,11 +587,19 @@ def evaluate_test(test: dict, reader: "RunReader", ws_root=None, config=None,
     if _is_empty_window(windowed):
         return _needs_rerun("empty or partial series data after windowing")
 
-    # 10. Reduce + predicate → outcome
+    # 10. Reduce + predicate → outcome, then attach the /v2 axis (best-effort).
     try:
-        return _apply_op(windowed, pass_if, kind, op, config=config)
+        outcome = _apply_op(windowed, pass_if, kind, op, config=config)
     except Exception as exc:  # noqa: BLE001
         return _agent(f"evaluation error: {exc}")
+    if outcome.get("evaluated_by") == "code":
+        try:
+            axis = _grade_axis_from_outcome(test, pass_if, op, outcome)
+            if axis is not None:
+                outcome["axis"] = axis
+        except Exception:  # noqa: BLE001 — grading is enrichment; never fail the test on it
+            pass
+    return outcome
 
 
 # ---------------------------------------------------------------------------
