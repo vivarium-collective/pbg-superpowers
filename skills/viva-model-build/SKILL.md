@@ -1,6 +1,6 @@
 ---
 name: viva-model-build
-description: Use when an open-ended study question should be turned into a validated model by an autonomous loop — authors acceptance-criteria Tests, audits their sufficiency, locks them, then builds/runs/evaluates and iterates the MODEL (never the locked Tests) until the severity gate passes or gives up honestly. Drives the agentic model-building protocol.
+description: Use when an open-ended study question should be turned into a validated model by an autonomous loop — authors acceptance-criteria Tests, audits their sufficiency, SELECTs where the model comes from (reuse / compose / build-new, under a sourcing audit), locks them, then builds/runs/evaluates and iterates the MODEL (never the locked Tests) until the severity gate passes or gives up honestly. Drives the agentic model-building protocol.
 user-invocable: true
 allowed-tools: Bash(*) Read Write Edit
 argument-hint: <study-slug> [--question "<text>"] [--max-iterations N] [--autonomous]
@@ -29,7 +29,8 @@ via the loop" note when no loop file exists yet).
 
 ```
 AUTHOR → AUDIT ─fail→ AUTHOR
-   AUDIT ─pass/warn→ LOCK → BUILD ─verify-gate→ RUN → EVALUATE → DECIDE
+   AUDIT ─pass/warn→ SELECT → LOCK → BUILD ─verify-gate→ RUN → EVALUATE → DECIDE
+   SELECT ─sourcing fail→ SELECT (revise the decision — don't lock a misfit)
    DECIDE ─pass→ DONE
    DECIDE ─fail→ NAVIGATE → (edit MODEL) → BUILD …            [budget remaining]
    NAVIGATE ─budget spent→ GIVE_UP
@@ -38,7 +39,8 @@ AUTHOR → AUDIT ─fail→ AUTHOR
 | State | Do | Gate to leave |
 |---|---|---|
 | **AUTHOR** | From `question:`, author `behavior_tests[]` (measure/pass_if/cites/classification) via `/viva-study` Design subcommands. Draft the model plan. | Tests exist + `/viva-study verify` L0/L1 clean. |
-| **AUDIT** | `/viva-audit-tests <study>`. Read its gate + insufficient dimensions. | `pass` or `warn` → LOCK. `fail` → back to AUTHOR (strengthen the flagged Tests). |
+| **AUDIT** | `/viva-audit-tests <study>`. Read its gate + insufficient dimensions. | `pass` or `warn` → SELECT. `fail` → back to AUTHOR (strengthen the flagged Tests). |
+| **SELECT** | Decide **where the model comes from**. Survey the catalog (`/viva-catalog list` + each candidate module's `describe()`) and assemble `{module: [capability tokens]}`. Choose **reuse** one module / **compose** several / **build-new**. Record `study.yaml.requires: [tokens]` + `sourcing: {decision, modules, rationale}` (mirror to `state["sourcing"]`). Grade it: `module_sourcing.build_sourcing_report(spec, catalog)` → `sourcing_gate`. Reuse an existing module contributes it to the workspace core (`<pkg>.core.build_core` inheriting the reused module), not a parallel core. | `pass`/`warn` → LOCK. `fail` → stay in SELECT and revise: **source_fit** mismatch = a chosen module doesn't cover `requires`; **reinvention** = built new where a catalogued module already fits. Never LOCK a `fail`. |
 | **LOCK** | Pre-register: freeze the Tests. `loop_state.lock_tests`. | always. |
 | **BUILD** | Build/edit the model (`/viva-expert`, or `variant-set-params` for parameter edits). | `/viva-study verify` + `check-observables` (HARD pre-run gate). |
 | **RUN** | `/viva-study run-baseline`/`run-variant`/`run-script`. Workbench `auto_evaluate` fills `runs[].outcomes`. | run completes. |
@@ -110,6 +112,24 @@ ls.save(ws, study, st)
 PY
 ```
 
+SELECT — record + grade the sourcing decision before locking (gate `fail` blocks LOCK):
+```bash
+python - "$STUDY" <<'PY'
+import sys, yaml
+from viva_superpowers import loop_state as ls, module_sourcing as ms, paths
+ws, study = paths.workspace_root(), sys.argv[1]
+st = ls.load(ws, study)
+spec = yaml.safe_load((paths.workspace_dir("studies", root=ws) / study / "study.yaml").read_text())
+catalog = spec.get("catalog") or {}          # {module: [capability tokens]} from the catalog survey
+report = ms.build_sourcing_report(spec, catalog)   # grades spec.requires + spec.sourcing
+gate = ms.sourcing_gate(report)                    # pass | warn | fail
+st = ls.advance(st, "SELECT", sourcing={**(spec.get("sourcing") or {}), "gate": gate})
+ls.save(ws, study, st)
+print("sourcing gate:", gate)
+assert gate != "fail", f"SELECT gate FAIL — revise the sourcing decision, do NOT lock. {report}"
+PY
+```
+
 Use the same pattern for `advance(st, "BUILD"|"RUN"|...)`, `record_iteration(...)`,
 and `advance(st, "DONE"|"GIVE_UP", last_verdict=...)`.
 
@@ -136,3 +156,5 @@ and `advance(st, "DONE"|"GIVE_UP", last_verdict=...)`.
 - Reporting a pass the severity gate marks `fail` → I4 violation.
 - A model edit with no cited mechanism → I3 violation.
 - The audit still `fail` but you locked anyway → you skipped the AUDIT gate.
+- Locking a model whose `sourcing_gate` is `fail` (source_fit mismatch / reinvention) → you skipped the SELECT gate.
+- Building a new module when a catalogued one already covers `requires` → `reinvention` mismatch; reuse it instead.
