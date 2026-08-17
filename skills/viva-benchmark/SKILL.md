@@ -43,6 +43,11 @@ the run is disposable/reproducible):
    print(json.dumps(art))   # loop_state + audit_gate + behavior_tests
    PY
    ```
+   The deterministic axes scored here are `test_sufficiency`, `efficiency`,
+   `loop_outcome`, and **`sourcing_quality`** — the trial's model-sourcing gate
+   (reuse / compose / build-new audit), read from the SELECT phase's record on
+   `loop_state["sourcing"]["gate"]` (soft; `ungraded` for items with no sourcing
+   decision).
 4. **Fill the LLM rubric axes** (only you can judge these — the scorer leaves them
    `ungraded`):
    - **question_comprehension** — did the study's `question`/`purpose.mechanism`

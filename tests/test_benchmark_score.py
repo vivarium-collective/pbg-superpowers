@@ -60,9 +60,27 @@ def test_build_trial_report_has_all_axes_and_worst_overall():
     assert rep["schema"] == "report_card_verdict/v2"
     axes = {a["id"]: a for g in rep["groups"].values() for a in g["axes"]}
     assert set(axes) == {"test_sufficiency", "efficiency", "loop_outcome",
-                         "question_comprehension", "model_plausibility"}
+                         "sourcing_quality", "question_comprehension", "model_plausibility"}
     assert axes["question_comprehension"]["verdict"] == "ungraded"   # LLM fills later
+    assert axes["sourcing_quality"]["verdict"] == "ungraded"         # no sourcing decision in this trial
     assert rep["overall"] == "mismatch"                              # audit_gate fail dominates
+
+
+def test_sourcing_quality_maps_gate():
+    assert bs.score_sourcing({"sourcing_gate": "pass"})["verdict"] == "within_tol"
+    assert bs.score_sourcing({"sourcing_gate": "warn"})["verdict"] == "drift"
+    ax = bs.score_sourcing({"sourcing_gate": "fail"})
+    assert ax["verdict"] == "mismatch" and ax["severity"] == "soft"
+
+
+def test_sourcing_quality_ungraded_when_absent():
+    assert bs.score_sourcing({})["verdict"] == "ungraded"
+
+
+def test_sourcing_quality_falls_back_to_loop_state_record():
+    # the SELECT phase records the gate on loop_state["sourcing"]["gate"]
+    art = {"loop_state": {"sourcing": {"decision": "reuse", "gate": "fail"}}}
+    assert bs.score_sourcing(art)["verdict"] == "mismatch"
 
 
 def _trial(item, art):

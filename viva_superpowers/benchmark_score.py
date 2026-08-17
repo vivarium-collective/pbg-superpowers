@@ -57,6 +57,21 @@ def score_loop_outcome(item: dict, ls: dict, behavior_tests: list) -> dict:
                  None, value(1.0, op=">="), severity="hard", verdict=v, detail=detail)
 
 
+def score_sourcing(artifacts: dict) -> dict:
+    """The trial's model-sourcing gate → a soft axis. `ungraded` when the item
+    involved no sourcing decision (no SELECT phase). pass → within_tol,
+    warn → drift, fail → mismatch. Soft: sourcing is graded quality, not an
+    integrity backstop (that is `loop_outcome`)."""
+    gate = artifacts.get("sourcing_gate")
+    if gate is None:  # fall back to what the SELECT phase recorded in loop_state
+        gate = ((artifacts.get("loop_state") or {}).get("sourcing") or {}).get("gate")
+    v = ("ungraded" if gate is None
+         else {"pass": "within_tol", "warn": "drift"}.get(str(gate), "mismatch"))
+    return check("sourcing_quality", "Sourcing quality (reuse/compose/build-new audit)",
+                 None, value(1.0, op=">="), severity="soft", verdict=v,
+                 detail={"sourcing_gate": gate})
+
+
 _LLM_AXES = (("question_comprehension", "Question comprehension"),
              ("model_plausibility", "Model plausibility"))
 
@@ -70,6 +85,7 @@ def build_trial_report(item: dict, artifacts: dict) -> dict:
     tb.add("rubric", score_test_sufficiency(artifacts.get("audit_gate")))
     tb.add("rubric", score_efficiency(ls))
     tb.add("rubric", score_loop_outcome(item, ls, artifacts.get("behavior_tests") or []))
+    tb.add("rubric", score_sourcing(artifacts))
     for aid, label in _LLM_AXES:
         tb.add("rubric", check(aid, label, None, value(1.0, op=">="),
                                severity="soft", verdict="ungraded",
