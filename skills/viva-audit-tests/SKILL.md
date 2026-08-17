@@ -13,6 +13,9 @@ model — not too weak, not gameable — BEFORE they are pre-registered/locked a
 the model-iteration loop begins. This is the AUDIT gate of the agentic
 model-building loop (spec: `docs/superpowers/specs/2026-08-16-agentic-model-building-loop-design.md`).
 
+The sufficiency report + gate this skill produces surfaces in the study's
+Assurance › Audit tab (alongside the rigor scorecard and L0–L5 reproducibility).
+
 ## What it checks
 
 Deterministic (from `viva_superpowers.test_audit.build_audit_report`):
