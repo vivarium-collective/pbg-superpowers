@@ -140,6 +140,51 @@ def has_discriminating_control(spec: dict) -> bool:
     return False
 
 
+def is_comparison_study(spec: dict) -> bool:
+    """A COMPARISON study grades a model against an external REFERENCE (e.g. v2ecoli
+    vs vEcoli) rather than building a mechanism to clear absolute bands. Its checks
+    are report-card comparisons and the reference standard is the discriminator, so
+    the sufficiency axes are computed differently (see build_audit_report). Detected
+    by a `comparison:` block, `report_card_refs`, or any `kind: report_card` test."""
+    if spec.get("comparison"):
+        return True
+    if spec.get("report_card_refs"):
+        return True
+    return any(str(t.get("kind", "")) == "report_card" for t in _tests(spec))
+
+
+def _card_name(x) -> str:
+    # "viz/report_card/statistical.html" -> "statistical"; "statistical" -> "statistical"
+    base = str(x or "").rsplit("/", 1)[-1]
+    return base[:-5] if base.endswith(".html") else base
+
+
+def comparison_axes(spec: dict) -> list:
+    """The comparison cards this study declares it grades on (`report_cards` list)."""
+    return sorted({_card_name(c) for c in (spec.get("report_cards") or []) if c})
+
+
+def uncovered_comparison_axes(spec: dict) -> list:
+    """Declared comparison cards with no test referencing them — the comparison
+    analogue of `uncovered_mechanisms`. Covers the compared AXES, not
+    question-tokenized mechanism names (which would misread the reference model
+    name, e.g. "vEcoli", as an uncovered mechanism)."""
+    tested = {_card_name(t.get("card")) for t in _tests(spec)
+              if t.get("card") and str(t.get("kind", "")) == "report_card"}
+    return [c for c in comparison_axes(spec) if c not in tested]
+
+
+def has_comparison_reference(spec: dict) -> bool:
+    """A comparison study's discriminator is its external reference standard —
+    match=pass / diverge=fail is inherent — so a declared reference satisfies the
+    discriminating-control requirement. Signalled by `report_card_refs` or a
+    `comparison:` block."""
+    if spec.get("report_card_refs"):
+        return True
+    comp = spec.get("comparison")
+    return bool(isinstance(comp, dict) and comp)
+
+
 def _axis(axis_id, label, ok: bool, severity, detail):
     # A boolean sufficiency dimension → a predicate-style axis: within_tol when ok,
     # else mismatch (hard) / drift (soft), carrying a human detail.
@@ -150,11 +195,27 @@ def _axis(axis_id, label, ok: bool, severity, detail):
 
 def build_audit_report(spec: dict) -> dict:
     spec = spec if isinstance(spec, dict) else {}
+    comparison = is_comparison_study(spec)
     wide = band_too_wide(spec)
     loose = one_sided_loose_primary(spec)
-    uncovered = uncovered_mechanisms(spec)
     dupes = redundant_paths(spec)
     missing_prov = _bands_missing_provenance(spec)
+    # Coverage + the discriminator are computed differently for COMPARISON studies
+    # (graded against an external reference) than for model-building studies
+    # (mechanism bands + negative controls). The axis IDs stay stable so renderers
+    # don't branch; only the label/detail/computation change.
+    if comparison:
+        uncovered = uncovered_comparison_axes(spec)
+        cov_label = "Comparison coverage (each compared card tested)"
+        cov_detail = {"uncovered_cards": uncovered}
+        control_ok = has_comparison_reference(spec)
+        control_label = "Reference standard present (the comparison discriminator)"
+    else:
+        uncovered = uncovered_mechanisms(spec)
+        cov_label = "Objective coverage (mechanisms tested)"
+        cov_detail = {"uncovered_mechanisms": uncovered}
+        control_ok = has_discriminating_control(spec)
+        control_label = "Discriminating control present"
     # Discrimination is 3-state, not the boolean-axis pattern: mismatch (hard)
     # if any band is outright too wide; else drift (soft signal on a hard axis,
     # which audit_gate turns into an overall "warn" — lockable but flagged, not
@@ -172,14 +233,13 @@ def build_audit_report(spec: dict) -> dict:
         value(1.0, op=">="), severity="hard", verdict=disc_verdict,
         detail={"wide_bands": wide, "one_sided_loose_primary": loose}))
     tb.add("sufficiency", _axis(
-        "objective_coverage", "Objective coverage (mechanisms tested)",
-        not uncovered, "hard", {"uncovered_mechanisms": uncovered}))
+        "objective_coverage", cov_label, not uncovered, "hard", cov_detail))
     tb.add("sufficiency", _axis(
         "redundancy", "Independence (tests on distinct observables)",
         not dupes, "soft", {"shared_paths": dupes}))
     tb.add("sufficiency", _axis(
-        "discriminating_control", "Discriminating control present",
-        has_discriminating_control(spec), "soft", {}))
+        "discriminating_control", control_label, control_ok, "soft",
+        {"comparison": comparison}))
     tb.add("provenance", _axis(
         "band_provenance", "Bands carry citation/provenance",
         not missing_prov, "soft", {"missing": missing_prov}))
