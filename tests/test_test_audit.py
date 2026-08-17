@@ -139,3 +139,50 @@ def test_pass_if_provenance_counts_as_provenance():
     rep = ta.build_audit_report(spec)
     axes = {a["id"]: a for g in rep["groups"].values() for a in g["axes"]}
     assert axes["band_provenance"]["verdict"] == "within_tol"     # not flagged
+
+
+# ── comparison studies (graded against an external reference) ─────────────────
+
+def _comparison_spec(uncovered_card=False):
+    """A vs-reference study: report_card tests + a comparison block. If
+    uncovered_card, a declared card has no test (a genuine coverage gap)."""
+    cards = ["statistical", "trajectory"]
+    tests = [{"name": f"{c}-vs-ref", "kind": "report_card", "card": c,
+              "classification": "primary"} for c in cards]
+    if uncovered_card:
+        cards = cards + ["metabolism"]   # declared but not tested
+    return {"name": "basal", "question": "Does v2ecoli reproduce vEcoli on basal?",
+            "comparison": {"seeds": 4}, "report_card_refs": {"vs": "…/verdict.json"},
+            "report_cards": [f"viz/report_card/{c}.html" for c in cards],
+            "tests": tests}
+
+
+def test_comparison_study_is_detected():
+    assert ta.is_comparison_study(_comparison_spec()) is True
+    # a model-building study (behavior_tests, no comparison markers) is NOT
+    assert ta.is_comparison_study(
+        {"behavior_tests": [{"name": "x", "measure": {"path": "v"},
+                             "pass_if": {"op": ">=", "value": 1.0}}]}) is False
+
+
+def test_comparison_audit_does_not_misread_reference_name_as_a_mechanism():
+    """The bug: "vEcoli" tokenized from the question was flagged as an uncovered
+    mechanism → false objective_coverage mismatch. Comparison coverage keys off
+    the compared CARDS, not question tokens, so a covered suite passes."""
+    spec = _comparison_spec()
+    assert ta.uncovered_comparison_axes(spec) == []
+    rep = ta.build_audit_report(spec)
+    axes = {a["id"]: a for g in rep["groups"].values() for a in g["axes"]}
+    assert axes["objective_coverage"]["verdict"] == "within_tol"
+    assert axes["discriminating_control"]["verdict"] == "within_tol"  # reference is the discriminator
+    assert ta.audit_gate(rep) == "pass"
+
+
+def test_comparison_coverage_still_bites_on_an_untested_card():
+    """Coverage is not a rubber stamp: a declared card with no test is a real gap."""
+    spec = _comparison_spec(uncovered_card=True)
+    assert "metabolism" in ta.uncovered_comparison_axes(spec)
+    rep = ta.build_audit_report(spec)
+    axes = {a["id"]: a for g in rep["groups"].values() for a in g["axes"]}
+    assert axes["objective_coverage"]["verdict"] == "mismatch"        # hard → gate fail
+    assert ta.audit_gate(rep) == "fail"
