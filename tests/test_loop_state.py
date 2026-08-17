@@ -56,6 +56,18 @@ def test_record_iteration_appends_history_and_spends_budget():
     h = st["history"][-1]
     assert h["edit"] == "raised rate 1.3x" and h["target"] == "model"
     assert h["margin_deltas"] == {"t1": 0.03} and h["gate"] == "fail"
+    assert "tests" not in h                                    # optional; absent by default
+
+
+def test_record_iteration_carries_per_test_verdicts():
+    st = ls.create(".", "s", "q")
+    st = ls.record_iteration(st, edit="install thermal_death", target="model",
+                             margin_deltas={"viability-cliff": 0.9}, gate="fail",
+                             tests=[{"name": "viability-cliff", "verdict": "within_tol", "margin": 0.05},
+                                    {"name": "viability-in-band", "verdict": "mismatch", "margin": -0.9}])
+    h = st["history"][-1]
+    assert [t["name"] for t in h["tests"]] == ["viability-cliff", "viability-in-band"]
+    assert h["tests"][1]["verdict"] == "mismatch" and h["tests"][1]["margin"] == -0.9
 
 
 def test_validate_flags_locked_test_change_without_reopen():

@@ -97,16 +97,30 @@ def advance(state: dict, to_state: str, **fields) -> dict:
 
 
 def record_iteration(state: dict, *, edit: str, target: str,
-                     margin_deltas: dict, gate: str) -> dict:
+                     margin_deltas: dict, gate: str, tests: list | None = None) -> dict:
+    """Append one iteration to the loop history.
+
+    ``tests`` (optional) is the per-test verdict snapshot for this iteration —
+    a list of ``{"name", "verdict", "margin"}`` — which lets a renderer draw a
+    per-test signed-margin matrix (rows=tests, columns=iterations) instead of
+    only the aggregate ``gate``. Omitted for back-compat; when absent the record
+    simply carries no ``tests`` key.
+    """
     state = dict(state)
     state["iteration"] = int(state.get("iteration", 0)) + 1
     budget = dict(state.get("budget") or {})
     budget["spent"] = int(budget.get("spent", 0)) + 1
     state["budget"] = budget
-    state["history"] = list(state.get("history") or []) + [{
+    record = {
         "iteration": state["iteration"], "edit": edit, "target": target,
         "margin_deltas": margin_deltas or {}, "gate": gate,
-    }]
+    }
+    if tests:
+        record["tests"] = [
+            {"name": t.get("name"), "verdict": t.get("verdict"), "margin": t.get("margin")}
+            for t in tests
+        ]
+    state["history"] = list(state.get("history") or []) + [record]
     return state
 
 
