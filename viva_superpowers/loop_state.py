@@ -15,8 +15,12 @@ from pathlib import Path
 from viva_superpowers import paths, study_io
 
 SCHEMA = "model_build_loop/v1"
-STATES = ("AUTHOR", "AUDIT", "LOCK", "BUILD", "RUN", "EVALUATE",
+STATES = ("AUTHOR", "AUDIT", "SELECT", "LOCK", "BUILD", "RUN", "EVALUATE",
           "DECIDE", "NAVIGATE", "DONE", "GIVE_UP")
+# SELECT: the model-sourcing decision (reuse an existing module / compose several /
+# build-new) is recorded on the state as `sourcing` and graded by
+# `module_sourcing.build_sourcing_report` before the tests are locked. It adds no
+# immutability invariant — sourcing is graded, not frozen.
 
 
 def loop_path(ws_root, study: str) -> Path:
