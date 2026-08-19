@@ -15,12 +15,24 @@ from pathlib import Path
 from viva_superpowers import paths, study_io
 
 SCHEMA = "model_build_loop/v1"
-STATES = ("AUTHOR", "AUDIT", "SELECT", "LOCK", "BUILD", "RUN", "EVALUATE",
+STATES = ("AUTHOR", "AUDIT", "SELECT", "SPIKE", "LOCK", "BUILD", "RUN", "EVALUATE",
           "DECIDE", "NAVIGATE", "DONE", "GIVE_UP")
 # SELECT: the model-sourcing decision (reuse an existing module / compose several /
 # build-new) is recorded on the state as `sourcing` and graded by
 # `module_sourcing.build_sourcing_report` before the tests are locked. It adds no
 # immutability invariant — sourcing is graded, not frozen.
+# SPIKE: a feasibility probe run between SELECT and LOCK — a cheap run through the
+# ACTUAL simulator demonstrating the mechanism vocabulary can express the phenomenon
+# (directionally) BEFORE any numeric threshold is frozen. Recorded via `record_spike`
+# on the `spike` field; a lock reached while the spike marked the phenomenon
+# non-expressible is an I0 violation. Cheap insurance against locking a contract the
+# engine cannot satisfy (the two most expensive errors observed were exactly this).
+
+# The five typed NAVIGATE actions. A model-build iteration records which kind of
+# action it took, so the history is a legible scientific record rather than
+# "iteration N: changed stuff". MODIFY (a structural edit) carries the strongest
+# obligation: it must be justified by a diagnosis (see `validate`, I6).
+ACTIONS = ("TUNE", "SELECT", "MODIFY", "MEASURE", "GIVE_UP")
 
 
 def loop_path(ws_root, study: str) -> Path:
@@ -40,6 +52,7 @@ def create(ws_root, study: str, question: str, *, max_iterations: int = 12) -> d
         "prereg_record": {"locked_at_iteration": None, "prior_hashes": []},
         "reopen_count": 0,
         "last_verdict": None,
+        "spike": None,
         "history": [],
     }
 
@@ -87,6 +100,23 @@ def lock_tests(state: dict, tests: list) -> dict:
     return state
 
 
+def record_spike(state: dict, *, expressible: bool, artifact: dict | None = None,
+                 note: str = "") -> dict:
+    """Record the feasibility spike and move to the SPIKE state.
+
+    ``expressible`` is the probe's verdict: did a cheap run through the ACTUAL
+    simulator show the chosen mechanism vocabulary can produce the phenomenon,
+    at least directionally? ``artifact`` is the evidence (e.g. ``{n_steps, trend,
+    plot_path}``). Locking a contract while ``expressible`` is False is an I0
+    violation (see :func:`validate`) — the spike exists precisely to stop the loop
+    from freezing numeric thresholds against a target the engine cannot express."""
+    state = dict(state)
+    state["spike"] = {"expressible": bool(expressible),
+                      "artifact": dict(artifact or {}), "note": note}
+    state["state"] = "SPIKE"
+    return state
+
+
 def advance(state: dict, to_state: str, **fields) -> dict:
     if to_state not in STATES:
         raise ValueError(f"unknown loop state {to_state!r}")
@@ -97,7 +127,8 @@ def advance(state: dict, to_state: str, **fields) -> dict:
 
 
 def record_iteration(state: dict, *, edit: str, target: str,
-                     margin_deltas: dict, gate: str, tests: list | None = None) -> dict:
+                     margin_deltas: dict, gate: str, tests: list | None = None,
+                     action: str | None = None, diagnosis: dict | None = None) -> dict:
     """Append one iteration to the loop history.
 
     ``tests`` (optional) is the per-test verdict snapshot for this iteration —
@@ -105,7 +136,16 @@ def record_iteration(state: dict, *, edit: str, target: str,
     per-test signed-margin matrix (rows=tests, columns=iterations) instead of
     only the aggregate ``gate``. Omitted for back-compat; when absent the record
     simply carries no ``tests`` key.
+
+    ``action`` (optional) is one of :data:`ACTIONS` — the typed kind of step this
+    iteration took (TUNE / SELECT / MODIFY / MEASURE / GIVE_UP), so the history is
+    a legible scientific record. A ``MODIFY`` (structural edit) should carry a
+    ``diagnosis`` (``{"hypotheses": [...>=2...], "discriminating_measure": ...}``);
+    :func:`validate` flags a MODIFY without one (I6). Both are omitted for
+    back-compat; a record with no ``action`` is a legacy iteration and is exempt.
     """
+    if action is not None and action not in ACTIONS:
+        raise ValueError(f"unknown loop action {action!r}; expected one of {ACTIONS}")
     state = dict(state)
     state["iteration"] = int(state.get("iteration", 0)) + 1
     budget = dict(state.get("budget") or {})
@@ -115,6 +155,10 @@ def record_iteration(state: dict, *, edit: str, target: str,
         "iteration": state["iteration"], "edit": edit, "target": target,
         "margin_deltas": margin_deltas or {}, "gate": gate,
     }
+    if action is not None:
+        record["action"] = action
+    if diagnosis is not None:
+        record["diagnosis"] = diagnosis
     if tests:
         record["tests"] = [
             {"name": t.get("name"), "verdict": t.get("verdict"), "margin": t.get("margin")}
@@ -142,4 +186,27 @@ def validate(state: dict, current_tests: list, *, is_reopen: bool = False) -> li
     lv = state.get("last_verdict") or {}
     if str(lv.get("roll_up")) == "passed" and str(lv.get("gate")) == "fail":
         out.append("I4: roll_up 'passed' contradicts a failing severity gate")
+    # I0 — feasibility: never lock a contract against a phenomenon the simulator
+    # cannot express. A spike marked non-expressible while the tests are locked is
+    # the failure the SPIKE stage exists to prevent. Absence of a spike is NOT a
+    # violation (back-compat with pre-SPIKE loop files); only an explicit
+    # non-expressible verdict under a lock is.
+    spike = state.get("spike")
+    if locked and isinstance(spike, dict) and spike.get("expressible") is False:
+        out.append("I0: contract locked while the feasibility spike marked the "
+                   "phenomenon non-expressible by the simulator")
+    # I6 — diagnosis before structural change: a MODIFY (structural model edit) must
+    # be justified by a diagnosis with >=2 competing hypotheses AND the MEASURE that
+    # discriminates them. A failed margin should trigger diagnosis, not a reflexive
+    # edit. Only enforced on iterations that declare action=="MODIFY"; legacy
+    # iterations (no action) and other actions (TUNE/SELECT/MEASURE) are exempt.
+    for h in (state.get("history") or []):
+        if h.get("action") != "MODIFY":
+            continue
+        diag = h.get("diagnosis") or {}
+        hyps = diag.get("hypotheses") or []
+        if len(hyps) < 2 or not diag.get("discriminating_measure"):
+            out.append(
+                f"I6: MODIFY at iteration {h.get('iteration')} without a diagnosis "
+                "(>=2 competing hypotheses + a discriminating MEASURE)")
     return out

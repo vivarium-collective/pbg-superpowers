@@ -29,10 +29,11 @@ via the loop" note when no loop file exists yet).
 
 ```
 AUTHOR → AUDIT ─fail→ AUTHOR
-   AUDIT ─pass/warn→ SELECT → LOCK → BUILD ─verify-gate→ RUN → EVALUATE → DECIDE
+   AUDIT ─pass/warn→ SELECT → SPIKE → LOCK → BUILD ─verify-gate→ RUN → EVALUATE → DECIDE
    SELECT ─sourcing fail→ SELECT (revise the decision — don't lock a misfit)
+   SPIKE ─not expressible→ AUTHOR/SELECT (the engine can't express it — don't lock)
    DECIDE ─pass→ DONE
-   DECIDE ─fail→ NAVIGATE → (edit MODEL) → BUILD …            [budget remaining]
+   DECIDE ─fail→ NAVIGATE ─{TUNE|SELECT|MODIFY|MEASURE}→ BUILD …   [budget remaining]
    NAVIGATE ─budget spent→ GIVE_UP
 ```
 
@@ -41,12 +42,13 @@ AUTHOR → AUDIT ─fail→ AUTHOR
 | **AUTHOR** | From `question:`, author `behavior_tests[]` (measure/pass_if/cites/classification) via `/viva-study` Design subcommands. Draft the model plan. | Tests exist + `/viva-study verify` L0/L1 clean. |
 | **AUDIT** | `/viva-audit-tests <study>`. Read its gate + insufficient dimensions. | `pass` or `warn` → SELECT. `fail` → back to AUTHOR (strengthen the flagged Tests). |
 | **SELECT** | Decide **where the model comes from**. Survey the catalog (`/viva-catalog list` + each candidate module's `describe()`) and assemble `{module: [capability tokens]}`. Choose **reuse** one module / **compose** several / **build-new**. Record `study.yaml.requires: [tokens]` + `sourcing: {decision, modules, rationale}` (mirror to `state["sourcing"]`). Grade it: `module_sourcing.build_sourcing_report(spec, catalog)` → `sourcing_gate`. Reuse an existing module contributes it to the workspace core (`<pkg>.core.build_core` inheriting the reused module), not a parallel core. | `pass`/`warn` → LOCK. `fail` → stay in SELECT and revise: **source_fit** mismatch = a chosen module doesn't cover `requires`; **reinvention** = built new where a catalogued module already fits. Never LOCK a `fail`. |
-| **LOCK** | Pre-register: freeze the Tests. `loop_state.lock_tests`. | always. |
+| **SPIKE** | **Feasibility probe before locking numbers.** After the qualitative claim is fixed and a source is chosen but BEFORE thresholds freeze, run a cheap probe (~100 steps) through the ACTUAL simulator showing the chosen mechanism vocabulary can produce the phenomenon directionally. Record it: `loop_state.record_spike(state, expressible=<bool>, artifact={...}, note=...)`. | `expressible: true` → LOCK. `false` → back to AUTHOR/SELECT — the engine can't express the phenomenon; **never LOCK** (a lock over a non-expressible spike is an I0 violation). |
+| **LOCK** | Pre-register: freeze the Tests. `loop_state.lock_tests`. | always (after a passing SPIKE). |
 | **BUILD** | Build/edit the model (`/viva-expert`, or `variant-set-params` for parameter edits). | `/viva-study verify` + `check-observables` (HARD pre-run gate). |
 | **RUN** | `/viva-study run-baseline`/`run-variant`/`run-script`. Workbench `auto_evaluate` fills `runs[].outcomes`. | run completes. |
 | **EVALUATE** | Read `study_verdict.roll_up_verdict` + the severity gate (`report.json`) + `test_diff.json` (what the last edit moved). | always. |
 | **DECIDE** | `roll_up == passed` (gate `pass`)? | pass → DONE. else → NAVIGATE. |
-| **NAVIGATE** | `/viva-navigate decisions`: take the top `hard_gate`/`test_regression`/`uncovered_ac` item; edit the **MODEL/params only**. Budget check. | budget remaining → BUILD. spent → GIVE_UP. |
+| **NAVIGATE** | `/viva-navigate decisions`: take the top `hard_gate`/`test_regression`/`uncovered_ac` item and choose a **typed action** — `TUNE` (params), `SELECT` (swap a model variant), `MODIFY` (structural edit), `MEASURE` (run an experiment to reduce uncertainty), or `GIVE_UP`. A failing margin should first trigger **diagnosis**, not a reflexive edit: a `MODIFY` must carry `diagnosis={"hypotheses":[≥2], "discriminating_measure": ...}` (I6). Edit the **MODEL/params only**. Record via `record_iteration(..., action=..., diagnosis=...)`. Budget check. | budget remaining → BUILD. spent → GIVE_UP. |
 
 ## Invariants (enforce every iteration — the loop's integrity)
 
@@ -56,8 +58,17 @@ AUTHOR → AUDIT ─fail→ AUTHOR
   go back to AUTHOR with a justification, re-run AUDIT, and `lock_tests` again
   (which records the reopen in `prereg_record.prior_hashes` + `reopen_count`).
   Weakening a Test to make it pass is a protocol violation — the trail makes it visible.
+- **I0 — feasibility before lock.** Never LOCK a contract against a phenomenon the
+  simulator cannot express. The SPIKE stage records `spike.expressible`; a lock over
+  a non-expressible spike is an I0 violation (`loop_state.validate`). Absence of a
+  spike is not a violation (back-compat), but a supervised run should always take it.
 - **I3 — provided-mechanisms-only.** A model change must cite its mechanism source
   (a paper, an expert input). Do not invent a mechanism to force a pass.
+- **I6 — diagnosis before structural change.** A `MODIFY` (structural model edit)
+  must be justified by a `diagnosis` with ≥2 competing hypotheses AND the MEASURE
+  that discriminates them — a failed margin triggers diagnosis, not a reflexive edit.
+  `loop_state.validate` flags a MODIFY without one. TUNE/SELECT/MEASURE and legacy
+  iterations are exempt.
 - **I4 — honest termination.** Never report `passed` the gate doesn't support.
   Budget exhaustion → **GIVE_UP** with the failing hard axes and why iteration
   stalled — an honest OPEN result.

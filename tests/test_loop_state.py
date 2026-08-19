@@ -109,3 +109,86 @@ def test_validate_flags_tampered_reopen_trail():
     st = ls.lock_tests(ls.create(".", "s", "q"), [{"name": "t", "pass_if": {"op": "<=", "value": 5}}])
     st["reopen_count"] = 2                        # claims 2 reopens but no prior hashes
     assert any("I1b" in v for v in ls.validate(st, [{"name": "t", "pass_if": {"op": "<=", "value": 5}}]))
+
+
+# --- SPIKE: feasibility spike before locking (closed-loop review §3a) ---
+
+def test_spike_is_a_state_and_record_spike_sets_it():
+    assert "SPIKE" in ls.STATES
+    st = ls.create(".", "s", "q")
+    assert st["spike"] is None                                   # present, empty by default
+    st = ls.record_spike(st, expressible=True, artifact={"mcs": 100, "trend": "up"},
+                         note="occupancy gradient present at low bg")
+    assert st["state"] == "SPIKE"
+    assert st["spike"]["expressible"] is True
+    assert st["spike"]["artifact"]["mcs"] == 100
+
+
+def test_locking_after_nonexpressible_spike_is_flagged():
+    # the contract was locked even though the feasibility probe showed the engine
+    # cannot express the phenomenon — the exact failure the spike exists to prevent
+    st = ls.record_spike(ls.create(".", "s", "q"), expressible=False,
+                         artifact={}, note="engine has no occupancy operator")
+    st = ls.lock_tests(st, [{"name": "t", "pass_if": {"op": ">=", "value": 0.5}}])
+    viol = ls.validate(st, [{"name": "t", "pass_if": {"op": ">=", "value": 0.5}}])
+    assert any("I0" in v for v in viol)
+    # an expressible spike locks clean
+    st2 = ls.record_spike(ls.create(".", "s", "q"), expressible=True, artifact={})
+    st2 = ls.lock_tests(st2, [{"name": "t", "pass_if": {"op": ">=", "value": 0.5}}])
+    assert not any("I0" in v for v in ls.validate(st2, [{"name": "t", "pass_if": {"op": ">=", "value": 0.5}}]))
+
+
+def test_legacy_state_without_spike_is_not_flagged():
+    # back-compat: a pre-existing loop file has no spike key; absence is never a violation
+    st = ls.lock_tests(ls.create(".", "s", "q"), [{"name": "t", "pass_if": {"op": ">=", "value": 0.5}}])
+    st.pop("spike", None)
+    assert not any("I0" in v for v in ls.validate(st, [{"name": "t", "pass_if": {"op": ">=", "value": 0.5}}]))
+
+
+# --- typed NAVIGATE actions + diagnosis-before-MODIFY (closed-loop review §3b) ---
+
+def test_record_iteration_carries_typed_action_and_diagnosis():
+    st = ls.create(".", "s", "q")
+    diag = {"hypotheses": ["receptor saturation", "adaptation too slow"],
+            "discriminating_measure": "high-background threshold scan"}
+    st = ls.record_iteration(st, edit="add adaptive kd", target="model",
+                             margin_deltas={"recruits_high": 0.4}, gate="fail",
+                             action="MODIFY", diagnosis=diag)
+    h = st["history"][-1]
+    assert h["action"] == "MODIFY" and h["diagnosis"]["discriminating_measure"] == "high-background threshold scan"
+
+
+def test_record_iteration_rejects_unknown_action():
+    import pytest
+    with pytest.raises(ValueError):
+        ls.record_iteration(ls.create(".", "s", "q"), edit="x", target="model",
+                            margin_deltas={}, gate="fail", action="FROB")
+
+
+def test_modify_without_diagnosis_is_flagged():
+    # a structural edit (MODIFY) must be justified by a diagnosis: >=2 competing
+    # hypotheses + the MEASURE that discriminates them — else it is a reflexive edit
+    st = ls.record_iteration(ls.create(".", "s", "q"), edit="swapped mechanism",
+                             target="model", margin_deltas={}, gate="fail", action="MODIFY")
+    assert any("I6" in v for v in ls.validate(st, []))
+    # a one-hypothesis "diagnosis" is not discriminating → still flagged
+    st2 = ls.record_iteration(ls.create(".", "s", "q"), edit="swapped mechanism",
+                              target="model", margin_deltas={}, gate="fail", action="MODIFY",
+                              diagnosis={"hypotheses": ["only one"], "discriminating_measure": "m"})
+    assert any("I6" in v for v in ls.validate(st2, []))
+    # a proper diagnosis clears it
+    st3 = ls.record_iteration(ls.create(".", "s", "q"), edit="swapped mechanism",
+                              target="model", margin_deltas={}, gate="fail", action="MODIFY",
+                              diagnosis={"hypotheses": ["a", "b"], "discriminating_measure": "scan"})
+    assert not any("I6" in v for v in ls.validate(st3, []))
+
+
+def test_tune_and_legacy_iterations_do_not_require_diagnosis():
+    # TUNE (parameter calibration) is not a structural edit → no diagnosis required
+    st = ls.record_iteration(ls.create(".", "s", "q"), edit="raised rate", target="model",
+                             margin_deltas={}, gate="fail", action="TUNE")
+    assert not any("I6" in v for v in ls.validate(st, []))
+    # legacy history entries carry no action → exempt (back-compat)
+    st2 = ls.record_iteration(ls.create(".", "s", "q"), edit="old-style", target="model",
+                              margin_deltas={}, gate="fail")
+    assert not any("I6" in v for v in ls.validate(st2, []))
