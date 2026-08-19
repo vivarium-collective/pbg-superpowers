@@ -568,6 +568,10 @@ CHECKS = (
     "missing_planned_runs",
     "missing_readouts",
     "missing_visualizations",
+    # HARD GATE (error, blocking): a study that DECLARES completion must show
+    # ≥1 visualization on a rendered surface, so a completed report card never
+    # has an empty Visualizations section.
+    "status_claims_done_no_visualizations",
     # Build / Simulations tab readiness — the dashboard's study-detail
     # template renders the Build tab from `conditions.{baseline,variants,
     # model_settings}` (or legacy model_change / implementation_requirements)
@@ -2363,6 +2367,34 @@ def _check_missing_simulation_set(ctx: _LintContext) -> None:
     )
 
 
+def _has_visualization_surface(ctx: _LintContext) -> bool:
+    """True iff the study has a visualization on any surface the dashboard /
+    generated report actually renders: a declared ``visualizations:`` entry, a
+    declared ``embed_visualizations:`` entry, or an auto-discovered figure in
+    ``reports/figures/<slug>/`` or ``studies/<slug>/{charts,viz}/``.
+
+    Shared by :func:`_check_missing_visualizations` (warning when a study has
+    none) and :func:`_check_status_claims_done_no_visualizations` (ERROR — the
+    hard gate — when a study that DECLARES completion still has none).
+    """
+    viz = ctx.spec.get("visualizations") or []
+    if isinstance(viz, list) and len(viz) > 0:
+        return True
+    embeds = ctx.spec.get("embed_visualizations") or []
+    if isinstance(embeds, list) and len(embeds) > 0:
+        return True
+    wp = WorkspacePaths.load(ctx.ws_root)
+    if (wp.reports / "figures" / ctx.slug).is_dir() and any(
+        (wp.reports / "figures" / ctx.slug).glob("*.html")
+    ):
+        return True
+    for sub in ("charts", "viz"):
+        d = wp.studies / ctx.slug / sub
+        if d.is_dir() and any(d.iterdir()):
+            return True
+    return False
+
+
 def _check_missing_visualizations(ctx: _LintContext) -> None:
     """Warning when a study has no `visualizations:` entries.
 
@@ -2370,29 +2402,14 @@ def _check_missing_visualizations(ctx: _LintContext) -> None:
     renders inline. A study with no viz entries gives the expert no
     figure to review. For studies pre-run, scaffold ≥1 PLANNED-mockup
     viz showing what the chart WILL look like when real data lands.
+
+    A study that DECLARES completion with no viz is a hard error instead —
+    see :func:`_check_status_claims_done_no_visualizations`; this warning is
+    left for the pre-completion (in-design / in-progress) studies.
     """
     if ctx.slug == "<workspace>":
         return
-    # A study "has a visualization" via any of the surfaces the dashboard
-    # actually renders: declared visualizations[], declared
-    # embed_visualizations[], or auto-discovered HTML in the canonical
-    # reports/figures/<slug>/ (and studies/<slug>/{charts,viz}/).
-    viz = ctx.spec.get("visualizations") or []
-    if isinstance(viz, list) and len(viz) > 0:
-        return
-    embeds = ctx.spec.get("embed_visualizations") or []
-    if isinstance(embeds, list) and len(embeds) > 0:
-        return
-    wp = WorkspacePaths.load(ctx.ws_root)
-    on_disk = (
-        any((wp.reports / "figures" / ctx.slug).glob("*.html"))
-        if (wp.reports / "figures" / ctx.slug).is_dir() else False
-    )
-    for sub in ("charts", "viz"):
-        d = wp.studies / ctx.slug / sub
-        if d.is_dir() and any(d.iterdir()):
-            on_disk = True
-    if on_disk:
+    if _has_visualization_surface(ctx):
         return
     ctx.add(
         level="warning",
@@ -2408,6 +2425,60 @@ def _check_missing_visualizations(ctx: _LintContext) -> None:
             "surface."
         ),
         check="missing_visualizations",
+    )
+
+
+def _check_status_claims_done_no_visualizations(ctx: _LintContext) -> None:
+    """ERROR — the hard visualization gate: a study that DECLARES completion
+    must show ≥1 visualization on a rendered surface.
+
+    A completed study with no figure publishes a report card with an empty
+    Visualizations section — the reader gets prose and numbers but nothing to
+    see, and (before this gate) nothing stopped it. This is the blocking
+    counterpart to the ``missing_visualizations`` warning: while a study is
+    still in design/in-progress a missing viz is a nudge, but once it claims
+    ``status: completed`` / ``gate_status: passed`` / ``evaluation_status:
+    evaluated`` the figure is required. The model itself renders from its
+    resolved composite (the bigraph-loom snapshot); this gate additionally
+    requires at least one result/behaviour-test chart alongside it.
+
+    Mirrors the completion-detection of ``status_claims_done_no_runs_recorded``.
+    Fix: add ≥1 ``visualizations:`` entry (or a figure under
+    ``studies/<slug>/{charts,viz}/`` or ``reports/figures/<slug>/``), or correct
+    the status if the study is not actually complete.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    legacy = str(ctx.spec.get("status") or "").strip().lower()
+    claims_done = (
+        legacy in {"completed", "complete", "done", "passed"}
+        or ctx.spec.get("gate_status") == "passed"
+        or ctx.spec.get("evaluation_status") == "evaluated"
+    )
+    if not claims_done:
+        return  # still in design/in-progress → the warning-level check applies
+    if _has_visualization_surface(ctx):
+        return
+    claimed_by = (
+        "gate_status: passed" if ctx.spec.get("gate_status") == "passed"
+        else "evaluation_status: evaluated"
+        if ctx.spec.get("evaluation_status") == "evaluated"
+        else f"status: {ctx.spec.get('status')!r}"
+    )
+    ctx.add(
+        level="error",
+        field_path="visualizations",
+        message=(
+            f"study declares completion ({claimed_by}) but has no visualization "
+            "on any rendered surface — no `visualizations:` / "
+            "`embed_visualizations:` entry and no figure in "
+            "`studies/<slug>/{charts,viz}/` or `reports/figures/<slug>/`. A "
+            "completed study must show at least one result chart alongside its "
+            "model, or the report renders an empty Visualizations section. Add "
+            "≥1 visualization (see another study's `visualizations:` for the "
+            "shape) or correct the status if the study is not actually complete."
+        ),
+        check="status_claims_done_no_visualizations",
     )
 
 
@@ -2877,6 +2948,8 @@ _CHECK_FUNCTIONS = (
     _check_missing_planned_runs,
     _check_missing_readouts,
     _check_missing_visualizations,
+    # HARD GATE (error): completion without a visualization is blocking
+    _check_status_claims_done_no_visualizations,
     _check_missing_conditions_block,
     _check_missing_simulation_set,
     # Anti-slop & honesty checks (added 2026-05-25 after pdmp-* feedback)
