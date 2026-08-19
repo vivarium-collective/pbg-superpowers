@@ -153,6 +153,26 @@ and `advance(st, "DONE"|"GIVE_UP", last_verdict=...)`.
   loop-state file are identical either way — that is the dispatch seam a future
   autonomous runner reads. Use only after the loop is trusted on the study class.
 
+## Orchestration — fan out independent work, wait event-driven
+
+The loop's slow parts are mostly **independent** and should run **concurrently**, not
+serially:
+
+- **Fan out** independent simulator work — multiple seeds, multiple conditions, the
+  points of a calibration grid, and independent member studies of an investigation.
+  A calibration is a program, not a conversation: use
+  `pbg_cpm_studies.model_building.calibrate` (a sensitivity screen picks the knobs to
+  sweep; `refine(..., max_workers=N)` evaluates the grid concurrently) instead of an
+  LLM narrating a hand grid — the hand sweep was the single biggest token cost observed.
+- **Wait event-driven, never poll.** Dispatch background work and act on its completion
+  signal; do not sit in fixed-interval sleeps checking one job at a time (that serial
+  polling dominated wall-clock). Synchronize only at real barriers (an audit gate, a
+  DECIDE).
+- **One state, one truth.** The ledger and the render are views of the loop state, not
+  separate files: fold commits/rulings/deferred findings in with
+  `loop_state.record_note(state, kind=..., text=...)`, and produce the trajectory with
+  `loop_state.to_trajectory(state)` rather than capturing a second copy.
+
 ## Termination report
 
 - **DONE:** record `findings` + the three-track verdicts (`/viva-study set-verdicts`,
