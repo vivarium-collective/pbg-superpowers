@@ -24,7 +24,7 @@ viva-superpowers builds **process-bigraph research workspaces** — wrapping sim
 | "wrap X" / "use simulator X" / "add a solver" | `/viva-expert` (default bridges the REAL tool; `--lightweight` for in-workspace) |
 | "is X true?" / "compare A vs B" / any research question | `/viva-study new` (group several under `/viva-investigation`) |
 | "run this composite" / "what does it emit?" | `/viva-run` |
-| "what's here?" / lost / just arrived | `/viva-status`, then `/viva-catalog` |
+| "what's here?" / lost / just arrived | `/viva-navigate status`, then `/viva-catalog` |
 
 **First session, from nothing:** `/viva-workspace my-model` → `/viva-workbench start` → then ask the user to wrap a tool (`/viva-expert`) or design a study (`/viva-study`). "Model X" always means **workspace first**.
 
@@ -34,9 +34,9 @@ viva-superpowers builds **process-bigraph research workspaces** — wrapping sim
 |---|---|
 | **Wrap & compose** | `/viva-expert` (wrap a simulator as a Process, or compose several) |
 | **Workspace lifecycle** | `/viva-workspace` (scaffold), `/viva-workbench` (dashboard server), `/viva-init` (machine setup) |
-| **Studies & runs** | `/viva-study` (design→build→simulate→evaluate→decide), `/viva-tests` (author/enrich/run graded tests → margin + diff feedback), `/viva-run`, `/viva-investigation`, `/viva-report`, `/viva-viz` |
-| **Navigate & status** | `/viva-catalog`, `/viva-navigate` (read-only graph queries + "decisions needed"), `/viva-status` |
-| **Evidence & rigor** | `/viva-cite-bands`, `/viva-biology-forward`, `/viva-harden-investigation` |
+| **Studies & runs** | `/viva-study` (design→build→simulate→evaluate→decide), `/viva-tests` (author/enrich/run graded tests → margin + diff feedback; also `audit`/`cite-bands`), `/viva-run`, `/viva-investigation`, `/viva-report`, `/viva-viz` |
+| **Navigate & status** | `/viva-catalog`, `/viva-navigate` (read-only graph queries + "decisions needed"; also `status`) |
+| **Evidence & rigor** | `/viva-harden-investigation` (also `biology-forward`) |
 
 Vocabulary and on-disk shapes: `docs/concepts/vivarium-workbench-model.md`. For any skill, use the **Skill** tool.
 

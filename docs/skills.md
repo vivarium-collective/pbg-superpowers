@@ -1,6 +1,6 @@
 # Skills catalog
 
-18 user-facing skills (plus `/viva-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects).
+14 user-facing skills (plus `/viva-init` machine setup and one internal dashboard callback). Each entry links to the skill's `SKILL.md` for the full contract (front-matter, args, side effects).
 
 ## Wrap & compose
 
@@ -19,7 +19,6 @@
 |---|---|
 | [`/viva-workspace <name>`](../skills/viva-workspace/SKILL.md) | Scaffold a fresh workspace — three modes: upstream-branch (clone an upstream model repo and create a workspace branch), standalone (clone `pbg-template`), or in-place (promote an existing checkout). |
 | [`/viva-workbench [start\|stop\|status\|open\|restart]`](../skills/viva-workbench/SKILL.md) | Start/stop/open the interactive vivarium-workbench (the side-rail-tabbed UI) and use its **session-per-tab** model — one workspace per browser tab. The single server every Studies skill depends on; it also serves the study reports. (Renamed from the former `/pbg-dashboard`.) |
-| [`/viva-status`](../skills/viva-status/SKILL.md) | Print workspace health: is this a workspace? server up? recent activity? Probes the running workbench for server liveness. |
 
 ## Catalog & registry
 
@@ -33,28 +32,20 @@ Maintainer-only: to audit an external `pbg-*` repo for discovery- and
 packaging-convention compliance, run `python scripts/audit-pbg-repo.py <repo>`
 from a pbg-superpowers checkout. (Replaces the v0.8 `/pbg-package` skill.)
 
-## Provenance & citations
-
-| Skill | What it does |
-|---|---|
-| [`/viva-cite-bands <study-slug>`](../skills/viva-cite-bands/SKILL.md) | Guided band-provenance extraction (spine stage #3b) — surface candidate evidence from expert PDFs for uncited acceptance bands, then write structured `cites`/`calibration_anchor` into `study.yaml` via a deterministic comment-preserving helper. |
-| [`/viva-biology-forward <study-slug>`](../skills/viva-biology-forward/SKILL.md) | Biology-forward results authoring (spine stage #5) — run `populate_finding_observations` to fill quantitative slots (`evidence.observed`, `expected.range`, `divergence_factor`) from `computed_outcomes`, then guide the agent to author the mechanism prose (`statement`/`summary`/`explanation`/`status`) over that scaffold. |
-
 ## Run, explore, study
 
 | Skill | What it does |
 |---|---|
 | [`/viva-run <composite-id> [--steps N]`](../skills/viva-run/SKILL.md) | Run a composite directly (no Study attached). |
 | [`/viva-study <subcmd> …`](../skills/viva-study/SKILL.md) | Full CRUD for **Studies** — baseline composites, variants, interventions, runs, behavior tests, follow-up proposals. Organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide). |
-| [`/viva-tests <author\|enrich\|run> <study> …`](../skills/viva-tests/SKILL.md) | Author/enrich/run a study's **graded Tests** — the report cards that compile a run into a pass/fail verdict AND a signed `margin` (distance-to-pass) + a cross-iteration diff, the feedback signal for agent-driven model building. Uses `viva_superpowers.check()`/`TestBuilder`; bands over magic numbers. |
-| [`/viva-audit-tests <study-slug>`](../skills/viva-audit-tests/SKILL.md) | Audit whether a study's `behavior_tests[]` are SUFFICIENT (discriminating, covering the question, independent, with a discriminating control) BEFORE they are pre-registered/locked — the AUDIT gate of the agentic model-building loop. Uses `viva_superpowers.test_audit.build_audit_report`/`audit_gate` plus AI reasoning (null-model plausibility, semantic coverage). |
+| [`/viva-tests <author\|enrich\|run\|audit\|cite-bands> <study> …`](../skills/viva-tests/SKILL.md) | Author/enrich/run a study's **graded Tests** — the report cards that compile a run into a pass/fail verdict AND a signed `margin` (distance-to-pass) + a cross-iteration diff, the feedback signal for agent-driven model building. Uses `viva_superpowers.check()`/`TestBuilder`; bands over magic numbers. `audit` judges whether Tests are sufficient (discriminating, covering the question, independent, with a discriminating control) BEFORE they are pre-registered/locked — the AUDIT gate of the agentic model-building loop, using `viva_superpowers.test_audit.build_audit_report`/`audit_gate` plus AI reasoning. `cite-bands` guides sourcing acceptance-band provenance from expert PDFs and writes structured `cites`/`calibration_anchor` into `study.yaml` via a deterministic comment-preserving helper. |
 | [`/viva-model-build <study> [--autonomous]`](../skills/viva-model-build/SKILL.md) | Drive the agentic model-building loop: an open-ended question → author Tests → AUDIT → LOCK → build/run/evaluate → iterate the MODEL (never the locked Tests) until the severity gate passes or gives up honestly. Orchestration + invariant enforcement over `loop_state` (`.pbg/loop/<study>.json`); supervised by default, `--autonomous` for hands-off. |
 | [`/viva-benchmark <suite> [--variant-label] [--score-only]`](../skills/viva-benchmark/SKILL.md) | Measure the framework's ability to produce models: run a suite of open-ended questions through the autonomous loop, score each with the reference-free process-quality rubric (question comprehension / test sufficiency / model plausibility / loop outcome / efficiency), and write a `benchmark_report/v1` you can diff across framework variants. |
 | [`/viva-investigation <subcmd> …`](../skills/viva-investigation/SKILL.md) | Manage **Investigations** — named collections of Studies grouped under a shared research question, with a cross-study dependency DAG. |
-| [`/viva-harden-investigation [slug]`](../skills/viva-harden-investigation/SKILL.md) | Make an existing **Investigation** rigorous — verify canonical source first, triage to the single load-bearing claim↔evidence gap, classify the hardening mode, root-cause failing report-card gates, and resolve open decisions. |
+| [`/viva-harden-investigation [slug\|biology-forward <study-slug>]`](../skills/viva-harden-investigation/SKILL.md) | Make an existing **Investigation** rigorous — verify canonical source first, triage to the single load-bearing claim↔evidence gap, classify the hardening mode, root-cause failing report-card gates, and resolve open decisions. The `biology-forward` aspect fills quantitative finding slots (`evidence.observed`, `expected.range`, `divergence_factor`) from `computed_outcomes`, then guides the agent to author the mechanism prose (`statement`/`summary`/`explanation`/`status`) over that scaffold. |
 | [`/viva-viz <study> <viz-name> '<description>'`](../skills/viva-viz/SKILL.md) | Generate a `Visualization` subclass from a natural-language description and attach it to a Study. |
 | [`/viva-report [model\|--all]`](../skills/viva-report/SKILL.md) | Regenerate `reports/index.html` after manual state changes. |
-| [`/viva-navigate <ac-gaps\|source\|finding-by-observable\|dag> …`](../skills/viva-navigate/SKILL.md) | **Read-only** query of the workspace linkage index (SP4a) — the AC→study gating matrix + unlinked-AC gaps, source↔study, finding-by-observable, study-DAG. Pure deterministic derive (`linkage_index` / `/api/linkage-index`), no writes, no AI. |
+| [`/viva-navigate <status\|ac-gaps\|source\|finding-by-observable\|dag> …`](../skills/viva-navigate/SKILL.md) | **Read-only** query of the workspace linkage index (SP4a) — the AC→study gating matrix + unlinked-AC gaps, source↔study, finding-by-observable, study-DAG. Pure deterministic derive (`linkage_index` / `/api/linkage-index`), no writes, no AI. `status` is a quick workspace/server/git status check that works even without the dashboard server. |
 
 For the read/write surface each skill touches (which API endpoints, which on-disk files), see the [Skill ↔ concept map](concepts/vivarium-workbench-model.md#skill--concept-map).
 

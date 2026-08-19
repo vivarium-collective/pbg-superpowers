@@ -1103,54 +1103,57 @@ def test_golden_dnaa2_v2einvest_untouched(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Task 3: viva-biology-forward skill tests
+# Task 3: biology-forward aspect tests (folded into /viva-harden-investigation
+# from the standalone /viva-biology-forward skill — see skills/
+# viva-harden-investigation/SKILL.md, "### Aspect: biology-forward")
 # ---------------------------------------------------------------------------
 
 
 def test_skill_file_exists():
-    """skills/viva-biology-forward/SKILL.md exists."""
-    skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-biology-forward" / "SKILL.md"
+    """skills/viva-harden-investigation/SKILL.md exists (hosts biology-forward)."""
+    skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-harden-investigation" / "SKILL.md"
     assert skill_path.is_file(), f"SKILL.md not found at {skill_path}"
 
 
 def test_skill_has_required_frontmatter():
-    """SKILL.md has valid front-matter with required fields."""
+    """SKILL.md has valid front-matter with required fields, and its
+    description/argument-hint acknowledge the biology-forward aspect."""
     import yaml as _yaml
-    skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-biology-forward" / "SKILL.md"
+    skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-harden-investigation" / "SKILL.md"
     text = skill_path.read_text(encoding="utf-8")
     assert text.startswith("---\n"), "SKILL.md must start with YAML frontmatter"
     end = text.find("\n---\n", 4)
     assert end != -1, "SKILL.md frontmatter not closed"
     fm = _yaml.safe_load(text[4:end]) or {}
-    assert fm.get("name") == "viva-biology-forward"
+    assert fm.get("name") == "viva-harden-investigation"
     assert fm.get("user-invocable") is True
     assert "Bash" in (fm.get("allowed-tools") or "")
-    assert fm.get("argument-hint") == "<study-slug>"
+    assert "biology-forward" in (fm.get("argument-hint") or "")
     assert "description" in fm
 
 
 def test_skill_references_populate_observations_endpoint():
     """SKILL.md drives the fill via the workbench endpoint (Phase 2.1f thin
     client), not the plugin function directly."""
-    skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-biology-forward" / "SKILL.md"
+    skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-harden-investigation" / "SKILL.md"
     text = skill_path.read_text(encoding="utf-8")
     assert "/api/study-findings-populate-observations" in text
 
 
 def test_skill_references_expert_search_endpoint():
     """SKILL.md surfaces expert-PDF candidates via GET /api/expert-search."""
-    skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-biology-forward" / "SKILL.md"
+    skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-harden-investigation" / "SKILL.md"
     text = skill_path.read_text(encoding="utf-8")
     assert "/api/expert-search" in text
 
 
 def test_skill_has_no_direct_viva_superpowers_compute_imports():
-    """Phase 2.1f: the skill is a thin workbench-API client — it must not
-    import finding_observations/expert_search/study_outcomes compute directly
-    (those calls belong to the workbench server backing the API). The plugin
-    modules still exist (they back the endpoints); this asserts the SKILL does
-    not reach into them."""
-    skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-biology-forward" / "SKILL.md"
+    """Phase 2.1f: the biology-forward aspect is a thin workbench-API client —
+    it must not import finding_observations/expert_search/study_outcomes
+    compute directly (those calls belong to the workbench server backing the
+    API). The plugin modules still exist (they back the endpoints); this
+    asserts the SKILL does not reach into them."""
+    skill_path = Path(__file__).resolve().parents[1] / "skills" / "viva-harden-investigation" / "SKILL.md"
     text = skill_path.read_text(encoding="utf-8")
     banned = [
         "viva_superpowers.finding_observations",
@@ -1172,7 +1175,8 @@ def test_backing_plugin_symbols_still_importable():
 
 
 def test_skill_registered_in_docs_skills_md():
-    """docs/skills.md includes an entry for viva-biology-forward."""
+    """docs/skills.md includes the biology-forward aspect on the
+    viva-harden-investigation entry (folded from the standalone skill)."""
     skills_md = Path(__file__).resolve().parents[1] / "docs" / "skills.md"
     text = skills_md.read_text(encoding="utf-8")
-    assert "viva-biology-forward" in text, "docs/skills.md must list viva-biology-forward"
+    assert "biology-forward" in text, "docs/skills.md must mention the biology-forward aspect"

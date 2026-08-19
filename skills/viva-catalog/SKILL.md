@@ -71,7 +71,7 @@ for s in sk:
 '
 ```
 
-If `dirty_count > 0`, hint that `/viva-status` shows the full paths.
+If `dirty_count > 0`, hint that `/viva-navigate status` shows the full paths.
 
 ## install
 
