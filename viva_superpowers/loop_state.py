@@ -28,6 +28,11 @@ STATES = ("AUTHOR", "AUDIT", "SELECT", "SPIKE", "LOCK", "BUILD", "RUN", "EVALUAT
 # non-expressible is an I0 violation. Cheap insurance against locking a contract the
 # engine cannot satisfy (the two most expensive errors observed were exactly this).
 
+# Ledger note kinds — the SDD-style ledger (commits, rulings, deferred findings)
+# folds into the ONE state as typed `log` rows, so an investigation has a single
+# source of truth instead of a state file + a separate ledger + a trajectory.
+NOTE_KINDS = ("commit", "ruling", "deferred", "note")
+
 # The five typed NAVIGATE actions. A model-build iteration records which kind of
 # action it took, so the history is a legible scientific record rather than
 # "iteration N: changed stuff". MODIFY (a structural edit) carries the strongest
@@ -54,6 +59,7 @@ def create(ws_root, study: str, question: str, *, max_iterations: int = 12) -> d
         "last_verdict": None,
         "spike": None,
         "history": [],
+        "log": [],
     }
 
 
@@ -166,6 +172,49 @@ def record_iteration(state: dict, *, edit: str, target: str,
         ]
     state["history"] = list(state.get("history") or []) + [record]
     return state
+
+
+def record_note(state: dict, *, kind: str, text: str, refs: list | None = None) -> dict:
+    """Append a typed ledger row to the ONE state — the SDD ledger (commits, rulings,
+    deferred findings) lives here rather than in a separate file. ``kind`` is one of
+    :data:`NOTE_KINDS`; the row is stamped with the current iteration so the log
+    interleaves with ``history`` on a render."""
+    if kind not in NOTE_KINDS:
+        raise ValueError(f"unknown note kind {kind!r}; expected one of {NOTE_KINDS}")
+    state = dict(state)
+    row = {"kind": kind, "text": text, "refs": list(refs or []),
+           "at_iteration": int(state.get("iteration", 0))}
+    state["log"] = list(state.get("log") or []) + [row]
+    return state
+
+
+def to_trajectory(state: dict) -> dict:
+    """Render the ``model_build_trajectory/v2`` view FROM the state — so the trajectory
+    is a derived projection, not a separately-captured artifact. The state owns
+    question / audit / spike / lock / iterations / result / log; a driver may augment
+    the render with driver-only extras (a `draft` spec, `timeseries`) it holds, but it
+    never needs to persist a second copy of what the state already records."""
+    prereg = state.get("prereg_record") or {}
+    return {
+        "schema": "model_build_trajectory/v2",
+        "study": state.get("study"),
+        "question": state.get("question"),
+        "audit": state.get("audit"),
+        "spike": state.get("spike"),
+        "lock": {
+            "tests_hash": state.get("locked_tests_hash"),
+            "locked_at_iteration": prereg.get("locked_at_iteration"),
+            "reopen_count": int(state.get("reopen_count", 0)),
+            "prior_hashes": list(prereg.get("prior_hashes") or []),
+        },
+        "iterations": list(state.get("history") or []),
+        "result": {
+            "state": state.get("state"),
+            "last_verdict": state.get("last_verdict"),
+            "budget": state.get("budget"),
+        },
+        "log": list(state.get("log") or []),
+    }
 
 
 def validate(state: dict, current_tests: list, *, is_reopen: bool = False) -> list:

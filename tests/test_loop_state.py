@@ -192,3 +192,44 @@ def test_tune_and_legacy_iterations_do_not_require_diagnosis():
     st2 = ls.record_iteration(ls.create(".", "s", "q"), edit="old-style", target="model",
                               margin_deltas={}, gate="fail")
     assert not any("I6" in v for v in ls.validate(st2, []))
+
+
+# --- one Investigation State: ledger folded in + trajectory as a derived render
+#     (closed-loop streamlining #1: collapse the redundant persistence layers) ---
+
+def test_record_note_folds_the_ledger_into_the_state():
+    st = ls.create(".", "s", "q")
+    assert st["log"] == []                                        # present, empty
+    st = ls.record_note(st, kind="ruling", text="deferred push to user",
+                        refs=["PR#28"])
+    st = ls.record_note(st, kind="commit", text="feat: mechanism ladder", refs=["abc123"])
+    kinds = [n["kind"] for n in st["log"]]
+    assert kinds == ["ruling", "commit"]
+    assert st["log"][0]["text"] == "deferred push to user" and st["log"][0]["refs"] == ["PR#28"]
+    assert st["log"][0]["at_iteration"] == 0                      # stamped with the iteration
+    import pytest
+    with pytest.raises(ValueError):
+        ls.record_note(st, kind="bogus", text="x")               # typed: unknown kind rejected
+
+
+def test_to_trajectory_is_derived_from_the_state():
+    st = ls.create(".", "adaptive", "Does it recruit across backgrounds?")
+    tests = [{"name": "recruits_high", "pass_if": {"op": "in_range", "low": 0.35, "high": 1.0}}]
+    st = ls.record_spike(st, expressible=True, artifact={"n_steps": 100})
+    st = ls.advance(st, "AUDIT", audit={"gate": "pass"})
+    st = ls.lock_tests(st, tests)
+    st = ls.record_iteration(st, edit="install adaptive", target="model",
+                             margin_deltas={"recruits_high": 0.4}, gate="pass",
+                             action="MODIFY",
+                             diagnosis={"hypotheses": ["saturation", "slow adaptation"],
+                                        "discriminating_measure": "bg scan"})
+    st = ls.record_note(st, kind="ruling", text="bands from measured numbers")
+    traj = ls.to_trajectory(st)
+    assert traj["schema"] == "model_build_trajectory/v2"
+    assert traj["study"] == "adaptive" and traj["question"].startswith("Does it recruit")
+    assert traj["spike"]["expressible"] is True
+    assert traj["lock"]["tests_hash"] == ls.tests_hash(tests)
+    assert traj["iterations"][0]["action"] == "MODIFY"           # history is the iteration log
+    assert traj["log"][0]["kind"] == "ruling"
+    # derived, not separately captured: rebuilding from the same state is identical
+    assert ls.to_trajectory(st) == traj
