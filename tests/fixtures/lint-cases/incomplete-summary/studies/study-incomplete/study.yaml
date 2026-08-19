@@ -2,6 +2,10 @@ name: study-incomplete
 baseline:
   - name: b1
     composite: pkg.composites.x
+# An on-disk viz (viz/chart.html) so this (evaluated) study clears the hard viz
+# gate (status_claims_done_no_visualizations) and stays isolated to the
+# incomplete_summaries check it exists to exercise. A file surface is used
+# rather than a declared `local:` address so it needs no address resolution.
 evaluation_status: evaluated
 simulation_status: ran
 implementation_status: complete
