@@ -6,7 +6,7 @@ This is the Claude Code plugin that drives the [vivarium-workbench](https://gith
 
 1. **Concept map: [`docs/concepts/vivarium-workbench-model.md`](docs/concepts/vivarium-workbench-model.md)** — canonical vocabulary (Workspace · Study · Baseline · Variant · Intervention · Run · Visualization), the 8-section canonical `study.yaml` (Pass 7), Decide-phase follow-up proposals (Pass 8), on-disk shapes, the dashboard API surface, and which skill controls which concept. **Read this before invoking any Study/Baseline/Variant skill.**
 2. **Conventions: [`docs/conventions/`](docs/conventions/)** — authoritative specs for composites, composite generators, discovery, distribution, visualizations, and bespoke runner scripts.
-3. **Skills catalog: [`docs/skills.md`](docs/skills.md)** — all 18 user-invocable `/viva-*` skills with one-line descriptions.
+3. **Skills catalog: [`docs/skills.md`](docs/skills.md)** — all 14 user-invocable `/viva-*` skills with one-line descriptions.
 4. **README: [`README.md`](README.md)** — install + quick start for humans.
 
 ## Working preconditions
@@ -48,7 +48,7 @@ If either is missing, the skill should fail with a clear actionable error pointi
 | Run all studies in an investigation | `/viva-investigation run <inv-slug> [--studies a,b] [--entry <name>]` (orchestrates `run-script` across members) |
 | Wipe runtime output for a from-scratch rerun | `/viva-study clean <study> [--dry-run] [--include-out-paths]` (refuses to touch git-tracked files) |
 | Record a textual intervention | `/viva-study intervention-add <study> --name <n> --description '<text>'` |
-| Audit a study's Tests before locking (agentic loop) | `/viva-audit-tests <study-slug>` |
+| Audit a study's Tests before locking (agentic loop) | `/viva-tests audit <study-slug>` |
 | Drive the agentic model-building loop (question → validated model) | `/viva-model-build <study> [--autonomous]` |
 | Benchmark the framework's model-building (score across variants) | `/viva-benchmark <suite> [--variant-label] [--score-only]` |
 | Add a visualization | `/viva-viz <study> <viz-name> '<description>'` |

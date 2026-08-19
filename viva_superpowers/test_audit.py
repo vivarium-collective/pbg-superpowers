@@ -1,4 +1,4 @@
-"""Deterministic test-sufficiency checks for /viva-audit-tests.
+"""Deterministic test-sufficiency checks for /viva-tests audit.
 
 Adds the sufficiency dimensions rigor.py doesn't cover — discrimination
 (trivially-wide bands), redundancy (tests on the same observable), objective

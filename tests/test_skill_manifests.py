@@ -22,14 +22,20 @@ import yaml
 # The pbg→viva rebrand is complete — the legacy `pbg-*` alias skills were removed,
 # so the invocable set is now viva-only. `/viva-server` (the report-mirror server)
 # was retired; report viewing is served by the vivarium-workbench (`/viva-workbench`).
+# The v0.10 skill-surface leanness pass folded 4 overlapping skills into 3 hosts
+# as subcommands/aspects and removed their standalone dirs:
+#   viva-audit-tests   -> viva-tests   "### Subcommand: audit"
+#   viva-cite-bands    -> viva-tests   "### Subcommand: cite-bands"
+#   viva-status        -> viva-navigate "### Subcommand: status"
+#   viva-biology-forward -> viva-harden-investigation "### Aspect: biology-forward"
 # Keep in sync with docs/skills.md + README/CLAUDE counts — the test below fails on drift.
 _VIVA_CORE = {
-    "viva-biology-forward", "viva-catalog", "viva-cite-bands", "viva-expert",
+    "viva-catalog", "viva-expert",
     "viva-init", "viva-investigation", "viva-navigate",
-    "viva-report", "viva-run", "viva-status", "viva-study", "viva-tests",
+    "viva-report", "viva-run", "viva-study", "viva-tests",
     "viva-viz", "viva-workbench", "viva-workspace",
 }
-_VIVA_EXTRA = {"viva-harden-investigation", "viva-audit-tests", "viva-model-build", "viva-benchmark"}
+_VIVA_EXTRA = {"viva-harden-investigation", "viva-model-build", "viva-benchmark"}
 _VIVA_INVOCABLE = _VIVA_CORE | _VIVA_EXTRA
 USER_INVOCABLE_SKILLS = _VIVA_INVOCABLE
 

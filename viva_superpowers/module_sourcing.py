@@ -9,7 +9,7 @@ with declared capabilities), it grades whether the chosen sourcing was sound:
 - compose several when the task spans their domains,
 - build-new ONLY when no catalogued module (or composition) fits.
 
-Pure stdlib + viva_superpowers; the ``/viva-audit-tests`` skill adds the LLM
+Pure stdlib + viva_superpowers; the ``/viva-tests audit`` skill adds the LLM
 near-miss judgment for semantic fit the tokens miss. Reuses the capability
 subset-match rule (``requires ⊆ capabilities``, same as
 ``vivarium_workbench.lib.analysis_tools``). See the model-sourcing spec.

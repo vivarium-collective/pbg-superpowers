@@ -1,4 +1,4 @@
-"""Guard: the /viva-cite-bands skill wires in the investigation-references pool.
+"""Guard: the /viva-tests cite-bands subcommand wires in the investigation-references pool.
 
 If this regresses (the skill stops referencing the deterministic gap surface or
 the sanctioned write path), the investigation references → band citations loop
@@ -8,10 +8,13 @@ Phase 2.1e (rewire-first): the skill is a thin workbench-API client — it must
 call the dashboard endpoints (`/api/citation-gaps`, `/api/band-provenance`,
 `/api/expert-search`, `/api/report-lint`) rather than importing
 `viva_superpowers.*` compute modules directly.
+
+cite-bands was folded into /viva-tests (skills/viva-tests/SKILL.md,
+"### Subcommand: cite-bands") from the standalone /viva-cite-bands skill.
 """
 from pathlib import Path
 
-SKILL = Path(__file__).resolve().parent.parent / "skills" / "viva-cite-bands" / "SKILL.md"
+SKILL = Path(__file__).resolve().parent.parent / "skills" / "viva-tests" / "SKILL.md"
 
 
 def test_skill_mentions_citation_gaps_surface():

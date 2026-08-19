@@ -12,7 +12,7 @@ Drive the **agentic model-building loop**: an open-ended `question` → validate
 model, by iterating the model against pre-registered, audited Tests. This skill is
 the *driver* — orchestration + invariant enforcement only. It never grades, never
 authors Tests, never edits a locked Test. Grading is `study_evaluator`; Test
-authoring is `/viva-study`; sufficiency is `/viva-audit-tests`.
+authoring is `/viva-study`; sufficiency is `/viva-tests audit`.
 
 Spec: `docs/superpowers/specs/2026-08-16-agentic-model-building-loop-design.md`.
 Preconditions (per `/viva-orient`): a workspace + the workbench running.
@@ -40,7 +40,7 @@ AUTHOR → AUDIT ─fail→ AUTHOR
 | State | Do | Gate to leave |
 |---|---|---|
 | **AUTHOR** | From `question:`, author `behavior_tests[]` (measure/pass_if/cites/classification) via `/viva-study` Design subcommands. Draft the model plan. | Tests exist + `/viva-study verify` L0/L1 clean. |
-| **AUDIT** | `/viva-audit-tests <study>`. Read its gate + insufficient dimensions. | `pass` or `warn` → SELECT. `fail` → back to AUTHOR (strengthen the flagged Tests). |
+| **AUDIT** | `/viva-tests audit <study>`. Read its gate + insufficient dimensions. | `pass` or `warn` → SELECT. `fail` → back to AUTHOR (strengthen the flagged Tests). |
 | **SELECT** | Decide **where the model comes from**. Survey the catalog (`/viva-catalog list` + each candidate module's `describe()`) and assemble `{module: [capability tokens]}`. Choose **reuse** one module / **compose** several / **build-new**. Record `study.yaml.requires: [tokens]` + `sourcing: {decision, modules, rationale}` (mirror to `state["sourcing"]`). Grade it: `module_sourcing.build_sourcing_report(spec, catalog)` → `sourcing_gate`. Reuse an existing module contributes it to the workspace core (`<pkg>.core.build_core` inheriting the reused module), not a parallel core. | `pass`/`warn` → LOCK. `fail` → stay in SELECT and revise: **source_fit** mismatch = a chosen module doesn't cover `requires`; **reinvention** = built new where a catalogued module already fits. Never LOCK a `fail`. |
 | **SPIKE** | **Feasibility probe before locking numbers.** After the qualitative claim is fixed and a source is chosen but BEFORE thresholds freeze, run a cheap probe (~100 steps) through the ACTUAL simulator showing the chosen mechanism vocabulary can produce the phenomenon directionally. Record it: `loop_state.record_spike(state, expressible=<bool>, artifact={...}, note=...)`. | `expressible: true` → LOCK. `false` → back to AUTHOR/SELECT — the engine can't express the phenomenon; **never LOCK** (a lock over a non-expressible spike is an I0 violation). |
 | **LOCK** | Pre-register: freeze the Tests. `loop_state.lock_tests`. | always (after a passing SPIKE). |

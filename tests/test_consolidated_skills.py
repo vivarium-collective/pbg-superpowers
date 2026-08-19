@@ -130,10 +130,12 @@ def test_pbg_package_skill_dir_is_gone():
 
 
 def test_pbg_status_reports_server_liveness():
-    text = _read("viva-status")
+    """status was folded into /viva-navigate as a subcommand
+    ("### Subcommand: status") from the standalone /viva-status skill."""
+    text = _read("viva-navigate")
     assert ".pbg/server/server-info" in text, (
-        "viva-status must probe the workbench server-info for its "
-        "server-liveness section (the report-mirror /viva-server was retired)"
+        "viva-navigate's status subcommand must probe the workbench server-info "
+        "for its server-liveness section (the report-mirror /viva-server was retired)"
     )
 
 

@@ -6,7 +6,7 @@ carries no machine-linked ``cites`` bib_key, so 3b can prompt the author to
 fill them in.
 
 ``set_band_provenance(study_dir, test_name, cites, calibration_anchor=None)``
-is the deterministic write helper the /viva-cite-bands skill calls after the
+is the deterministic write helper the /viva-tests cite-bands skill calls after the
 agent judges the correct source.  It uses a ruamel comment-preserving
 round-trip (mirrors ``simulation_set._write_simset_preserving_comments``).
 

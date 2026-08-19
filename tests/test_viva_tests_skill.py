@@ -52,5 +52,5 @@ def test_guards_the_disciplines(skill_text):
     assert "bands over magic numbers" in skill_text.lower() \
         or "over magic numbers" in skill_text.lower()
     assert "hard" in skill_text and "directional" in skill_text
-    # points at /viva-cite-bands for the acceptance-band + citation authoring path
-    assert "viva-cite-bands" in skill_text
+    # points at the cite-bands subcommand for the acceptance-band + citation authoring path
+    assert "cite-bands" in skill_text

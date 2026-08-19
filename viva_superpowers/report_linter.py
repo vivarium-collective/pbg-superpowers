@@ -1349,7 +1349,7 @@ def _check_finding_scope_generality_lifecycle(ctx: _LintContext) -> None:
 # _is_numeric_band: see the top-of-file import — was a local reimplementation
 # here that disagreed with band_provenance.py / rigor.py (this one didn't
 # count pass_if.value, so a value-style test was invisible to the
-# /viva-cite-bands citation-gap worklist yet counted as "sourced" in rigor's
+# /viva-tests cite-bands citation-gap worklist yet counted as "sourced" in rigor's
 # gate). Now a single import of the canonical band_provenance.has_numeric_band.
 
 
