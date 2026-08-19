@@ -15,7 +15,7 @@ from viva_superpowers import study_evaluator as se
 def _evict_fixture_packages():
     yield
     for mod_name in list(sys.modules):
-        if mod_name.startswith(("pbg_toyws", "pbg_brokenws")):
+        if mod_name.startswith(("pbg_toyws", "pbg_brokenws", "toy_pkg")):
             del sys.modules[mod_name]
 
 
@@ -144,3 +144,30 @@ def test_compute_outcomes_ungraded_reconciles_as_no_authored(tmp_path: Path):
     assert reconcile == "no_authored", (
         f"Expected 'no_authored' for ungraded skip, got {reconcile!r}"
     )
+
+
+def test_loader_finds_hook_via_package_path(tmp_path):
+    """When the workspace package IS its `package_path` (not viva_<name>) — e.g.
+    multiscale-BATS whose name is `multiscale-BATS` but package is
+    `multiscale_bats` — the evaluators hook is still discovered."""
+    ws = tmp_path / "ws"
+    pkg = ws / "toy_pkg"
+    pkg.mkdir(parents=True)
+    # name-derived slug would be viva_My_Toy_WS (absent); package_path is the
+    # only place the hook lives.
+    (ws / "workspace.yaml").write_text(
+        "name: My-Toy-WS\npackage_path: toy_pkg\n", encoding="utf-8")
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "evaluators.py").write_text(textwrap.dedent("""
+        def _pp(test, reader, ws_root):
+            return {"result": "PASS", "evaluated_by": "pkgpath"}
+        def register_evaluators(registry):
+            registry["pkgpath_kind"] = _pp
+    """), encoding="utf-8")
+
+    se.clear_workspace_evaluator_cache()
+    cands = se._workspace_evaluator_packages(ws)
+    assert "toy_pkg" in cands  # package_path is a candidate
+    reg = se.load_workspace_evaluators(ws)
+    assert "pkgpath_kind" in reg
+    assert reg["pkgpath_kind"]({}, None, ws)["evaluated_by"] == "pkgpath"

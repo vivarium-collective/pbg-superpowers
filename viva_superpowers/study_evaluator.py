@@ -188,9 +188,9 @@ def _workspace_package_slug(ws_root: Any) -> str:
     Canonical is ``viva_<name>`` (post-rebrand), but a not-yet-migrated workspace
     may still ship ``pbg_<name>/`` on disk. ``resolve_package_dir`` returns
     whichever exists (viva_ preferred, pbg_ recognized during the migration
-    window), so the evaluators hook imports the real package. Uses the workspace
-    ``name`` (where build_core lives), NOT workspace.yaml `package_path` (which
-    points at the simulation package, e.g. v2ecoli). dashes -> underscores.
+    window), so the evaluators hook imports the real package. Derived from the
+    workspace ``name`` (where build_core lives for a viva-template workspace).
+    dashes -> underscores.
     """
     import yaml
     from pathlib import Path
@@ -204,12 +204,60 @@ def _workspace_package_slug(ws_root: Any) -> str:
     return resolve_package_dir(ws_root, name).name
 
 
-def load_workspace_evaluators(ws_root: Any) -> dict[str, Callable]:
-    """Import the workspace's pbg_<name>.evaluators and collect its registrations.
+def _workspace_evaluator_packages(ws_root: Any) -> list[str]:
+    """Importable package names that may host the workspace's ``evaluators`` hook.
 
-    Returns a {measure_kind: callable} dict. Empty if ws_root is None, the
-    package/hook is absent, or the hook raises (a broken workspace hook must
-    never crash evaluation — degrade to the agent bucket). Cached per ws_root.
+    Two conventions exist and both must be tried:
+
+    * the **name-derived slug** (``viva_<name>`` / ``pbg_<name>``) — where
+      ``build_core`` lives for a viva-template workspace whose package differs
+      from its simulation package (e.g. v2ecoli: package_path = ``v2ecoli`` but
+      the workspace package is ``viva_<name>``), and
+    * workspace.yaml **``package_path``** — the workspace's own package for the
+      common case where the package IS the package_path (e.g. multiscale-BATS,
+      package_path = ``multiscale_bats``). The name-derived slug there would be
+      ``viva_multiscale_BATS``, which does not exist, so ``package_path`` is the
+      only place the hook lives.
+
+    Returned de-duplicated, name-slug first. Never raises.
+    """
+    import yaml
+    from pathlib import Path
+
+    cands: list[str] = []
+    try:
+        cands.append(_workspace_package_slug(ws_root))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        wy = Path(ws_root) / "workspace.yaml"
+        if wy.is_file():
+            data = yaml.safe_load(wy.read_text(encoding="utf-8")) or {}
+            pkg_path = data.get("package_path")
+            if pkg_path:
+                cands.append(str(pkg_path).replace("-", "_"))
+    except Exception:  # noqa: BLE001
+        pass
+    seen: set[str] = set()
+    out: list[str] = []
+    for c in cands:
+        if c and c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out
+
+
+def load_workspace_evaluators(ws_root: Any) -> dict[str, Callable]:
+    """Import the workspace's ``<pkg>.evaluators`` hook(s) and collect registrations.
+
+    Tries each candidate package (name-derived slug AND workspace.yaml
+    ``package_path`` — see :func:`_workspace_evaluator_packages`) so the hook is
+    found whether the workspace package is ``viva_<name>`` or its own
+    ``package_path``. Registrations from every hook found are merged.
+
+    Returns a {measure_kind: callable} dict. Empty if ws_root is None or no hook
+    is present. A hook that raises is skipped (a broken workspace hook must never
+    crash evaluation — degrade to the agent bucket). Cached per ws_root.
     """
     import sys
     from pathlib import Path
@@ -219,16 +267,16 @@ def load_workspace_evaluators(ws_root: Any) -> dict[str, Callable]:
     if key in _WS_EVALUATOR_CACHE:
         return _WS_EVALUATOR_CACHE[key]
     registry: dict[str, Callable] = {}
-    try:
-        if key not in sys.path:
-            sys.path.insert(0, key)
-        pkg = _workspace_package_slug(ws_root)
-        mod = __import__(f"{pkg}.evaluators", fromlist=["register_evaluators"])
-        hook = getattr(mod, "register_evaluators", None)
-        if callable(hook):
-            hook(registry)
-    except Exception:  # noqa: BLE001 — never let a workspace hook break evaluation
-        registry = {}
+    if key not in sys.path:
+        sys.path.insert(0, key)
+    for pkg in _workspace_evaluator_packages(ws_root):
+        try:
+            mod = __import__(f"{pkg}.evaluators", fromlist=["register_evaluators"])
+            hook = getattr(mod, "register_evaluators", None)
+            if callable(hook):
+                hook(registry)
+        except Exception:  # noqa: BLE001 — never let a workspace hook break evaluation
+            continue
     _WS_EVALUATOR_CACHE[key] = registry
     return registry
 
