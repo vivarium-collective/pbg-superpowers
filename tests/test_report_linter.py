@@ -1424,3 +1424,19 @@ def test_workspace_scan_cache_is_not_stale_across_separate_lint_runs(tmp_path):
     after = _findings_by_check(lint_workspace_report(ws))
     assert after.get("finding_cites_unknown_bib_key", []) == []
     assert after.get("finding_references_unknown_expert_doc", []) == []
+
+
+# 4b. placeholder markers are standalone tokens, not hyphenated-compound words
+def test_placeholder_patterns_ignore_hyphenated_compounds():
+    from viva_superpowers.report_linter import _PLACEHOLDER_PATTERNS
+
+    def hits(s):
+        return [p.pattern for p in _PLACEHOLDER_PATTERNS if p.search(s)]
+
+    # false positives fixed: TODO/TBD used as common nouns inside a compound
+    assert hits("a forward build-TODO list with no authored content") == []
+    assert hits("the TODO-list is empty") == []
+    # real placeholders still fire
+    assert hits("TODO: fill this in") and hits("value is TBD") and hits("XXX")
+    # bracketed markers unaffected
+    assert hits("see [fill in] and <insert>")

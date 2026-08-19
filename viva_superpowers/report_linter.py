@@ -725,10 +725,15 @@ def _check_missing_provenance(ctx: _LintContext) -> None:
 # --- 4. unresolved_placeholders --------------------------------------------
 
 
+# The bare-word markers use a HYPHEN-AWARE boundary: a placeholder is a standalone
+# token, not part of a hyphenated compound. `\bTODO\b` treats `-` as a boundary, so
+# it false-positives on ordinary prose like "a build-TODO list" (TODO used as a
+# common noun). `(?<![\w-])…(?![\w-])` requires the marker not be adjacent to a word
+# char OR a hyphen, so "TODO"/"TODO:" still fire but "build-TODO"/"TODO-list" do not.
 _PLACEHOLDER_PATTERNS = (
-    re.compile(r"\bTBD\b", re.IGNORECASE),
-    re.compile(r"\bTODO\b", re.IGNORECASE),
-    re.compile(r"\bXXX\b", re.IGNORECASE),
+    re.compile(r"(?<![\w-])TBD(?![\w-])", re.IGNORECASE),
+    re.compile(r"(?<![\w-])TODO(?![\w-])", re.IGNORECASE),
+    re.compile(r"(?<![\w-])XXX(?![\w-])", re.IGNORECASE),
     re.compile(r"\[fill in\]", re.IGNORECASE),
     re.compile(r"<insert>", re.IGNORECASE),
 )
