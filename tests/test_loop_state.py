@@ -233,3 +233,35 @@ def test_to_trajectory_is_derived_from_the_state():
     assert traj["log"][0]["kind"] == "ruling"
     # derived, not separately captured: rebuilding from the same state is identical
     assert ls.to_trajectory(st) == traj
+
+
+# --- I7 model discrepancy: don't let TUNE compensate forever for structural error
+#     (closed-loop review §3d — the anti-overfitting escalation rule) ---
+
+def test_tune_streak_that_never_clears_the_gate_is_flagged():
+    st = ls.create(".", "s", "q")
+    for _ in range(3):                                            # 3 consecutive TUNE, still failing
+        st = ls.record_iteration(st, edit="nudged a param", target="model",
+                                 margin_deltas={"t": 0.0}, gate="fail", action="TUNE")
+    viol = ls.validate(st, [])
+    assert any("I7" in v for v in viol)                          # persistent residual → escalate
+
+
+def test_tune_streak_that_clears_or_escalates_is_clean():
+    # a TUNE run that ends by clearing the gate is fine
+    st = ls.create(".", "s", "q")
+    st = ls.record_iteration(st, edit="t1", target="model", margin_deltas={}, gate="fail", action="TUNE")
+    st = ls.record_iteration(st, edit="t2", target="model", margin_deltas={}, gate="pass", action="TUNE")
+    assert not any("I7" in v for v in ls.validate(st, []))
+    # escalating to MODIFY (with a diagnosis) breaks the TUNE streak → clean
+    st2 = ls.create(".", "s", "q")
+    for _ in range(2):
+        st2 = ls.record_iteration(st2, edit="tune", target="model", margin_deltas={}, gate="fail", action="TUNE")
+    st2 = ls.record_iteration(st2, edit="swap mechanism", target="model", margin_deltas={}, gate="fail",
+                              action="MODIFY", diagnosis={"hypotheses": ["a", "b"], "discriminating_measure": "m"})
+    assert not any("I7" in v for v in ls.validate(st2, []))
+    # legacy history (no action) is exempt
+    st3 = ls.create(".", "s", "q")
+    for _ in range(4):
+        st3 = ls.record_iteration(st3, edit="old", target="model", margin_deltas={}, gate="fail")
+    assert not any("I7" in v for v in ls.validate(st3, []))

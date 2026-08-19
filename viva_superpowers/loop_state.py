@@ -217,9 +217,11 @@ def to_trajectory(state: dict) -> dict:
     }
 
 
-def validate(state: dict, current_tests: list, *, is_reopen: bool = False) -> list:
+def validate(state: dict, current_tests: list, *, is_reopen: bool = False,
+             max_tune_streak: int = 3) -> list:
     """Invariant violations (empty = clean). I1: after LOCK the tests are frozen
-    (a change is only legal on a reopen). I4: no `passed` roll-up the gate rejects."""
+    (a change is only legal on a reopen). I4: no `passed` roll-up the gate rejects.
+    I7: TUNE must not compensate indefinitely for structural error (``max_tune_streak``)."""
     out = []
     locked = state.get("locked_tests_hash")
     if locked and not is_reopen and tests_hash(current_tests) != locked:
@@ -258,4 +260,19 @@ def validate(state: dict, current_tests: list, *, is_reopen: bool = False) -> li
             out.append(
                 f"I6: MODIFY at iteration {h.get('iteration')} without a diagnosis "
                 "(>=2 competing hypotheses + a discriminating MEASURE)")
+    # I7 — model discrepancy / anti-overfitting: calibration (TUNE) must not paper
+    # over structural error forever. A trailing run of >=max_tune_streak consecutive
+    # TUNE iterations that never clears the gate is a persistent residual — the loop
+    # should escalate (SELECT a variant / MODIFY the structure / GIVE_UP), not keep
+    # nudging parameters. Counts only the trailing streak, so escalating (any non-TUNE
+    # action) or clearing the gate resets it; legacy iterations (no action) never count.
+    streak = 0
+    for h in reversed(state.get("history") or []):
+        if h.get("action") != "TUNE" or str(h.get("gate")) != "fail":
+            break
+        streak += 1
+    if streak >= max_tune_streak:
+        out.append(
+            f"I7: {streak} consecutive TUNE iterations without clearing the gate — a "
+            "persistent model discrepancy; escalate to SELECT/MODIFY/GIVE_UP, don't tune on")
     return out

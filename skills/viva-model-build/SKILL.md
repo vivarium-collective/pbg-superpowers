@@ -64,6 +64,11 @@ AUTHOR → AUDIT ─fail→ AUTHOR
   spike is not a violation (back-compat), but a supervised run should always take it.
 - **I3 — provided-mechanisms-only.** A model change must cite its mechanism source
   (a paper, an expert input). Do not invent a mechanism to force a pass.
+- **I7 — model discrepancy (anti-overfitting).** `TUNE` (parameter calibration) must
+  not compensate indefinitely for structural error. A run of ≥3 consecutive TUNE
+  iterations that never clears the gate is a persistent residual — `loop_state.validate`
+  flags it; escalate to `SELECT`/`MODIFY`/`GIVE_UP` (a diagnosed structural change or an
+  honest give-up), don't keep nudging parameters.
 - **I6 — diagnosis before structural change.** A `MODIFY` (structural model edit)
   must be justified by a `diagnosis` with ≥2 competing hypotheses AND the MEASURE
   that discriminates them — a failed margin triggers diagnosis, not a reflexive edit.
