@@ -25,6 +25,12 @@ If either is missing, the skill should fail with a clear actionable error pointi
 - **Body keys:** standardize on `study:` (not `investigation:`, not `name:` when the body has a separate entry-name field). The server's `_study_name_from_body` accepts all three but new code should send `study:`.
 - **Subcommands** (for skills like `/viva-study`) use kebab-case verbs: `new`, `set-objective`, `baseline-add`, `variant-set-params`, `run-baseline`, `propose-followup`, `seed-from-followup`, etc. The `/viva-study` subcommand surface is organized by lifecycle phase (Design → Build → Simulate → Evaluate → Decide).
 
+## Authored-content style (prose the skills write into a Study)
+
+Skills fill Study/Investigation fields with generated prose — `question`, `claim`, `biological_summary`, `conclusion`, `findings[].*`, verdicts, report text. Write that prose in **normal sentence case**. Do **not** use ALL-CAPS words for emphasis: it renders as shouting in the report and the dashboard. Reserve capitals for genuine acronyms (FBA, DNA, ATP, ODE), unit symbols, and enum/status values (`PASS`, `FAIL`, `MIXED`; the Design/Build/Simulate/Evaluate/Decide phases). When a word genuinely needs emphasis, use markdown *italics*, not capitals.
+
+The ALL-CAPS in these skills' *own* instructions (e.g. "BIAS TO EXECUTE", "HONEST OPEN QUESTION") is emphasis directed at **you, the agent** — it is not a style to copy into the content you author.
+
 ## Editing rules
 
 - **Don't add features the plan doesn't call for.** Each skill has a tight scope; keep it.

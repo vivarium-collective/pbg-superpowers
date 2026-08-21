@@ -65,6 +65,14 @@ read-only via [`/viva-workbench`](../viva-workbench/SKILL.md) (step 5).
 5. **CALIBRATE WITH A SWEEP, not one value at a time.** To put a knob in a band,
    sweep a grid × multiseed in one pass and pick the recommended in-band point
    with provenance, instead of iterating single values.
+6. **SENTENCE-CASE PROSE (no shouting).** Write the prose you put into Study
+   fields (`question`, `claim`, `biological_summary`, `conclusion`, `findings`,
+   verdicts, report text) in normal sentence case. Do not use ALL-CAPS words for
+   emphasis — it renders as shouting in the report. Reserve capitals for acronyms
+   (FBA, DNA, ATP), units, and enum/status values (`PASS`/`FAIL`, the
+   Design→Decide phases); use markdown *italics* if a word needs emphasis. The
+   ALL-CAPS in these instructions is for your attention as the agent — it is not a
+   style to copy into authored content.
 
 **The letter is the spirit.** These rules cost effort exactly when you're under
 pressure to skip them — a target that won't hit, a reviewer waiting, a run you'd
