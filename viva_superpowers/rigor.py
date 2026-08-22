@@ -103,6 +103,10 @@ _HYPOTHESIS_TEST_DIMS = frozenset({
     "threshold_provenance",
     "metric_calibration",
     "generality",
+    # Review-integration dims (conditionally appended — see G2/G3 below); they
+    # presuppose a claim under test, so a descriptive study relabels them NA.
+    "statistical_power",
+    "held_out_generalization",
 })
 
 # Authored verdict values that mark a study as descriptive (no hypothesis test).
@@ -593,6 +597,250 @@ def is_descriptive_study(spec: dict) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# Review-integration dims (G2 / G3 / G6) — conditionally-appended dimensions
+# that only bite the claim classes they police (like the confirmatory-only
+# preregistration dim), so every other study's dimension count is unchanged
+# (back-compat: study_rigor({}) still scores 12 dimensions).
+#
+# Schema (all OPTIONAL, back-compatible)::
+#
+#     findings:
+#       - claim_type: causal            # causal | directional  (G2)
+#         # or: substitutability | equivalence | surrogate     (G3)
+#     arms: [treatment, control]        # or contrast: ... / statistics.arms (G2)
+#     statistics:                       # the declared test for a causal contrast
+#       test: mann-whitney-u
+#       p_value: 0.003
+#       effect_size: 0.61
+#       n_per_arm: 24
+#       gate_on: ensemble               # ensemble | flagship_seed (or spec.gate_on)
+#     held_out:                         # G3 — train vs test condition
+#       train: [tuned-condition]        # aliases: generalization / train_test
+#       test: [held-out-condition]
+#     degrees_of_freedom:               # G3 — free params vs matched observables
+#       free_parameters: 3
+#       matched_observables: 7
+#     representation_conversion:        # G6 — a conserved quantity crosses reps
+#       from: lattice_pixels
+#       to: particles
+#       quantity: mass
+#       ledger: {test: mass_ledger, result: PASS}
+# ---------------------------------------------------------------------------
+
+# claim_type vocabulary for the conditional dims — distinct from ``tier`` and
+# ``claim_scope``: the KIND of claim, which decides which extra bar applies.
+_CAUSAL_CLAIM_TYPES = ("causal", "directional")
+_EQUIVALENCE_CLAIM_TYPES = (
+    "substitutability", "equivalence", "surrogate", "interface_equivalence",
+    "same_interface",
+)
+# Conservative text signals for an equivalence/substitutability claim when no
+# claim_type is declared (G3 detection: "if none, don't flag").
+_EQUIVALENCE_TEXT_SIGNALS = (
+    "substitut", "equivalen", "same interface", "surrogate", "interchangeab",
+    "drop-in",
+)
+# Text tokens marking a drift-null / no-effect control arm (G2).
+_DRIFT_NULL_TOKENS = ("drift", "null", "no-effect", "no_effect")
+_DRIFT_NULL_KINDS = ("null", "drift", "drift-null", "drift_null", "no-effect", "no_effect")
+# gate_on values (G2): the pass/fail gate reads the ensemble statistic, not a
+# single flagship seed.
+_ENSEMBLE_GATE_VALUES = ("ensemble", "ensemble_statistic", "ensemble-statistic")
+# Minimum replicates per arm for a causal claim from a stochastic contrast (G2)
+# — the review's power bar, deliberately above the ≥3-seed replication floor.
+_CAUSAL_MIN_N_PER_ARM = 20
+# Conserved-quantity tokens for the conservative G6 text signal.
+_CONSERVED_QUANTITY_TOKENS = (
+    "mass", "pixel", "particle", "volume", "flux", "molecule", "count", "conserv",
+)
+
+
+def _finding_claim_type(finding: dict) -> str:
+    return str((finding or {}).get("claim_type") or "").strip().lower()
+
+
+def _study_statistics(spec: dict) -> dict:
+    """The declared ``statistics`` block — study-level preferred, else the first
+    finding-level one (mirrors the alternatives dim's source-preference style)."""
+    stats = (spec or {}).get("statistics")
+    if isinstance(stats, dict):
+        return stats
+    for f in _findings(spec or {}):
+        s = f.get("statistics")
+        if isinstance(s, dict):
+            return s
+    return {}
+
+
+def _declares_arm_contrast(spec: dict) -> bool:
+    """True when the study declares a between-arm contrast (``arms`` /
+    ``contrast(s)`` at the study level, ``statistics.arms``, or a finding's
+    ``evidence.arms`` / ``evidence.contrast``)."""
+    spec = spec or {}
+    for key in ("arms", "contrast", "contrasts"):
+        if _nonempty(spec.get(key)):
+            return True
+    if _nonempty(_study_statistics(spec).get("arms")):
+        return True
+    for f in _findings(spec):
+        ev = f.get("evidence")
+        if isinstance(ev, dict) and (_nonempty(ev.get("arms")) or _nonempty(ev.get("contrast"))):
+            return True
+    return False
+
+
+def _causal_stochastic_claim(spec: dict) -> bool:
+    """G2 applicability: a causal/directional finding derived from a STOCHASTIC
+    contrast between arms.
+
+    Conservative (does not bite deterministic or non-causal studies):
+
+    * the study must be stochastic — ``stochastic: true`` or ≥2 declared
+      replicates (seeds), AND
+    * a finding declares ``claim_type: causal|directional`` (always in scope), or
+      a ``tier: interpretation`` finding coincides with a DECLARED arm contrast
+      (``arms`` / ``contrast`` / ``statistics.arms`` / ``evidence.arms``).
+    """
+    spec = spec or {}
+    n_rep, _ = _replicate_count(spec)
+    if not (bool(spec.get("stochastic")) or n_rep >= 2):
+        return False
+    findings = _findings(spec)
+    if any(_finding_claim_type(f) in _CAUSAL_CLAIM_TYPES for f in findings):
+        return True
+    has_interp = any((f.get("tier") or "").lower() == "interpretation" for f in findings)
+    return has_interp and _declares_arm_contrast(spec)
+
+
+def _has_drift_null_arm(spec: dict, stats: dict) -> bool:
+    """A declared drift-null / no-effect control arm: ``statistics.null_arm`` /
+    ``statistics.drift_null``, or a control whose kind / name / hypothesis marks
+    it as the no-effect arm."""
+    if _nonempty((stats or {}).get("null_arm")) or _nonempty((stats or {}).get("drift_null")):
+        return True
+    for c in _as_list((spec or {}).get("controls")):
+        if not isinstance(c, dict):
+            continue
+        if (c.get("kind") or "").strip().lower() in _DRIFT_NULL_KINDS:
+            return True
+        hay = " ".join(str(c.get(k) or "") for k in ("name", "hypothesis", "expected")).lower()
+        if any(t in hay for t in _DRIFT_NULL_TOKENS):
+            return True
+    return False
+
+
+def _gate_target(spec: dict, stats: dict) -> str:
+    """The declared gate target (``gate_on`` at study level or in statistics)."""
+    return str((spec or {}).get("gate_on") or (stats or {}).get("gate_on") or "").strip().lower()
+
+
+def _equivalence_claim_present(spec: dict) -> bool:
+    """G3 applicability: a substitutability / equivalence / surrogate claim —
+    a declared ``claim_type`` (study- or finding-level) or a clear text signal
+    in a finding statement. No claim → don't flag."""
+    spec = spec or {}
+    if str(spec.get("claim_type") or "").strip().lower() in _EQUIVALENCE_CLAIM_TYPES:
+        return True
+    for f in _findings(spec):
+        if _finding_claim_type(f) in _EQUIVALENCE_CLAIM_TYPES:
+            return True
+        text = str(f.get("statement") or "").lower()
+        if any(sig in text for sig in _EQUIVALENCE_TEXT_SIGNALS):
+            return True
+    return False
+
+
+def _held_out_block(spec: dict) -> dict:
+    """The declared train-vs-test block (``held_out`` / ``generalization`` /
+    ``train_test``) — the first dict wins."""
+    for key in ("held_out", "generalization", "train_test"):
+        b = (spec or {}).get(key)
+        if isinstance(b, dict):
+            return b
+    return {}
+
+
+def _held_out_conditions(block: dict) -> tuple[set[str], set[str]]:
+    """(train, test) condition-name sets from a held-out block (alias-tolerant)."""
+    block = block or {}
+    train = (block.get("train") if block.get("train") is not None
+             else block.get("train_conditions") if block.get("train_conditions") is not None
+             else block.get("tuned_on"))
+    test = (block.get("test") if block.get("test") is not None
+            else block.get("test_conditions") if block.get("test_conditions") is not None
+            else block.get("held_out") if block.get("held_out") is not None
+            else block.get("evaluated_on"))
+    to_set = lambda v: {str(x).strip().lower() for x in _as_list(v) if str(x).strip()}  # noqa: E731
+    return to_set(train), to_set(test)
+
+
+def _dof_statement(spec: dict) -> bool:
+    """A degrees-of-freedom-vs-constraints statement: ``degrees_of_freedom`` /
+    ``dof_vs_constraints`` (a non-empty string, or a dict declaring both
+    free parameters and matched observables/constraints)."""
+    spec = spec or {}
+    for key in ("degrees_of_freedom", "dof_vs_constraints"):
+        v = spec.get(key)
+        if isinstance(v, str) and v.strip():
+            return True
+        if isinstance(v, dict):
+            free = v.get("free_parameters", v.get("free_params"))
+            matched = v.get("matched_observables", v.get("constraints"))
+            if free is not None and matched is not None:
+                return True
+    return False
+
+
+def _representation_conversions(spec: dict) -> list[dict]:
+    """Declared representation conversions (``representation_conversion`` — a
+    single dict or a list — or the plural alias)."""
+    raw = ((spec or {}).get("representation_conversion")
+           or (spec or {}).get("representation_conversions"))
+    if isinstance(raw, dict):
+        return [raw]
+    if isinstance(raw, list):
+        return [x for x in raw if isinstance(x, dict)]
+    return []
+
+
+def _conversion_text_signal(spec: dict) -> bool:
+    """Conservative G6 text signal: a finding statement that talks about
+    CONVERTING a conserved-quantity-bearing representation (must contain a
+    convert-word AND a conserved-quantity token)."""
+    for f in _findings(spec or {}):
+        text = str(f.get("statement") or "").lower()
+        if ("convert" in text or "conversion" in text) and any(
+                q in text for q in _CONSERVED_QUANTITY_TOKENS):
+            return True
+    return False
+
+
+def _conversion_ledger(conv: dict, spec: dict) -> Any:
+    """The ledger declaration covering one conversion — on the entry
+    (``ledger`` / ``conservation_check`` / ``ledger_test``) or the study-level
+    ``conservation_ledger`` fallback."""
+    for key in ("ledger", "conservation_check", "ledger_test"):
+        v = (conv or {}).get(key)
+        if v is not None:
+            return v
+    return (spec or {}).get("conservation_ledger")
+
+
+def _ledger_named_and_verified(ledger: Any) -> tuple[bool, bool]:
+    """(named, verified) for a ledger declaration. A non-empty string names a
+    check; a dict names one via test/check/name and is verified when its
+    result/status reads pass/passed/verified/ok (or ``asserted: true``)."""
+    if isinstance(ledger, str):
+        return bool(ledger.strip()), False
+    if isinstance(ledger, dict):
+        named = any(_nonempty(ledger.get(k)) for k in ("test", "check", "name"))
+        result = str(ledger.get("result") or ledger.get("status") or "").strip().lower()
+        verified = result in ("pass", "passed", "verified", "ok") or ledger.get("asserted") is True
+        return named or verified, named and verified
+    return False, False
+
+
 def study_rigor(spec: dict) -> dict:
     """Compute the per-study rigor scorecard.
 
@@ -872,6 +1120,140 @@ def study_rigor(spec: dict) -> dict:
                          f"{len(runs)} run(s) recorded but none carry an emitter "
                          "(sqlite/parquet/xarray) or a run-db reference — the trajectories are "
                          "not persisted; runs should emit via the workspace emitter", ["persistence"]))
+
+    # 14. G2 — Statistical power for causal stochastic claims. Conditionally
+    #     appended (like the confirmatory-only preregistration dim) so it only
+    #     bites causal/directional claims derived from a stochastic contrast
+    #     between arms — deterministic and non-causal studies are untouched.
+    #     Sharpened bar above the ≥3-seed replication floor: n≥20 per arm, a
+    #     declared rank/nonparametric test with a p-value, a drift-null control
+    #     arm, and a gate on the ENSEMBLE statistic (not one flagship seed).
+    if _causal_stochastic_claim(spec):
+        stats = _study_statistics(spec)
+        n_arm = stats.get("n_per_arm")
+        if not isinstance(n_arm, int) or isinstance(n_arm, bool):
+            n_arm = n_rep
+        missing: list[str] = []
+        if n_arm < _CAUSAL_MIN_N_PER_ARM:
+            missing.append(f"n>={_CAUSAL_MIN_N_PER_ARM} replicates per arm "
+                           f"(found {n_arm} — the >=3 replication floor is not "
+                           "statistical power)")
+        has_test = bool(str(stats.get("test") or "").strip())
+        p_val = stats.get("p_value")
+        has_p = isinstance(p_val, (int, float)) and not isinstance(p_val, bool)
+        if not (has_test and has_p):
+            missing.append("a declared rank/nonparametric test with a p-value "
+                           "(statistics: {test, p_value, effect_size})")
+        if not _has_drift_null_arm(spec, stats):
+            missing.append("a drift-null / no-effect control arm")
+        gate = _gate_target(spec, stats)
+        single_seed_gate = bool(gate) and gate not in _ENSEMBLE_GATE_VALUES and (
+            "seed" in gate or "flagship" in gate)
+        if gate not in _ENSEMBLE_GATE_VALUES:
+            missing.append("gate on the ensemble statistic (gate_on: ensemble), "
+                           "not a single flagship seed")
+        if not missing:
+            dims.append(_dim("statistical_power", "Statistical power (causal stochastic claim)",
+                             OK,
+                             f"causal contrast powered: n>={_CAUSAL_MIN_N_PER_ARM} per arm, "
+                             f"{stats.get('test')} test with p-value, drift-null arm, "
+                             "gate on the ensemble statistic", ["G2", "C4"]))
+        elif single_seed_gate:
+            detail = (f"causal claim gated on a single seed (gate_on: {gate}) — gate the "
+                      "pass/fail on the ENSEMBLE statistic")
+            other = [m for m in missing if "ensemble" not in m]
+            if other:
+                detail += "; also missing: " + "; ".join(other)
+            dims.append(_dim("statistical_power", "Statistical power (causal stochastic claim)",
+                             GAP, detail, ["G2", "C4"]))
+        elif not (has_test and has_p):
+            dims.append(_dim("statistical_power", "Statistical power (causal stochastic claim)",
+                             GAP,
+                             "causal claim from a stochastic contrast with no declared statistical "
+                             "test — missing: " + "; ".join(missing), ["G2", "C4"]))
+        else:
+            dims.append(_dim("statistical_power", "Statistical power (causal stochastic claim)",
+                             WARN,
+                             "statistical test declared but the power bar is not met — missing: "
+                             + "; ".join(missing), ["G2", "C4"]))
+
+    # 15. G3 — Held-out generalization. Conditionally appended for
+    #     substitutability / equivalence / surrogate claims only (detected from a
+    #     declared claim_type or a clear finding-text signal; no claim → silent).
+    #     A surrogate that only agrees on the condition it was tuned on is
+    #     calibration, not mechanism-independence: require a declared train vs
+    #     HELD-OUT test condition plus a degrees-of-freedom-vs-constraints
+    #     statement (free params vs matched observables).
+    if _equivalence_claim_present(spec):
+        ho = _held_out_block(spec)
+        train, test = _held_out_conditions(ho)
+        has_dof = _dof_statement(spec)
+        if not test:
+            dims.append(_dim("held_out_generalization", "Held-out generalization", GAP,
+                             "substitutability/equivalence claim with no held-out condition "
+                             "declared — agreement on the tuned condition alone is surrogate "
+                             "calibration, not yet mechanism-independence (declare "
+                             "held_out: {train, test} with a test condition the surrogate was "
+                             "NOT tuned on, plus degrees_of_freedom: free params vs matched "
+                             "observables)", ["G3"]))
+        elif train and test <= train:
+            dims.append(_dim("held_out_generalization", "Held-out generalization", WARN,
+                             "held-out test condition(s) are the tuned (train) condition(s) — "
+                             "surrogate calibration, not yet mechanism-independence; evaluate on "
+                             "a condition the surrogate was NOT tuned on", ["G3"]))
+        elif not has_dof:
+            dims.append(_dim("held_out_generalization", "Held-out generalization", WARN,
+                             "held-out condition declared but no degrees-of-freedom-vs-constraints "
+                             "statement — declare degrees_of_freedom: {free_parameters, "
+                             "matched_observables} so readers can judge how constrained the "
+                             "agreement is", ["G3"]))
+        else:
+            dims.append(_dim("held_out_generalization", "Held-out generalization", OK,
+                             f"held-out test condition(s) {sorted(test)} distinct from tuned "
+                             f"{sorted(train) if train else '(undeclared)'} + a declared "
+                             "degrees-of-freedom-vs-constraints statement", ["G3"]))
+
+    # 16. G6 — Conservation ledger across representation conversions.
+    #     Conditionally appended, and detection stays conservative: only a study
+    #     that DECLARES a conversion of a conserved quantity between
+    #     representations (representation_conversion field, or a clear
+    #     finding-text signal) is flagged — everything else is silent. When a
+    #     conversion is declared, require a ledger check asserting the quantity
+    #     is conserved (not manufactured or lost) across the conversion.
+    conversions = _representation_conversions(spec)
+    if conversions or _conversion_text_signal(spec):
+        if not conversions:
+            dims.append(_dim("conservation_ledger", "Conservation ledger", GAP,
+                             "findings describe a representation conversion but no "
+                             "representation_conversion is declared — declare {from, to, "
+                             "quantity, ledger: {test, result}} so the conserved quantity is "
+                             "checked, not manufactured, across the conversion", ["G6"]))
+        else:
+            unledgered = []
+            unverified = []
+            for conv in conversions:
+                named, verified = _ledger_named_and_verified(_conversion_ledger(conv, spec))
+                label = (f"{conv.get('from') or '?'}->{conv.get('to') or '?'} "
+                         f"({conv.get('quantity') or 'quantity?'})")
+                if not named:
+                    unledgered.append(label)
+                elif not verified:
+                    unverified.append(label)
+            if unledgered:
+                dims.append(_dim("conservation_ledger", "Conservation ledger", GAP,
+                                 f"{len(unledgered)} of {len(conversions)} representation "
+                                 f"conversion(s) declare no conservation-ledger check "
+                                 f"({'; '.join(unledgered)}) — add a ledger test asserting the "
+                                 "quantity is conserved across the conversion", ["G6"]))
+            elif unverified:
+                dims.append(_dim("conservation_ledger", "Conservation ledger", WARN,
+                                 f"ledger check named but no recorded passing result for "
+                                 f"{'; '.join(unverified)} — run the ledger and record "
+                                 "result: PASS", ["G6"]))
+            else:
+                dims.append(_dim("conservation_ledger", "Conservation ledger", OK,
+                                 f"all {len(conversions)} representation conversion(s) carry a "
+                                 "verified conservation-ledger check", ["G6"]))
 
     # Mode-awareness: for a descriptive / informational study the hypothesis-test
     # dimensions don't apply — relabel them NA so they neither score as gaps nor

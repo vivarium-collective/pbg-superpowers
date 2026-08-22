@@ -90,6 +90,32 @@ lever for "add more detail so the model-building agent can improve its design."
    with the human before writing. Bands over magic numbers.
 3. Re-run (`run` below) and check the axis now reports a numeric `margin`.
 
+## Gate discipline: gate_class + held-out grading
+
+**Every gate carries a `gate_class`.** When authoring or enriching, classify
+each gating check / behavior_test as
+`gate_class: regression_pin | acceptance_criterion`. The rule is *when the
+threshold was stated*, not how strict it is: a threshold chosen **after** seeing
+the run is a **`regression_pin`** — it locks observed behavior against silent
+drift (worth having!) but is not evidence the behavior is right; a directional
+prior declared **before** the run — in the study's `preregistered:` block — is
+an **`acceptance_criterion`**, the only kind that can confirm or refute. The
+report's verdict counts split the two, and a pin counted as acceptance is the
+classic post-hoc-gate failure the `audit` subcommand and
+`/viva-harden-investigation`'s reviewer lens both hunt. (See
+[pbg-study → Born-rigorous defaults](../viva-study/SKILL.md) for the scaffold
+shapes; the rigor scorecard's threshold-provenance dim reads the result.)
+
+**Substitutability / equivalence needs a held-out grading axis.** A claim that
+module X can stand in for Y ("swap", surrogate, equivalence) is only graded by
+a **held-out condition**: the tuning (train) condition and the grading (test)
+condition must differ, the test axis must be marked as held-out so the report
+can show train vs test, and the surrogate's **degrees of freedom vs the
+constraints it was fit to** must be recorded. A surrogate tuned and graded on
+the same condition demonstrates curve-fitting, not substitutability — the
+audit's discrimination reasoning treats it as insufficient, and the rigor
+held-out-generalization dim reads `gap` without it.
+
 ## run `<study>`
 Run the study's tests and return the structured feedback signal.
 
@@ -507,3 +533,5 @@ margins trending up. The study dir — spec + tests + `report.json` + `test_diff
 - "I'll pick a threshold" → derive it from analyses + a cited band (`/viva-tests cite-bands`); confirm.
 - "I'll hand-write the verdict.json" → emit it from `TestStep.build()` via `check()`/`TestBuilder`; the on-disk `overall` vocabulary is load-bearing.
 - "Every axis should gate" → only `hard` axes gate; use `directional` for should-improve quantities so a not-yet-calibrated model isn't falsely failed.
+- "This gate passed, so the model is validated" → check its `gate_class`: a post-run threshold is a `regression_pin`, never acceptance evidence (§ Gate discipline).
+- "The surrogate matches, so they're substitutable" → only on a HELD-OUT condition it wasn't tuned on, with DoF vs constraints reported (§ Gate discipline).

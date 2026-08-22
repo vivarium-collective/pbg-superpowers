@@ -228,6 +228,178 @@ def diverges_from_authored(spec: dict) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Gate classification (review G1) — regression_pin vs acceptance_criterion
+# ---------------------------------------------------------------------------
+
+# Canonical values for the per-test ``gate_class`` field (review M1 fix).
+# A REGRESSION PIN is a threshold set AFTER observing the run — it guards a
+# rerun against drift, but passing it is not evidence the model met a
+# pre-stated expectation. An ACCEPTANCE CRITERION is a directional prior
+# stated BEFORE the run — passing it IS evidence. Conflating the two lets
+# "gate: passed" overclaim; every counter below keeps them separate.
+GATE_CLASS_REGRESSION_PIN = "regression_pin"
+GATE_CLASS_ACCEPTANCE_CRITERION = "acceptance_criterion"
+GATE_CLASSES = (GATE_CLASS_REGRESSION_PIN, GATE_CLASS_ACCEPTANCE_CRITERION)
+
+# Presence of any of these fields marks a behavior_test as COMMITTED /
+# rerunnable — it names an executable check (a pytest node / registered
+# post-sim step) or a machine-evaluable predicate (``pass_if``), rather than a
+# narrated judgement. Extend this tuple when a new carrier lands (e.g. the
+# tests-spec typed registry).
+_COMMITTED_TEST_FIELDS = ("pytest", "pytest_node", "test_path", "post_sim", "pass_if")
+
+
+def _test_gate_class(test: dict) -> str | None:
+    """The canonical ``gate_class`` of one behavior_test, or ``None``.
+
+    Reads the ``gate_class`` field; tolerates the value appearing under the
+    tests-spec ``kind`` carrier when it equals one of the canonical values
+    (``kind`` values like ``report_card`` are ignored — they are a different
+    axis). Unknown / absent values return ``None`` (→ narrated/unclassified).
+    """
+    test = test or {}
+    for key in ("gate_class", "kind"):
+        v = str(test.get(key) or "").strip().lower()
+        if v in GATE_CLASSES:
+            return v
+    return None
+
+
+def is_expected_fail(test: dict) -> bool:
+    """True for a control DESIGNED to fail (a negative/diagnostic control).
+
+    Recognised by any of: ``expected_result: fail`` (or ``failed``),
+    ``classification: diagnostic``, or ``control: negative`` — the same
+    markers ``test_audit.has_discriminating_control`` reads. Such a test must
+    NEVER be counted as an acceptance pass: its FAIL outcome is the desired
+    behaviour, and its gate_class (if any) is overridden by its control role.
+    """
+    test = test or {}
+    if str(test.get("expected_result") or "").strip().lower() in ("fail", "failed"):
+        return True
+    if str(test.get("classification") or "").strip().lower() == "diagnostic":
+        return True
+    if str(test.get("control") or "").strip().lower() == "negative":
+        return True
+    return False
+
+
+def _is_committed_rerunnable(test: dict) -> bool:
+    """True when the test names an executable check or machine predicate."""
+    test = test or {}
+    return any(test.get(k) for k in _COMMITTED_TEST_FIELDS)
+
+
+def classify_gates(spec: dict) -> dict:
+    """Bucket a study's behavior_tests by ``gate_class`` (review G1).
+
+    Pure ``spec -> dict`` of NAME lists (mirroring ``bucket_tests``):
+
+    - ``expected_fail`` — negative/diagnostic controls designed to fail
+      (:func:`is_expected_fail`). Checked FIRST: an expected-fail control is
+      never bucketed as (nor counted toward) acceptance, whatever its
+      ``gate_class`` says.
+    - ``committed_pins`` — ``gate_class: regression_pin`` (post-hoc rerun
+      guards).
+    - ``acceptance_criteria`` — ``gate_class: acceptance_criterion``
+      (pre-stated directional priors).
+    - ``narrated`` — no gate_class AND no committed executable check
+      (:func:`_is_committed_rerunnable`): a narrative judgement, not a
+      rerunnable gate.
+    - ``unclassified`` — a committed/coded check with NO gate_class: the
+      author has not yet said whether its threshold is a pin or a prior
+      (the report linter can flag these).
+
+    Buckets are mutually exclusive and cover every test once.
+    """
+    out: dict[str, list[str]] = {
+        "committed_pins": [],
+        "acceptance_criteria": [],
+        "expected_fail": [],
+        "narrated": [],
+        "unclassified": [],
+    }
+    for t in _study_tests(spec or {}):
+        name = t.get("name") or ""
+        if is_expected_fail(t):
+            out["expected_fail"].append(name)
+        elif _test_gate_class(t) == GATE_CLASS_REGRESSION_PIN:
+            out["committed_pins"].append(name)
+        elif _test_gate_class(t) == GATE_CLASS_ACCEPTANCE_CRITERION:
+            out["acceptance_criteria"].append(name)
+        elif _is_committed_rerunnable(t):
+            out["unclassified"].append(name)
+        else:
+            out["narrated"].append(name)
+    return out
+
+
+def verdict_count_split(spec: dict) -> dict:
+    """Per-gate_class outcome counts, so a verdict can render HONESTLY.
+
+    ``roll_up_verdict`` deliberately stays the coarse gate (fail==0 and
+    pass>0); this ADDITIVE split lets the renderer/report say
+    ``pins: N/N; acceptance: M/K`` instead of conflating rerun-guard pins with
+    pre-stated acceptance criteria (review G1). Pure ``spec -> dict``:
+
+    - ``regression_pins`` / ``acceptance_criteria`` — ``{total, pass, fail}``
+      against the canonical run's outcomes (same classification as
+      ``bucket_tests``).
+    - ``expected_fail`` — ``{total, behaved}`` where ``behaved`` counts
+      controls that FAILED as designed. Never contributes to acceptance.
+    - ``narrated`` / ``unclassified`` — counts of tests with no coded gate /
+      no declared gate_class.
+    - ``committed_rerunnable`` — how many tests carry an executable check or
+      machine predicate at all (:func:`_is_committed_rerunnable`).
+    - ``label`` — the honest render string, e.g.
+      ``"pins: 2/2; acceptance: 1/3"`` (expected-fail / narrated appended
+      only when present).
+    """
+    spec = spec or {}
+    tests = _study_tests(spec)
+    outcomes = canonical_outcomes(spec)
+    buckets = bucket_tests(tests, outcomes)
+    passed = set(buckets["pass"])
+    failed = set(buckets["fail"])
+    classes = classify_gates(spec)
+
+    def _split(names: list[str]) -> dict:
+        return {
+            "total": len(names),
+            "pass": sum(1 for n in names if n in passed),
+            "fail": sum(1 for n in names if n in failed),
+        }
+
+    pins = _split(classes["committed_pins"])
+    acceptance = _split(classes["acceptance_criteria"])
+    expected_fail = {
+        "total": len(classes["expected_fail"]),
+        # behaved == FAILED as designed (the control's success condition)
+        "behaved": sum(1 for n in classes["expected_fail"] if n in failed),
+    }
+
+    label = (f"pins: {pins['pass']}/{pins['total']}; "
+             f"acceptance: {acceptance['pass']}/{acceptance['total']}")
+    if expected_fail["total"]:
+        label += (f"; expected-fail behaved: "
+                  f"{expected_fail['behaved']}/{expected_fail['total']}")
+    if classes["narrated"]:
+        label += f"; narrated: {len(classes['narrated'])}"
+    if classes["unclassified"]:
+        label += f"; unclassified: {len(classes['unclassified'])}"
+
+    return {
+        "committed_rerunnable": sum(1 for t in tests if _is_committed_rerunnable(t)),
+        "regression_pins": pins,
+        "acceptance_criteria": acceptance,
+        "expected_fail": expected_fail,
+        "narrated": len(classes["narrated"]),
+        "unclassified": len(classes["unclassified"]),
+        "label": label,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Pre-registration status (critique #18) — pure spec -> dict
 # ---------------------------------------------------------------------------
 
@@ -259,7 +431,10 @@ def preregistration_status(spec: dict) -> dict:
       ``pass_if`` equals the pre-registered threshold. ``None`` when no
       ``thresholds`` were declared.
 
-    Tolerant of a minimal / absent block.
+    Tolerant of a minimal / absent block. Sibling
+    :func:`preregistration_gate_alignment` returns this dict ENRICHED with the
+    gate_class alignment keys (review G1) — kept separate so existing callers
+    see byte-identical output.
     """
     spec = spec or {}
     prereg = spec.get("preregistered")
@@ -299,6 +474,53 @@ def preregistration_status(spec: dict) -> dict:
                 break
         out["criteria_match"] = match
 
+    return out
+
+
+def preregistration_gate_alignment(spec: dict) -> dict:
+    """:func:`preregistration_status` ENRICHED with gate_class alignment (G1).
+
+    Ties the pin-vs-acceptance distinction to the pre-registration machinery.
+    An ``acceptance_criterion`` gate is a pre-stated directional prior, so it
+    SHOULD have a matching ``preregistered.thresholds`` entry (same name, same
+    ``pass_if`` — the equality rule ``criteria_match`` already uses); a
+    ``regression_pin`` is a post-hoc rerun guard and is EXEMPT from
+    pre-statement. Pure ``spec -> dict``: all of
+    :func:`preregistration_status`'s keys unchanged, plus:
+
+    - ``acceptance_prestated`` (bool | None) — every acceptance_criterion gate
+      has a ``preregistered.thresholds`` entry equal to its ``pass_if``.
+      ``None`` when the study declares no acceptance_criterion gates; ``False``
+      when any acceptance gate lacks one (including when there is no
+      ``preregistered:`` block at all).
+    - ``unregistered_acceptance`` (list[str]) — acceptance_criterion gate names
+      WITHOUT a matching pre-stated threshold (post-hoc acceptance: either
+      reclassify as ``regression_pin`` or pre-register the threshold).
+    - ``pins_exempt`` (list[str]) — regression_pin gate names, exempt from the
+      pre-statement requirement (their absence from ``thresholds`` is fine).
+    """
+    spec = spec or {}
+    out = dict(preregistration_status(spec))
+
+    prereg = spec.get("preregistered")
+    thresholds = prereg.get("thresholds") if isinstance(prereg, dict) else None
+    if not isinstance(thresholds, dict):
+        thresholds = {}
+
+    classes = classify_gates(spec)
+    acceptance_names = classes["acceptance_criteria"]
+    actual_pass_if = {
+        t.get("name"): t.get("pass_if")
+        for t in _study_tests(spec)
+        if isinstance(t, dict) and t.get("name")
+    }
+    unregistered = [
+        n for n in acceptance_names
+        if n not in thresholds or actual_pass_if.get(n) != thresholds.get(n)
+    ]
+    out["acceptance_prestated"] = None if not acceptance_names else not unregistered
+    out["unregistered_acceptance"] = unregistered
+    out["pins_exempt"] = classes["committed_pins"]
     return out
 
 

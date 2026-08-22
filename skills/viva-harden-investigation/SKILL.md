@@ -56,6 +56,32 @@ prioritize.
 > Wilson score interval, or at minimum clamp the normal-approx CI to the
 > metric's support; never report a CI bound outside the metric's range.
 
+**2b. Reviewer lens — hunt the review's durable failure modes.**
+After classifying the load-bearing gap, sweep the investigation once against
+this checklist. Each row is a failure mode external peer review keeps finding in
+*finished* investigations — and each now has a rigor-scorecard dimension or
+report-linter check behind it (see
+[`docs/conventions/rigor-checklist.md`](../../docs/conventions/rigor-checklist.md)),
+so point authors at the enforcing check rather than re-litigating the principle:
+
+| Failure mode to hunt | Signature | Enforced by |
+|---|---|---|
+| Post-hoc gate presented as acceptance | behavior_test with no `gate_class`, or a threshold that first appears in the same commit as the run it grades | `gate_class` lint; rigor threshold-provenance + pre-registration dims; `study_verdict.preregistration_status()` |
+| Tuned surrogate labeled substitutability | swap/equivalence claim with no HELD-OUT condition (tuned and graded on the same data); degrees-of-freedom vs constraints unreported | rigor held-out-generalization dim; `/viva-tests audit` discrimination |
+| Under-powered stochastic causal claim | n < 20 replicates per arm, gated on a single seed, no rank test, no drift-null control | rigor Replication dim (causal-claim tier) |
+| Authored criterion dressed as emergence | interpretation-tier finding missing `mechanism_origin`, or `engineered` behavior narrated as emergent | rigor engineered-vs-emergent dim |
+| Missing conservation ledger | a representation conversion (lattice→particles, field→agents, …) with no tally of the conserved quantity on both sides | conservation-ledger check |
+| Unseeded stochastic / dropped config keys | a stochastic process with no explicit seed; a composite config key that never reaches its process | `stochastic_unseeded` / `config_consumption` lints |
+| Decorative physical unit labels | µm / mM / minutes on axes or claims with no `units_and_time:` declaration or calibration behind them | `units_declared` / unearned-unit-labels lint |
+| Best-seed headline | verdict or claim quotes the flagship seed instead of the ensemble band | band-not-best-seed lint; lead with the band |
+
+Any hit is a hardening gap in its own right — fold it into the step-2 table
+(most land in "passed-but-thin" or "overclaimed verdict") and fix it per kind.
+Remediation is usually a reclassification, not a rewrite: a post-hoc gate
+becomes an honest `gate_class: regression_pin`; a best-seed headline becomes a
+band; a tuned surrogate claim narrows to "fits condition A" until a held-out
+condition exists.
+
 **3. Look for cross-investigation leverage.** The same signature (e.g. an O₂ exchange deficit)
 often weakens two investigations at once. Root-cause once; update *every* study/investigation that
 cites it, including the `decisions_needed` your finding resolves.
@@ -322,6 +348,8 @@ curl -sf -X POST -H "Content-Type: application/json" \
 - "The survey/memory says study X is a scaffold" → confirm on current `origin/main` first (step 0).
 - "Let me add seeds and statistics to this failing gate" → root-cause it first (step 2).
 - "Here are 11 things to improve" with no ranking → you skipped triage (step 1).
+- A gate whose threshold matches the run it grades, presented as acceptance → it's a `regression_pin` until a pre-stated prior exists (step 2b).
+- A headline number from the best seed of a stochastic ensemble → lead with the band; gate on the ensemble statistic (step 2b).
 - An observable computed only over the sub-population the mechanism gates/selects (e.g. measuring recruitment over just the cells the mechanism activated) → circular by construction; require the observable's domain/denominator be fixed independently of the mechanism under test.
 - Hardening the investigation you were handed without checking a sibling has the same defect (step 3).
 - Committing in the shared `~/code/<repo>` checkout instead of a worktree (step 4).
