@@ -75,6 +75,73 @@ For testers evaluating the UI against an existing or scaffold-only workspace. No
 
 Open the printed URL and browse the side-rail tabs — Workspace, Registry, Composites, Investigations, Visualizations, GitHub Branches, Simulations DB (the canonical set is owned by the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench); see `/viva-workbench`). Create studies and investigations directly through the UI. Scaffolding details in the [viva-template](https://github.com/vivarium-collective/viva-template) README; serving details (ports, multi-workspace) in the [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench) README.
 
+## Tutorial — a study and an investigation, end to end
+
+A concrete walkthrough from an empty machine to a two-study investigation with a report.
+You type the `/viva-*` commands (Path A); Claude writes the typed Python + YAML and the
+dashboard reflects each step. Full command reference: [`docs/skills.md`](docs/skills.md).
+
+**Prereqs.** `/viva-init` once per machine, then boot the workbench (`/viva-workbench
+start`) — every step below reads/writes through that server.
+
+**1 · Scaffold a workspace and start the dashboard.**
+
+    /viva-workspace monod-demo --upstream <owner/model-repo>   # or omit --upstream for standalone
+    cd monod-demo
+    /viva-workbench start                                      # prints the dashboard URL
+
+**2 · Get a composite into the catalog.** Wrap a simulator you know, or install an
+existing one. This is the runnable substrate a study will point at.
+
+    /viva-expert odeint --lightweight        # wrap an ODE solver into viva_<pkg>/ (a Process)
+    /viva-catalog list                       # confirm the composite id, e.g. monod_demo.composites.monod
+
+**3 · Open an investigation** (its slug becomes a git branch + worktree, so parallel work
+never collides):
+
+    /viva-investigation new growth-kinetics
+
+**4 · Create the first study, wire its baseline, and run it.** A study is one question
+wrapped around a composite (`baseline`), with an emit contract (`readouts`) and a pass/fail
+bar (`behavior_tests`):
+
+    /viva-study new monod_demo.composites.monod          # creates studies/<slug>/study.yaml
+    /viva-study baseline-add <study> --name wt --composite monod_demo.composites.monod
+    /viva-study set-objective <study> "Does growth rate follow Monod kinetics vs [S]?"
+    # ask Claude to fill readouts + behavior_tests, then:
+    /viva-study run-baseline <study>                     # writes runs.db
+    /viva-viz <study> growth-curve "growth rate vs substrate, Monod fit overlaid"
+
+Open the study in the dashboard: the **Assurance › Tests** tab shows each behavior test's
+PASS/FAIL (derived from the latest run), and **Evidence › Visualizations** shows the chart.
+
+**5 · Add it to the investigation, then create a dependent second study.**
+
+    /viva-investigation add-study growth-kinetics <study-1>
+    /viva-study new monod_demo.composites.monod          # study 2 — e.g. a temperature sweep
+    /viva-investigation add-study growth-kinetics <study-2>
+    # ask Claude to set study 2's pipeline_gate.prerequisites to [study-1] with condition tests-passed
+
+The **Investigation graph** now draws study-2 downstream of study-1 (edge from its
+`pipeline_gate.prerequisites`). A prerequisite that hasn't passed shows study-2 as
+`🔒 blocked`.
+
+**6 · Run the whole investigation and render the report.**
+
+    /viva-investigation run growth-kinetics              # runs members in dependency order
+    /viva-report <study-1>                               # per-study report
+    /viva-report                                          # workspace dashboard + investigation report
+
+**What just happened underneath.** Running the investigation compiles it into a
+process-bigraph composite — one `StudyStep` per member, wired by the prerequisite edges
+(vivarium-workbench's investigation-as-composite). That compile is the **investigation
+template** made concrete: one open **site** per member study, filled to admit a member and
+pruned to gate it. The mechanics — composites, draft processes, and templates/sites — are
+a runnable tutorial in the process-bigraph
+[README quickstart](https://github.com/vivarium-collective/process-bigraph#quickstart--composites-drafts--templates-in-code),
+and the full model is in
+[`docs/concepts/composites-templates-and-the-study-investigation-stack.md`](docs/concepts/composites-templates-and-the-study-investigation-stack.md).
+
 ## Concepts
 
 - **Workspace IS the model.** A git repo containing the model's Python package, tests, references, decisions log, and a `workspace.yaml`. The unit of reproducibility — clone a workspace, run it, get the same answer.
