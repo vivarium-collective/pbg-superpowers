@@ -53,141 +53,67 @@ re-reading the code.
 
 ## 2. The composite
 
-A composite is a **process-bigraph document**: one `state` map whose entries are
-**typed nodes**. There are two kinds of node, and a composite is nothing but these two
-kinds wired together.
-
-- **Processes** — the moving parts. A node with `_type: process` names an `address`
-  (which Process class), a `config`, an `interval`/schedule, and an `update` that
-  advances state each step. This is where the simulator actually computes.
-- **Stores** — the state. A store holds typed values (a concentration field, a
-  molecule count, the clock). Processes never talk to each other directly; they read
-  and write **shared stores**, and that wiring *is* the coupling.
-
-### Anatomy
-
-Each process node's `inputs`/`outputs` are **paths into shared stores**. Change a path
-and you rewire the model; two processes that name the same store path are now coupled.
-Nothing else connects them. This is a real node from
-`spatio_flux/composites/fig07-1-community-dfba.composite.json`:
+A composite is a **process-bigraph document**: one `state` map of **typed nodes** of two
+kinds — **processes** (`_type: process`; an `address` + `config` + an `update` that
+computes each step) and **stores** (typed state). Processes never talk to each other
+directly; they read and write **shared stores**, and that wiring *is* the coupling. A
+real node from `spatio_flux/composites/fig07-1-community-dfba.composite.json`:
 
 ```jsonc
 "ecoli core dFBA": {
-  "_type":    "process",
-  "address":  "local:DynamicFBA",           // which Process class, resolved in the registry
-  "config":   { "model_file": "textbook", "kinetic_params": { /* … */ } },
-  "inputs":   { "substrates": { "glucose": ["fields", "glucose"] },   // ← wiring path
-                "biomass": ["fields", "ecoli core"] },                //   into a shared store
-  "outputs":  { "substrates": { "glucose": ["fields", "glucose"] }, /* … */ },
-  "interval": 1.0
-}
+  "_type": "process", "address": "local:DynamicFBA",       // resolved in the registry
+  "config": { "model_file": "textbook", /* … */ },
+  "inputs":  { "biomass": ["fields", "ecoli core"] },       // ← wiring path into a shared store
+  "outputs": { "biomass": ["fields", "ecoli core"] },
+  "interval": 1.0 }
 ```
 
-An **address** is `protocol:path`. `local:` means "resolve this name in the local
-registry (`core.link_registry`), which `allocate_core()`/`build_core()` populated by
-walking the installed packages"; `DynamicFBA` is the registered Process class name.
+> **The full formalism lives in process-bigraph:**
+> [`docs/concepts/composites-and-templates.md`](https://github.com/vivarium-collective/process-bigraph/blob/main/docs/concepts/composites-and-templates.md)
+> — the composite anatomy (addresses, nesting), static vs generator composites, **draft
+> processes**, and the **template/site** mechanism. This document summarizes only what
+> the study/investigation layer needs and builds *on top* of that substrate.
 
-Two more structural facts: a composite can **nest** — a node can itself be a
-sub-composite, so big models are built from small ones (containment) — and time is
-**per-process** (`interval`), so fast and slow processes advance on one shared state.
-
-### Processes and draft processes
-
-A **Process** is a Python class with typed `inputs()`/`outputs()` and an `update()`;
-wrapping a simulator (via `/viva-expert`) means writing one. But you don't always have
-the mechanism yet — and that's what a **draft process** is for.
-
-A `DraftProcess` (a process-bigraph **core** primitive, ≥ 1.8.3 —
-`from process_bigraph import DraftProcess, draft_process`) declares a **contract**:
-input/output ports plus a human-readable description of the transformation it is *meant*
-to perform — but carries **no `update` dynamics**. It inherits the base no-op update, so
-if stepped it stays inert and never fabricates behavior. That lets you drop a node into
-the model's topology, wire it to stores, and review the whole thing *before* committing
-the biology.
-
-```python
-from process_bigraph import DraftProcess, draft_process
-
-@draft_process(name="PTH secretion",
-    inputs={"ca_sense": "float"}, outputs={"pth_out": "float"},
-    contract={"summary": "...", "senses": "...", "makes": "..."})
-class PTHSecretion(DraftProcess):
-    pass
-```
-
-Because a workspace's `build_core()` walks the package and registers every Process, a
-module-scope draft **auto-appears in the dashboard** under Modules → Processes, marked
-DRAFT, with its ports and contract — no workbench change required.
+**Draft processes, briefly.** A `DraftProcess` (`from process_bigraph import
+DraftProcess, draft_process`) is a Process that declares a **contract** — ports + a
+description of what it is *meant* to do — but has **no `update` dynamics**. It is a
+present-but-inert placeholder *node*: drop it where a mechanism will go so the model's
+topology is complete and reviewable (and the composite already runs — the node no-ops)
+*before* the biology is written, then replace it with a real Process later. A
+module-scope draft auto-registers and shows in the dashboard (Modules → Processes) marked
+DRAFT. It is complementary to a **site** (§3): a draft is a node that is *there but
+inert*; a site is an empty *hole* where no node exists yet. See the process-bigraph doc
+for the full treatment.
 
 ---
 
-## 3. Templates: composite documents with holes (sites)
+## 3. Templates: composites with holes (sites)
 
-Every composite above is **ground**: every node concrete, ready to run. A **template**
-is a composite document that is *not* ground — it has open **sites**.
+A **template** is a composite document that is not *ground* — it has open **sites**
+(`{"_type": "site", "_sort": <face>}`), Milner place-graph **holes** where a whole
+composite, process, or value plugs in. `Composite` won't run a document with any open
+required site; filling every required site makes it **ground** and runnable. The full
+mechanism — `open_sites` / `fill_sites` / `template_document` / `investigation_document`
+and the literal on-disk shape — is in process-bigraph
+[`docs/concepts/composites-and-templates.md`](https://github.com/vivarium-collective/process-bigraph/blob/main/docs/concepts/composites-and-templates.md).
 
-A site is a **place-graph hole**, written `{"_type": "site", "_sort": <face>}`: a slot
-where a whole composite, process, or value plugs in. This is Milner's bigraph site
-(Def. 2.1), implemented in bigraph-schema — a document with sites describes a *context*,
-not a runnable state tree, and `Composite` **refuses to run one** until every required
-site is filled ("an open site is a hole where a process should be", `composite.py`).
+The two template shapes the study/investigation layer is built from:
 
-Here is a real **study template** (from `process-bigraph/tests.py`) — the
-analysis/emitter/report-card network is fixed, and the model is left as a hole:
-
-```jsonc
-// a STUDY TEMPLATE — analysis/emitter network fixed, the model is a hole
-{ "study": {
-    "threshold": { "_type": "site", "_sort": "float" },          // a VALUE hole
-    "sim": { "_type": "step", "address": "local:SimulationStep",
-      "config": { "state": {
-        "model":   { "_type": "site", "_sort": MODEL_FACE },     // ← plug a COMPOSITE in here
-        "emitter": { "address": { "_type": "site", "_sort": "emitter" }, /* … */ } } } },
-    "report_cards": {
-      "card": { "_type": "site", "_sort": CARD_FACE } } } }      // plug a REPORT CARD in here
-
-open_sites(template) → [ study/threshold,
-                         study/sim/config/state/model,           // the model hole
-                         study/sim/config/state/emitter/address,
-                         study/report_cards/card ]
-```
-
-The `_sort` **types the hole** — what may plug in (a model composite, an emitter, a
-card, a bare `float`). Filling is `fill_sites(core, template, bindings)`: plug a filler
-into a site by path and the hole is gone — "once a site is filled there is no site
-anymore." Fill every required site → the document is **ground** → it runs. A site
-carrying a `_default` is optional; one without is required.
-
-| Template kind | Shape | Fill / build helper |
+| Template kind | Shape | Build helper |
 |---|---|---|
-| **Study template** | analysis/emitter/card network fixed; **the model is a site** | `template_document(core, tmpl, bindings)` — fills + renders, raises naming any required hole left empty |
-| **Investigation template** | **one site per member study** | `investigation_document(core, tmpl, bindings)` — fills a member's site to admit it, **prunes** members left open |
+| **Study template** | analysis/emitter/card network fixed; **the model is a site** | `template_document` — fill the model hole with a composite → ground → runnable |
+| **Investigation template** | **one site per member study** | `investigation_document` — fill a member's site to admit it, **prune** members left open |
 
 Investigation gating is expressed as *filling*, not scheduling: an unfilled member site
-is dropped from the built document (`prune_open_regions`), so a blocked prerequisite
-simply never appears in the run — the engine never has to decide "don't run this."
+is dropped from the built document, so a blocked prerequisite simply never appears in the
+run. This is the substrate under investigation-as-composite (§4).
 
-### Three things that all look like "blanks" — keep them apart
-
-- **A site** (`_type: site`) is an *empty structural hole* — no node there yet; you plug
-  a whole composite/process/value in. **This is the template mechanism.**
-- **A draft process** is a node that *is* there but inert (ports + contract, no
-  `update`) — a placeholder *node*, not a hole.
-- **`config` / `params` / `${name}` substitution** fills a node's *parameters* — rate
-  constants, a model file — not a hole and not a node. (`${name}` placeholders live in
-  `composite_spec.py`; `params`/`parameter_overrides` are merged at build.)
-
-So a template is specialized two ways: **fill its sites** (structure) and **set its
-parameters** (values). A study picks a composite for the model site and sets its params;
-an investigation fills one site per member study.
-
-### Static vs generator composites
-
-A ground composite comes in two forms: a **static** inline `state` (the
-`.composite.json` above) or a **generator** — a `@composite_generator` /
-`CompositeSpec` function that *builds* the state (e.g. from a ParCa cache),
-parameterized by its arguments. The generator is the parameter-driven cousin of a
-template; sites are the structural mechanism.
+Keep three "blanks" apart: a **site** is an empty structural *hole* (the template
+mechanism); a **draft process** is a present-but-inert *node* (§2); and **`config` /
+`params` / `${name}`** fills a node's *parameters*. So a template is specialized two ways
+— **fill its sites** (structure) and **set its parameters** (values). A study picks a
+composite for the model site and sets its params; an investigation fills one site per
+member study.
 
 ---
 
@@ -311,26 +237,14 @@ Four repos, stacked by dependency: **bigraph-schema** (types) ⊂ **process-bigr
 investigation-as-composite) ⊂ **viva-superpowers** (`/viva-*` skills + authoring). Each
 lower layer is imported by the ones above it.
 
-### bigraph-schema — the type system beneath every store
+### bigraph-schema + process-bigraph — the substrate
 
-| File | What it is |
-|---|---|
-| `bigraph_schema/core.py` | The `TypeSystem` — types, ports, schema resolution. |
-| `bigraph_schema/schema.py` · `parse.py` | Schema definitions + the type-grammar parser; the `Site` type. |
-| `bigraph_schema/assembly.py` | The Milner bigraph algebra — `interfaces`, `compose`, `tensor`, `fill_sites`. |
-| `bigraph_schema/methods/apply.py` | The store-write law — how a typed update is applied to state. |
-| `bigraph_schema/methods/transform.py` · `generalize.py` · `merge.py` · `resolve.py` | Schema→schema transforms + type ops. |
-
-### process-bigraph — the engine + composite / process / template primitives
-
-| File | What it is |
-|---|---|
-| `process_bigraph/composite.py` | The `Composite` class + `allocate_core()` (the registry); ground-check of sites. |
-| `process_bigraph/templates.py` | Study/investigation **templates** — `open_sites`, `fill_template`, `template_document`, `investigation_document`, `prune_open_regions`. |
-| `process_bigraph/composite_spec.py` | `CompositeSpec` — the unified static/generator front-end; `${name}` placeholders. |
-| `process_bigraph/composite_generator.py` | The `@composite_generator` decorator (parameterized composites). |
-| `process_bigraph/draft_process.py` | `DraftProcess` + `@draft_process` — contract, no dynamics. |
-| `process_bigraph/composite_discovery.py` · `scheduling.py` · `emitter.py` | Package discovery/registration; per-process interval scheduler; emitters. |
+The type system (`bigraph_schema`: the `Site` type, the `assembly.py` bigraph algebra)
+and the engine + composite/template primitives (`process_bigraph`: `composite.py`,
+`templates.py`, `draft_process.py`, `composite_spec.py`) are catalogued in the
+process-bigraph companion doc,
+[`docs/concepts/composites-and-templates.md`](https://github.com/vivarium-collective/process-bigraph/blob/main/docs/concepts/composites-and-templates.md#3-where-the-code-lives).
+The tables below cover the two layers that own the *study/investigation* concepts.
 
 ### vivarium-workbench — the dashboard server + investigation-as-composite
 
