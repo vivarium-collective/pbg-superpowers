@@ -152,6 +152,46 @@ run-db reference). Both are linted: an unresolved composite is flagged via
 `report_linter.unresolved_composite_refs`, and a study with runs but no emitter
 earns a `run_persistence` rigor `gap` + a `runs_without_emitter` warning.
 
+## Acceptance criteria — pre-state them BEFORE runs (never leave `[]`)
+
+An `acceptance_criteria: []` left empty until results exist is the single most
+common way an investigation ends up grading itself post-hoc — a reviewer reads
+criteria written after the runs as regression pins dressed up as acceptance.
+Populate `acceptance_criteria[]` at scaffold time, **before any member study
+runs**, with two kinds of entry:
+
+- **Pre-stated directional priors** — what direction/magnitude is expected if
+  the hypothesis is right (e.g. "raising adhesion asymmetry should monotonically
+  increase the sorting index"), each linked to the member study behavior_test
+  that will gate it (`{study: <slug>, behavior: <name>}`). Mirror each prior into
+  that study's `preregistered:` block and mark the gating test
+  `gate_class: acceptance_criterion` (see
+  [pbg-study → Born-rigorous defaults](../viva-study/SKILL.md)).
+- **Order-of-magnitude EXTERNAL ANCHORS** — literature values that bound what a
+  plausible result looks like (e.g. "sorting completes within ~10²–10³ MCS at
+  Graner–Glazer scale"). Flag each explicitly as an **anchor** — a sanity bound
+  the result is *compared against* — never as a calibration target the model is
+  *tuned to hit*. Source anchors via `/viva-tests cite-bands`; an anchor the
+  expert did not provide and you cannot cite is a `proposed_inputs` pending
+  item, not a fact.
+
+A criterion first conceived after the runs exist may still be recorded — but
+honestly, as a `regression_pin` on the member study, never back-dated into this
+list as acceptance.
+
+## Status triad — reconcile to ONE honest signal
+
+Three surfaces report investigation state: the per-study `confidence:` badges,
+`executive.verdict_status`, and the investigation's top-level `status:`. A
+reviewer reads disagreement among them (a `Refuted` member under
+`verdict_status: passed`; `status: complete` over open `decisions_needed`) as
+either sloppiness or spin. Whenever any one of the three changes, reconcile the
+other two in the same edit so they tell one story — and when the evidence is
+mixed, the rollup takes the **weakest** honest reading, not the most flattering
+(a failed hard gate anywhere means the rollup is not `passed`). The report-card
+status reconciliation flags divergence; fix it at the source rather than
+overriding the lint.
+
 ## Common prelude
 
 All sub-commands:
@@ -244,7 +284,9 @@ status: planning
 
 studies: []
 expert_docs: []
-acceptance_criteria: []
+acceptance_criteria: []  # populate BEFORE runs — pre-stated directional priors +
+                         # external anchors (see § Acceptance criteria above);
+                         # do NOT leave empty until results exist
 ```
 
 All v2 narrative-spine fields are optional per `investigation.schema.json`, so the scaffold validates on day one. The user opts in by uncommenting + filling sections. See `template/NEXT_STEPS.md` in pbg-template for the full pattern + when to fill each.
@@ -444,6 +486,13 @@ For each phase/stage/section in the plan that represents a discrete implementati
 **Investigation acceptance_criteria:**
 
 For each study, pick the most important `expected_behavior` entry (the one that gates the next phase) and emit a `{study: <slug>, behavior: <name>}` pair in the investigation's `acceptance_criteria`.
+
+Because scaffolding happens **before any run**, this is exactly the moment to
+make each criterion a genuine acceptance criterion (see § Acceptance criteria
+above): phrase it as the plan's pre-stated directional prior, and where the plan
+or expert docs give order-of-magnitude literature values, emit them as external
+**anchors** (flagged as anchors, not calibration targets). Only numbers that
+appear explicitly in the plan — never invented precision.
 
 #### 4. Print preview tree
 

@@ -94,7 +94,9 @@ A study's **acceptance criteria live in the `behavior_tests:` list** in
 This is the load-bearing form: the evaluators, the report-card axes, the audit,
 and the Tests tab all read it, and it's what studies actually use. **Author your
 criteria here** via the `/viva-study` Design/Evaluate subcommands — start here,
-not with the pytest directory below.
+not with the pytest directory below. Every entry carries a
+`gate_class: regression_pin | acceptance_criterion` (see § Born-rigorous
+defaults below for the classification rule).
 
 For **graded report-card tests** — axes with a signed `margin` (distance-to-pass),
 `severity`, cited acceptance bands, and a cross-iteration diff (the agent-feedback
@@ -160,6 +162,79 @@ Picking the strict reading and recording a FAIL when the aggregate passes wastes
 a review round (and often a confirmatory sweep). See
 [handling-investigation-feedback.md#acceptance-criteria](../../docs/conventions/handling-investigation-feedback.md)
 for the full rationale and the signals that the aggregate is intended.
+
+## Born-rigorous defaults (review-derived) — gate_class · units_and_time · preregistered
+
+External peer review of finished investigations keeps finding the same avoidable
+failure modes. Scaffold the following at **Design** time so every new study is
+born compliant instead of hardened retroactively — the rigor scorecard and the
+report linter now enforce each one (see
+[`docs/conventions/rigor-checklist.md`](../../docs/conventions/rigor-checklist.md)),
+and `/viva-harden-investigation`'s reviewer lens hunts for their absence.
+
+**1. `gate_class` on every behavior_test.** When scaffolding `behavior_tests[]`,
+prompt for and emit `gate_class: regression_pin | acceptance_criterion` on each
+entry. The classification is about WHEN the threshold was stated, not how strict
+it is: a threshold set **after** seeing the run is a **`regression_pin`** — it
+locks in observed behavior so it can't silently drift (valuable!), but it is
+not evidence the behavior is *right*; a directional prior stated **before** the
+run is an **`acceptance_criterion`** — the only kind that can confirm or refute.
+Never let a pin masquerade as acceptance: the verdict counts split the two, and
+an unclassified gate is a lint finding.
+
+**2. `units_and_time:` block.** Declare what a tick maps to and the units of
+every field/quantity — or state `dimensionless model units` explicitly. A
+physical unit label (µm, mM, minutes) that no calibration earns is decorative
+and gets linted; honest dimensionless units beat borrowed physical ones.
+
+```yaml
+units_and_time:
+  tick: "1 MCS, no physical time calibration"     # or e.g. "1 tick = 1 s (calibrated to X)"
+  quantities:
+    volume: "lattice sites (dimensionless)"
+    concentration: "model units (uncalibrated)"
+```
+
+**3. `preregistered:` block.** For every acceptance_criterion, declare the
+threshold/prior BEFORE the runs land, and record when:
+
+```yaml
+preregistered:
+  declared_before_runs: true
+  date: '<YYYY-MM-DD>'
+  criteria:
+    - test: <behavior-test-name>
+      prior: "raising J_ab above J_aa should monotonically increase the sorting index"
+```
+
+`viva_superpowers.study_verdict.preregistration_status()` reads this block; a
+threshold that first appears in the same commit as the run it grades is
+post-hoc by construction — record it as a `regression_pin` instead.
+
+**4. SEED every stochastic process.** Give every stochastic process an explicit
+seed in its config, and verify every config key actually reaches its process
+(a silently-dropped key is linted via `config_consumption`; an unseeded process
+is linted via `stochastic_unseeded`). An unseeded process makes every replicate
+claim unverifiable.
+
+**5. Plan the design for the claim class** — declare these at Design, before any
+run, not as a post-hoc patch:
+
+- **Causal/directional claim from a stochastic contrast** → plan **n ≥ 20
+  replicates per arm**, a **rank test** (e.g. Mann-Whitney) on the ensemble, and
+  a **drift-null control** (the same statistic with the mechanism removed), and
+  gate the behavior_test on the **ensemble statistic** — never on a flagship
+  seed. (The ≥3-seed `robustness:` floor is smoke-level replication; it does not
+  power a causal claim.)
+- **Substitutability / surrogate claim** ("X can stand in for Y") → plan a
+  **held-out condition**: tune on one condition, grade on another the surrogate
+  never saw, and report the surrogate's **degrees of freedom vs the constraints
+  it was fit to**. A surrogate tuned and graded on the same condition
+  demonstrates curve-fitting, not substitutability (see `/viva-tests` § Gate
+  discipline).
+- **Representation conversion** (e.g. lattice → particles) → plan a
+  **conservation ledger**: tally the conserved quantities (mass, volume, count)
+  on both sides of the conversion, with the loss bounded and reported.
 
 ## Cross-study dependencies (parent_studies)
 
@@ -284,7 +359,8 @@ In short, ensure the study declares:
 - **tiered findings** — each finding `tier: observation|mechanism|interpretation`, with `mechanism_origin: engineered|emergent` on interpretation claims;
 - **falsifiability** — a `falsifiability:` note (what result would overturn the claim);
 - **limitations** — what this does NOT show;
-- **discovery_implications** — resolved/remaining uncertainties + `followup_study_proposals` (each with a real `motivation`, not just a title).
+- **discovery_implications** — resolved/remaining uncertainties + `followup_study_proposals` (each with a real `motivation`, not just a title);
+- **review-derived defaults** — `gate_class` per behavior_test, a `units_and_time:` block, and a `preregistered:` block for acceptance criteria (see § Born-rigorous defaults above; these feed the scorecard's pre-registration and threshold-provenance dimensions).
 
 At the investigation level, ensure `competing_frameworks:` is set and at least
 one member study is `kind: adversarial` (a system that should NOT qualify; the

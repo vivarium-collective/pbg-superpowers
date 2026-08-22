@@ -298,6 +298,33 @@ curl -s -X POST -H "Content-Type: application/json" -d '{"force": true}' "$URL/a
 
 `{"force": true}` makes `POST /api/render` log every currently-blocking (error-level, not-yet-overridden) `report-lint` finding to `.pbg/report-lint-overrides.json` server-side, then render — the skill never writes the override file itself. `{"ok": true}` at HTTP 200 on success; `{"error": "<str>"}` at HTTP 500 on a render failure (per-model rendering catches `build_core()` failures internally rather than aborting the whole render).
 
+## What the rendered report now splits — author toward it
+
+The rendered tests/verdict section no longer shows one undifferentiated pass
+count. It splits four populations, so author studies with the fields that feed
+the split (see [pbg-study → Born-rigorous defaults](../viva-study/SKILL.md)):
+
+- **Committed pytests** — the study's `tests/` suite results (executable
+  invariants).
+- **`gate_class: regression_pin`** — post-run pins that lock observed behavior
+  against drift. Rendered separately and **never counted as acceptance
+  evidence**.
+- **`gate_class: acceptance_criterion`** — pre-stated priors from the study's
+  `preregistered:` block; the only rows that count toward "the model behaves as
+  predicted".
+- **Expected-fail controls** — adversarial / drift-null entries that PASS by
+  failing.
+
+A behavior_test with no `gate_class` renders unclassified and is a lint
+finding — classify it at the source rather than forcing past it. The report
+also renders a **provenance / environment block** per study (environment
+fingerprint, seeds, run ids, and the `units_and_time:` declaration); a study
+missing those fields shows the hole to every reviewer. When drafting or
+auditing verdict prose (Pass A), keep the populations honest: a verdict line
+whose evidence is all pins should say "pinned, not validated", and a headline
+number from a stochastic ensemble should quote the band across seeds, not the
+best seed.
+
 ## Before sending to a reviewer — verify the rendered artifact
 
 A clean lint + a successful render does **not** mean the report reads correctly.
