@@ -3,6 +3,8 @@
 The canonical concepts pbg-superpowers reads, writes, and orchestrates in a vivarium-workbench workspace. This document is the source of truth for vocabulary, on-disk shape, and the API surface that maps each concept to skill commands.
 
 > **Companion repo:** [vivarium-workbench](https://github.com/vivarium-collective/vivarium-workbench). pbg-superpowers requires its server to be running for any skill that mutates dashboard state.
+>
+> **Companion doc:** [`composites-templates-and-the-study-investigation-stack.md`](composites-templates-and-the-study-investigation-stack.md) — the conceptual bridge from these YAML shapes *down* to the process-bigraph substrate: what a composite is, what a **template** (a composite document with open **sites**/holes) looks like, and how studies and investigations use it (including investigation-as-composite).
 
 ## At a glance
 
