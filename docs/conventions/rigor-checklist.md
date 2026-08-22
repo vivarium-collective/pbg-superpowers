@@ -31,6 +31,19 @@ feedback — but a finished study should address every dimension or say why not.
 | **Limitations** | `limitations:` / `does_not_show:` (or `discovery_implications.remaining_uncertainties`) | What this result does NOT show — model scope/fidelity, what's out of frame. |
 | **Next steps** | `discovery_implications` (with `followup_study_proposals`) or `follow_up_studies` | The Decide-phase synthesis: resolved/remaining uncertainties, alternate hypotheses, and concrete follow-up study proposals (each `{id, title, motivation}` — give real motivation, not just a title). |
 
+## Conditional rigor dimensions (appended only when the claim class applies)
+
+These dimensions come from external peer review (G2/G3/G6) and are appended to
+the scorecard **only for the claim class they police** — a deterministic,
+non-causal, non-converting study never sees them. When they do apply, a missing
+field is a `gap` — that is the feedback.
+
+| Dimension | Applies when | Field(s) to declare | How to satisfy |
+|---|---|---|---|
+| **Statistical power (causal stochastic claims)** (G2) | A finding is causal/directional (`claim_type: causal\|directional`, or `tier: interpretation` with a declared `arms:`/`contrast:`) AND the study is stochastic (seeds/`stochastic: true`) | `statistics: {test, p_value, effect_size, n_per_arm, gate_on: ensemble}` + a drift-null control (`controls[].kind: null` or `statistics.null_arm`) | The ≥3-seed replication floor is NOT statistical power. A causal contrast between stochastic arms needs **n≥20 replicates per arm**, a declared rank/nonparametric test with a p-value (and effect size), a **drift-null / no-effect control arm**, and the pass/fail gate on the **ensemble statistic** — never a single flagship seed (`gate_on: flagship_seed` is a `gap`). |
+| **Held-out generalization** (G3) | The study makes a substitutability / equivalence / "same interface, different mechanism" / surrogate claim (`claim_type: substitutability\|equivalence\|surrogate`, or clear finding text) | `held_out: {train: [...], test: [...]}` (aliases `generalization` / `train_test`) + `degrees_of_freedom: {free_parameters, matched_observables}` | Evaluate the surrogate on a **held-out condition it was NOT tuned on** (test ≠ train). Agreement only on the tuned condition is *surrogate calibration, not yet mechanism-independence* (`warn`). Also state degrees of freedom vs constraints — how many free parameters were fit vs how many observables were matched. |
+| **Conservation ledger** (G6) | The study converts a conserved quantity between representations (e.g. lattice pixels → particles, field mass → flux) — declared via `representation_conversion` or clearly described in a finding | `representation_conversion: {from, to, quantity, ledger: {test, result: PASS}}` (list form `representation_conversions:` for several; study-level `conservation_ledger:` also read) | Declare each conversion and back it with a **ledger check** — a test asserting the quantity is conserved (not manufactured or lost) across the conversion, with a recorded passing result. A named-but-unrun ledger is a `warn`; no ledger is a `gap`. |
+
 ## Investigation-level dimensions (5)
 
 | Dimension | What to do |

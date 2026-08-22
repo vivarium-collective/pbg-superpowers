@@ -592,6 +592,22 @@ CHECKS = (
     "generality_level_unknown",
     "lifecycle_state_unknown",
     "lifecycle_state_below_floor",
+    # Peer-review rigor (framework-rigor design G1/G4/G5):
+    # G1-lint — every behavior_tests[] entry declares its gate_class
+    # (regression_pin | acceptance_criterion); never inferred by the linter.
+    "gate_class_missing",
+    "gate_class_unknown",
+    # G4a — structural config-consumption audit: supplied composite config
+    # keys must be accepted by the process's declared config_schema (unknown
+    # keys are silently dropped by bigraph-schema fill — the mut_sigma: 0.0
+    # disease). Static ast analysis only; no instantiation.
+    "config_consumption",
+    # G4b — seed-all-stochastic: a stochastic composite process (declared
+    # flag / known-stochastic name / RNG source signal) must pin a seed.
+    "stochastic_unseeded",
+    # G5 — physical unit labels in claim/finding text require a
+    # units_and_time declaration; otherwise they are decorative (WARN).
+    "unearned_unit_labels",
 )
 
 
@@ -2915,6 +2931,485 @@ def _check_renders_via_dashboard(ctx: _LintContext) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Peer-review rigor checks (framework-rigor: G1 gate_class, G4 config
+# consumption + seed-all-stochastic, G5 units/time declared)
+# ---------------------------------------------------------------------------
+
+
+# G1 — the canonical per-behavior_test gate classification (design doc:
+# "CANONICAL FIELD NAME … `gate_class` on each behavior_test").
+_GATE_CLASSES = ("regression_pin", "acceptance_criterion")
+
+
+def _check_gate_class_declared(ctx: _LintContext) -> None:
+    """G1-lint: every ``behavior_tests[]`` entry should DECLARE its
+    ``gate_class`` — ``regression_pin`` (a threshold set after seeing the run;
+    pins are never counted as acceptance evidence) or ``acceptance_criterion``
+    (a pre-stated directional prior committed before the run).
+
+    The linter never infers the classification — only the author knows whether
+    the threshold predated the run — it requires it be declared:
+
+    - entry carries a machine-readable gate (a ``pass_if`` block or a numeric
+      band per ``band_provenance.has_numeric_band``) and no ``gate_class``
+      → WARNING (the verdict counts split on this field; an unclassified gate
+      silently inflates the acceptance count).
+    - descriptive-only entry (no machine-readable gate yet) and no
+      ``gate_class`` → INFO (classify when the gate is authored).
+    - ``gate_class`` set to a value outside the enum → WARNING.
+    """
+    tests = ctx.spec.get("behavior_tests") or []
+    if not isinstance(tests, list):
+        return
+    for idx, t in enumerate(tests):
+        if not isinstance(t, dict):
+            continue
+        name = t.get("name", f"<index-{idx}>")
+        gc = t.get("gate_class")
+        if isinstance(gc, str) and gc.strip():
+            if gc.strip() not in _GATE_CLASSES:
+                ctx.add(
+                    level="warning",
+                    field_path=f"behavior_tests[{idx}].gate_class",
+                    message=(
+                        f"behavior_test {name!r} declares gate_class {gc.strip()!r}, "
+                        f"which is not a recognised value. Expected one of "
+                        f"{list(_GATE_CLASSES)}."
+                    ),
+                    check="gate_class_unknown",
+                )
+            continue
+        carries_gate = isinstance(t.get("pass_if"), dict) or _is_numeric_band(t)
+        ctx.add(
+            level="warning" if carries_gate else "info",
+            field_path=f"behavior_tests[{idx}].gate_class",
+            message=(
+                f"behavior_test {name!r} has no gate_class. Declare "
+                "`gate_class: regression_pin | acceptance_criterion` — a "
+                "threshold set AFTER seeing the run is a regression_pin (it "
+                "pins current behavior and is never counted as acceptance "
+                "evidence); a pre-stated directional prior committed BEFORE "
+                "the run is an acceptance_criterion. The linter does not "
+                "infer this — only the author knows whether the threshold "
+                "predated the run."
+            ),
+            check="gate_class_missing",
+        )
+
+
+# --- G4 shared machinery: static composite + process-class analysis ---------
+#
+# LIMITATION (stated up front): the reference implementation of the config-
+# consumption audit (meta-modelers-guide tests/test_config_consumption.py)
+# INSTANTIATES each process and compares the effective config to the supplied
+# one, which also catches bigraph-schema's value-clobbering disease (a pinned
+# Float 0.0 refilled from the schema _default — the `mut_sigma: 0.0` bug).
+# The linter deliberately never imports or executes arbitrary workspace code
+# (same contract as _check_visualization_addresses), so the checks below are a
+# LIGHTER, STRUCTURAL version: they parse composite spec files and process
+# class sources with `ast` only. They catch supplied config KEYS that no
+# declared `config_schema` accepts (silently dropped by bigraph-schema fill),
+# but CANNOT catch a schema-declared key whose VALUE is clobbered at
+# instantiation time — that stronger guarantee belongs in a workspace test
+# modeled on the reference implementation.
+
+_SOURCE_SCAN_SKIP = frozenset({
+    "__pycache__", "node_modules", "out", "outputs", "reports",
+    "datasets", "references", "tests",
+})
+
+_RNG_SIGNAL_RE = re.compile(
+    r"default_rng\s*\(|np\.random\.|numpy\.random\.|RandomState\s*\(|"
+    r"random\.(?:random|randint|choice|gauss|normalvariate|normal|uniform|"
+    r"sample|shuffle|poisson|exponential)\s*\("
+)
+
+_STOCHASTIC_NAME_RE = re.compile(
+    r"(stochastic|gillespie|monte_?carlo|langevin|brownian|random_?walk|ssa\b)",
+    re.IGNORECASE,
+)
+
+_SEED_CONFIG_KEYS = frozenset({"seed", "random_seed", "rng_seed", "random_state"})
+
+
+def _workspace_process_class_index(ws_root: Path) -> dict:
+    """Statically index every class defined under the workspace's Python
+    package directories: ``{class_name: {"schema_keys": set|None,
+    "rng_signal": bool, "file": str}}``.
+
+    ``schema_keys`` is the set of top-level keys of a NON-EMPTY literal-dict
+    ``config_schema`` class attribute; ``None`` when the class has no
+    ``config_schema``, an empty one, or builds it dynamically (merge/call) —
+    in all of which cases the consumption check conservatively skips the
+    class rather than guessing. ``rng_signal`` is a source-text randomness
+    signal used by the seed-all-stochastic check. Pure ``ast`` analysis —
+    no workspace code is imported or executed.
+    """
+    import ast as _ast
+
+    index: dict = {}
+    try:
+        children = [c for c in ws_root.iterdir()
+                    if c.is_dir() and not c.name.startswith(".")]
+    except OSError:
+        return index
+    pkg_dirs = [c for c in children
+                if (c / "__init__.py").is_file() and c.name not in _SOURCE_SCAN_SKIP]
+    for pkg in pkg_dirs:
+        for py in pkg.rglob("*.py"):
+            rel_parts = py.relative_to(pkg).parts
+            if any(p in _SOURCE_SCAN_SKIP or p.startswith(".") for p in rel_parts):
+                continue
+            try:
+                src = py.read_text(encoding="utf-8")
+                tree = _ast.parse(src)
+            except (OSError, UnicodeDecodeError, SyntaxError):
+                continue
+            for node in _ast.walk(tree):
+                if not isinstance(node, _ast.ClassDef):
+                    continue
+                schema_keys = None
+                for stmt in node.body:
+                    if isinstance(stmt, _ast.Assign):
+                        targets = [t.id for t in stmt.targets
+                                   if isinstance(t, _ast.Name)]
+                        value = stmt.value
+                    elif isinstance(stmt, _ast.AnnAssign) and isinstance(
+                            stmt.target, _ast.Name):
+                        targets = [stmt.target.id]
+                        value = stmt.value
+                    else:
+                        continue
+                    if "config_schema" not in targets:
+                        continue
+                    if isinstance(value, _ast.Dict) and all(
+                        isinstance(k, _ast.Constant) and isinstance(k.value, str)
+                        for k in value.keys
+                    ):
+                        keys = {k.value for k in value.keys}
+                        schema_keys = keys or None  # empty literal → unknown
+                    break  # first config_schema statement decides
+                try:
+                    seg = _ast.get_source_segment(src, node) or ""
+                except Exception:  # noqa: BLE001
+                    seg = ""
+                index[node.name] = {
+                    "schema_keys": schema_keys,
+                    "rng_signal": bool(_RNG_SIGNAL_RE.search(seg)),
+                    "file": str(py),
+                }
+    return index
+
+
+_COMPOSITE_SPEC_EXTS = (
+    ".composite.yaml", ".composite.yml", ".composite.json",
+    ".yaml", ".yml", ".json",
+)
+
+
+def _composite_spec_dirs(ws_root: Path) -> list:
+    """Directories where composite spec files live: the workspace-level
+    ``composites/`` dir plus any ``<child>/composites/`` package dir."""
+    dirs: list = []
+    wp = WorkspacePaths.load(ws_root)
+    if wp.composites.is_dir():
+        dirs.append(wp.composites)
+    try:
+        children = list(ws_root.iterdir())
+    except OSError:
+        return dirs
+    for child in children:
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        d = child / "composites"
+        if d.is_dir() and d not in dirs:
+            dirs.append(d)
+    return dirs
+
+
+def _resolve_composite_file(ctx: _LintContext, ref: str):
+    """Best-effort resolution of a study composite reference to a spec FILE
+    on disk. Returns ``None`` when the ref doesn't resolve (a registry id,
+    a Python-defined composite, …) — the G4 checks stay silent for those
+    rather than guessing."""
+    ref = (ref or "").strip()
+    if ref.startswith("local:"):
+        ref = ref[len("local:"):]
+    if not ref:
+        return None
+    # 1. Literal path relative to the workspace root.
+    p = ctx.ws_root / ref
+    if p.suffix.lower() in {".json", ".yaml", ".yml"} and p.is_file():
+        return p
+    # 2. <composites-dir>/<stem><ext> for the plausible stems of the ref.
+    stems: list = []
+    for s in (ref, ref.rsplit("/", 1)[-1], ref.rsplit(".", 1)[-1]):
+        if s and s not in stems:
+            stems.append(s)
+    dirs = _cached(ctx, "composite_spec_dirs",
+                   lambda: _composite_spec_dirs(ctx.ws_root))
+    for d in dirs:
+        for stem in stems:
+            for ext in _COMPOSITE_SPEC_EXTS:
+                cand = d / f"{stem}{ext}"
+                if cand.is_file():
+                    return cand
+    # 3. Dotted module-ish ref (pkg.composites.x) → path with extensions.
+    if "." in ref and "/" not in ref:
+        rel = ref.replace(".", "/")
+        for ext in _COMPOSITE_SPEC_EXTS:
+            cand = ctx.ws_root / f"{rel}{ext}"
+            if cand.is_file():
+                return cand
+    return None
+
+
+def _composite_process_nodes(state, path: str = "state") -> list:
+    """Yield ``(node_path, address, config, node)`` for every process/step
+    node in a composite state tree (mirrors the reference audit's walker)."""
+    out: list = []
+    if isinstance(state, dict):
+        t = state.get("_type")
+        addr = state.get("address")
+        if isinstance(addr, str) and isinstance(t, str) and (
+                t.startswith("process") or t.startswith("step")):
+            out.append((path, addr, state.get("config") or {}, state))
+        for k, v in state.items():
+            out += _composite_process_nodes(v, f"{path}.{k}")
+    elif isinstance(state, list):
+        for i, v in enumerate(state):
+            out += _composite_process_nodes(v, f"{path}[{i}]")
+    return out
+
+
+def _composite_class_name(address: str) -> str:
+    """``local:!pkg.mod.Cls`` / ``local:Cls`` / ``pkg.mod.Cls`` → ``Cls``."""
+    data = address.split(":", 1)[-1].lstrip("!")
+    return data.rsplit(".", 1)[-1]
+
+
+def _study_composite_specs(ctx: _LintContext) -> list:
+    """The parsed composite spec files a study references, de-duplicated:
+    ``[(composite_name, spec_path, state_tree)]``. Unresolvable refs and
+    unparseable files are silently skipped (other checks own those)."""
+    out: list = []
+    seen: set = set()
+    for ref in _collect_composite_refs(ctx.spec):
+        f = _resolve_composite_file(ctx, ref)
+        if f is None or f in seen:
+            continue
+        seen.add(f)
+        try:
+            spec = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        if not isinstance(spec, dict):
+            continue
+        state = spec.get("state") if isinstance(spec.get("state"), dict) else spec
+        name = spec.get("name") if isinstance(spec.get("name"), str) else None
+        out.append((name or f.name, f, state))
+    return out
+
+
+def _check_config_consumption(ctx: _LintContext) -> None:
+    """G4a — config-consumption audit (structural). Every config key a
+    composite supplies to a process should be ACCEPTED by that process's
+    declared ``config_schema``; a key the schema doesn't declare is silently
+    dropped by bigraph-schema fill (the ``mut_sigma: 0.0`` disease — a
+    published parameter that never reaches the process).
+
+    Structural-only: composite specs and class ``config_schema`` literals are
+    compared via ``ast`` — no instantiation (see the LIMITATION note above:
+    value-level clobbering of a schema-declared key is out of this check's
+    reach and needs the workspace-level instantiation test). Conservative:
+    classes that aren't found in workspace source, or whose ``config_schema``
+    is absent/empty/dynamic, are skipped rather than guessed at. Warning per
+    (composite, process, dropped key).
+    """
+    if ctx.slug == "<workspace>":
+        return
+    composites = _study_composite_specs(ctx)
+    if not composites:
+        return
+    index = _cached(ctx, "process_class_index",
+                    lambda: _workspace_process_class_index(ctx.ws_root))
+    if not index:
+        return
+    for comp_name, _spec_path, state in composites:
+        for node_path, addr, config, _node in _composite_process_nodes(state):
+            if not isinstance(config, dict) or not config:
+                continue
+            cls = _composite_class_name(addr)
+            info = index.get(cls)
+            if not info or not info.get("schema_keys"):
+                continue  # unknown/dynamic schema → conservatively skip
+            schema_keys = info["schema_keys"]
+            for key in config:
+                if not isinstance(key, str) or key in schema_keys:
+                    continue
+                ctx.add(
+                    level="warning",
+                    field_path=f"composite:{comp_name}:{node_path}.config.{key}",
+                    message=(
+                        f"Composite {comp_name!r} supplies config key {key!r} "
+                        f"to process {cls!r} (at {node_path}), but the class's "
+                        f"declared config_schema does not accept it "
+                        f"(accepted: {sorted(schema_keys)}). bigraph-schema "
+                        "silently drops unknown config keys, so this published "
+                        "parameter never reaches the process. Fix the key name, "
+                        "add it to the process config_schema, or remove it. "
+                        "(Structural check — schema-declared keys whose VALUE "
+                        "is clobbered at instantiation, e.g. a pinned 0.0 "
+                        "refilled from the schema default, need the "
+                        "instantiation-level workspace test.)"
+                    ),
+                    check="config_consumption",
+                )
+
+
+def _config_declares_seed(config) -> bool:
+    """True when a process config carries a seed-ish key at any depth."""
+    if not isinstance(config, dict):
+        return False
+    for k, v in config.items():
+        if isinstance(k, str) and k.strip().lower() in _SEED_CONFIG_KEYS:
+            return True
+        if isinstance(v, dict) and _config_declares_seed(v):
+            return True
+    return False
+
+
+def _check_stochastic_unseeded(ctx: _LintContext) -> None:
+    """G4b — seed-all-stochastic. A composite process that draws randomness
+    must declare a seed in its config, or its runs are unreproducible and
+    seed-sweep claims are unfounded.
+
+    Conservative stochasticity detection (better to under-flag than
+    false-positive) — a process counts as stochastic only when:
+
+    - it declares ``stochastic: true`` on the node or in its config, OR
+    - its class name matches a known-stochastic pattern (Stochastic,
+      Gillespie, MonteCarlo, Langevin, Brownian, RandomWalk, SSA), OR
+    - its class source (statically located in the workspace package) shows
+      an RNG signal (``default_rng(``, ``np.random.``, ``random.choice(`` …).
+
+    Seeded = a ``seed`` / ``random_seed`` / ``rng_seed`` / ``random_state``
+    key anywhere in the supplied config. Warning per (composite, process).
+    """
+    if ctx.slug == "<workspace>":
+        return
+    composites = _study_composite_specs(ctx)
+    if not composites:
+        return
+    index = _cached(ctx, "process_class_index",
+                    lambda: _workspace_process_class_index(ctx.ws_root))
+    for comp_name, _spec_path, state in composites:
+        for node_path, addr, config, node in _composite_process_nodes(state):
+            cls = _composite_class_name(addr)
+            declared = (
+                node.get("stochastic") is True
+                or (isinstance(config, dict) and config.get("stochastic") is True)
+            )
+            name_signal = bool(_STOCHASTIC_NAME_RE.search(cls))
+            info = index.get(cls) or {}
+            rng_signal = bool(info.get("rng_signal"))
+            if not (declared or name_signal or rng_signal):
+                continue
+            if _config_declares_seed(config):
+                continue
+            how = (
+                "declares stochastic: true" if declared
+                else "has a stochastic-sounding class name" if name_signal
+                else "shows an RNG signal in its source"
+            )
+            ctx.add(
+                level="warning",
+                field_path=f"composite:{comp_name}:{node_path}.config.seed",
+                message=(
+                    f"Composite {comp_name!r} process {cls!r} (at {node_path}) "
+                    f"{how} but its config declares no seed "
+                    f"(none of {sorted(_SEED_CONFIG_KEYS)}). Unseeded "
+                    "stochastic processes make runs unreproducible and "
+                    "seed-sweep claims unfounded — pin a seed in the "
+                    "composite config (and sweep it explicitly for "
+                    "replication)."
+                ),
+                check="stochastic_unseeded",
+            )
+
+
+# --- G5 — units/time declared; no unearned physical unit labels -------------
+
+
+# A physical-unit label only counts when it follows a number ("4.2 mM",
+# "30 seconds"), which keeps prose like "the mM scale" or the word "um" from
+# false-positiving. Longest alternatives first so "minutes" wins over "min".
+_PHYSICAL_UNIT_RE = re.compile(
+    r"(?<![\w.])\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\s*"
+    r"(mmol/gDW/hr|mmol/gDW/h|mmol/L|mol/L|mM|µM|μM|uM|nM|pM|"
+    r"µm|μm|um|nm|"
+    r"seconds|second|minutes|minute|hours|hour|hrs|hr|min|ms)"
+    r"(?![\w/])"
+)
+
+
+def _check_unearned_unit_labels(ctx: _LintContext) -> None:
+    """G5 — units/time declared, or no physical unit labels in claims.
+
+    A study whose findings / conclusions print physical unit labels (mM,
+    mmol/gDW/hr, µm, seconds, …) implicitly claims a calibrated mapping from
+    simulation ticks and arbitrary field values to physical quantities. That
+    mapping must be DECLARED in a ``units_and_time`` block (what a tick maps
+    to; what unit each field/quantity carries) — otherwise the labels are
+    decorative and overstate the model's calibration.
+
+    Fires ONE aggregated WARNING per study when claim/finding text
+    (``findings[]`` and ``conclusion_logic`` strings) contains
+    number-followed-by-unit labels and the spec has no non-empty
+    ``units_and_time`` block. Silent when the block exists (its quality is
+    the author's/reviewer's job, not the linter's) or when no unit labels
+    appear. Warning, not an error — decorative units are an overclaim
+    symptom, not a schema violation.
+    """
+    if ctx.slug == "<workspace>":
+        return
+    if _is_nonempty(ctx.spec.get("units_and_time")):
+        return
+    offenders: list = []
+    findings = ctx.spec.get("findings") or []
+    if isinstance(findings, list):
+        for idx, f in enumerate(findings):
+            for path, value in _walk_strings(f, prefix=f"findings[{idx}]"):
+                m = _PHYSICAL_UNIT_RE.search(value)
+                if m:
+                    offenders.append((path, m.group(1)))
+    cl = ctx.spec.get("conclusion_logic")
+    if cl:
+        for path, value in _walk_strings(cl, prefix="conclusion_logic"):
+            m = _PHYSICAL_UNIT_RE.search(value)
+            if m:
+                offenders.append((path, m.group(1)))
+    if not offenders:
+        return
+    shown = ", ".join(f"{p} ({u!r})" for p, u in offenders[:4])
+    more = f" (+{len(offenders) - 4} more)" if len(offenders) > 4 else ""
+    ctx.add(
+        level="warning",
+        field_path="units_and_time",
+        message=(
+            f"Study prints physical unit labels in claim/finding text — "
+            f"{shown}{more} — but declares no `units_and_time` block. A "
+            "physical unit implies a calibrated tick→time and value→quantity "
+            "mapping; without the declaration the labels are decorative and "
+            "overstate calibration. Either add `units_and_time:` (what one "
+            "tick maps to; the unit each field/quantity carries, with the "
+            "calibration source) or strip the unit labels from the claims."
+        ),
+        check="unearned_unit_labels",
+    )
+
+
 _CHECK_FUNCTIONS = (
     _check_renders_via_dashboard,
     _check_incomplete_summaries,
@@ -2963,6 +3458,12 @@ _CHECK_FUNCTIONS = (
     _check_finding_scope_generality_lifecycle,
     # Hedged verdict: a passed study whose conclusion hedges ("should"/"likely")
     _check_hedged_verdict_when_passed,
+    # Peer-review rigor (framework-rigor): G1 gate_class declared, G4a config
+    # consumption (structural), G4b seed-all-stochastic, G5 units/time declared
+    _check_gate_class_declared,
+    _check_config_consumption,
+    _check_stochastic_unseeded,
+    _check_unearned_unit_labels,
 )
 
 
