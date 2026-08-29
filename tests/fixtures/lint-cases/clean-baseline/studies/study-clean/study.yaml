@@ -21,6 +21,10 @@ visualizations:
 conditions:
   baseline:
     composite: pkg.composites.x
+    params:
+      seed: 0
+      initiation_rate: 0.02
+      dnaa_atp_fraction: 0.7
   variants:
     - name: reference
       description: "Reference variant with published parameters."

@@ -608,6 +608,12 @@ CHECKS = (
     # G5 — physical unit labels in claim/finding text require a
     # units_and_time declaration; otherwise they are decorative (WARN).
     "unearned_unit_labels",
+    # Reproducibility — the effective baseline run-config (composite defaults
+    # ⊕ config_file ⊕ inline params, plus the separate runtime: surface) must
+    # add SOMETHING beyond composite defaults / a bare {seed, cache_dir}.
+    # Otherwise the workbench viewer shows composite defaults, not a
+    # reproducible spec, and a Run won't reproduce the study.
+    "baseline_config_carry",
 )
 
 
@@ -3410,6 +3416,133 @@ def _check_unearned_unit_labels(ctx: _LintContext) -> None:
     )
 
 
+# --- Reproducibility — baseline carries a real run-config -------------------
+
+# Keys that do NOT count as a reproducible run-config on their own. A baseline
+# whose params carry only these (or nothing) is indistinguishable from
+# composite defaults: {seed, cache_dir} pin reproducibility plumbing but not
+# the scientific configuration the viewer/Run needs to reconstruct the study.
+_BARE_BASELINE_PARAM_KEYS = frozenset({"seed", "cache_dir"})
+
+
+def _read_baseline_condition(spec: dict) -> dict | None:
+    """The effective baseline condition dict, or ``None`` when absent.
+
+    Mirrors how ``_check_missing_baseline`` reads the baseline: prefer the v4
+    ``conditions.baseline`` mapping, fall back to the first entry of the legacy
+    v3 ``baseline[]`` list. Returns ``None`` when neither is present (the
+    ``missing_baseline`` check owns that gap).
+    """
+    conditions = spec.get("conditions") or {}
+    cond_baseline = conditions.get("baseline") if isinstance(conditions, dict) else None
+    if isinstance(cond_baseline, dict) and cond_baseline:
+        return cond_baseline
+    baseline = spec.get("baseline")
+    if isinstance(baseline, list) and baseline and isinstance(baseline[0], dict):
+        return baseline[0]
+    return None
+
+
+def _baseline_params_are_rich(params) -> bool:
+    """True when inline params add something beyond a bare {seed, cache_dir}."""
+    if not isinstance(params, dict) or not params:
+        return False
+    for key, value in params.items():
+        if isinstance(key, str) and key.strip().lower() in _BARE_BASELINE_PARAM_KEYS:
+            continue
+        if _is_nonempty(value):
+            return True
+    return False
+
+
+def _resolve_baseline_config_file(ctx: _LintContext, config_file) -> Path | None:
+    """Resolve a baseline ``config_file`` the way the workbench load_spec does.
+
+    Absolute path used as-is; otherwise tried study-dir-relative then
+    workspace-root-relative. Returns the first candidate that is an existing
+    file, or ``None`` (unset / unresolvable).
+    """
+    if not isinstance(config_file, str) or not config_file.strip():
+        return None
+    raw = config_file.strip()
+    p = Path(raw)
+    if p.is_absolute():
+        candidates = [p]
+    else:
+        try:
+            study_dir = WorkspacePaths.load(ctx.ws_root).studies / ctx.slug
+        except Exception:  # noqa: BLE001 — tolerate a missing workspace.yaml
+            study_dir = ctx.ws_root / "studies" / ctx.slug
+        candidates = [study_dir / raw, ctx.ws_root / raw]
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
+def _runtime_carries_run_config(runtime) -> bool:
+    """True when the separate ``runtime:`` surface pins a real run-config.
+
+    ``runtime:`` (emitter, generation count, post-run scripts) is read by the
+    runner INDEPENDENTLY of baseline params, so a study that carries its
+    run-config there is reproducible even with bare params — it must not be
+    falsely flagged as bare.
+    """
+    if not isinstance(runtime, dict):
+        return False
+    for key in (
+        "max_generations", "n_generations", "generations",
+        "emitter", "default_emitter", "post_run_scripts",
+        "subprocess_timeout_s",
+    ):
+        if _is_nonempty(runtime.get(key)):
+            return True
+    return False
+
+
+def _check_baseline_config_carry(ctx: _LintContext) -> None:
+    """Reproducibility — the baseline must resolve to a real run-config.
+
+    The workbench viewer/Run reconstructs a study from the EFFECTIVE baseline
+    params: composite defaults ⊕ ``conditions.baseline.config_file`` ⊕ inline
+    ``conditions.baseline.params`` (config_file resolved absolute →
+    study-dir-relative → workspace-root-relative). When that resolution adds
+    NOTHING beyond composite defaults / a bare ``{seed, cache_dir}`` — no rich
+    inline params, no resolvable config_file — AND the separate ``runtime:``
+    surface (emitter, generation count) carries no run-config either, the
+    viewer shows composite defaults rather than a reproducible spec, and a Run
+    will not reproduce the study.
+
+    Silent when there is no baseline at all (``missing_baseline`` owns that).
+    Handles the v4 ``conditions.baseline`` mapping and the legacy ``baseline[]``
+    list shape (mirrors ``_check_missing_baseline``).
+    """
+    if ctx.slug == "<workspace>":
+        return
+    cond = _read_baseline_condition(ctx.spec)
+    if cond is None:
+        return  # no baseline declared — missing_baseline handles that gap
+    if _baseline_params_are_rich(cond.get("params")):
+        return
+    if _resolve_baseline_config_file(ctx, cond.get("config_file")) is not None:
+        return
+    if _runtime_carries_run_config(ctx.spec.get("runtime")):
+        return
+    ctx.add(
+        level=_completeness_level(ctx.spec, warn_at="Build"),
+        field_path="conditions.baseline",
+        message=(
+            "the viewer shows composite defaults, not a reproducible spec; "
+            "Run will not reproduce this study — add "
+            "conditions.baseline.config_file or fill conditions.baseline.params"
+        ),
+        check="baseline_config_carry",
+    )
+
+
 _CHECK_FUNCTIONS = (
     _check_renders_via_dashboard,
     _check_incomplete_summaries,
@@ -3464,6 +3597,9 @@ _CHECK_FUNCTIONS = (
     _check_config_consumption,
     _check_stochastic_unseeded,
     _check_unearned_unit_labels,
+    # Reproducibility — baseline must resolve to a real run-config (not bare
+    # composite defaults / {seed, cache_dir}); config_file ⊕ params ⊕ runtime.
+    _check_baseline_config_carry,
 )
 
 
