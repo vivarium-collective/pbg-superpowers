@@ -32,7 +32,7 @@ import yaml
 _VIVA_CORE = {
     "viva-catalog", "viva-expert",
     "viva-init", "viva-investigation", "viva-navigate",
-    "viva-report", "viva-run", "viva-study", "viva-tests",
+    "viva-remote-run", "viva-report", "viva-run", "viva-study", "viva-tests",
     "viva-viz", "viva-workbench", "viva-workspace",
 }
 _VIVA_EXTRA = {"viva-harden-investigation", "viva-model-build", "viva-benchmark"}
