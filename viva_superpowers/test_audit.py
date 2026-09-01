@@ -193,66 +193,128 @@ def _axis(axis_id, label, ok: bool, severity, detail):
                  verdict=verdict, detail=detail)
 
 
+def _na_axis(axis_id, label, severity, reason):
+    """An axis that CANNOT be assessed (nothing to check) — reported as
+    ``ungraded`` (renders 'not assessable', gray), NOT a pass. This is the
+    honesty fix: a study with no tests must not earn green ``within_tol`` on a
+    sufficiency check just because the empty test set produced no violations."""
+    return check(axis_id, label, None, value(1.0, op=">="),
+                 severity=severity, verdict="ungraded", detail={"reason": reason})
+
+
+def _band_test_count(spec: dict) -> int:
+    """Tests carrying a quantitative ``pass_if`` (a low/high band, a threshold,
+    or an op+value comparator) — i.e. a claim that CAN carry provenance. Broader
+    than low/high alone so a one-sided threshold with provenance still makes the
+    provenance axis assessable."""
+    n = 0
+    for t in _tests(spec):
+        pi = t.get("pass_if") or {}
+        if any(isinstance(pi.get(k), (int, float))
+               for k in ("low", "high", "threshold", "value")):
+            n += 1
+    return n
+
+
 def build_audit_report(spec: dict) -> dict:
     spec = spec if isinstance(spec, dict) else {}
     comparison = is_comparison_study(spec)
+    tests = _tests(spec)
+    n_tests = len(tests)
     wide = band_too_wide(spec)
     loose = one_sided_loose_primary(spec)
     dupes = redundant_paths(spec)
     missing_prov = _bands_missing_provenance(spec)
-    # Coverage + the discriminator are computed differently for COMPARISON studies
-    # (graded against an external reference) than for model-building studies
-    # (mechanism bands + negative controls). The axis IDs stay stable so renderers
-    # don't branch; only the label/detail/computation change.
+    n_band_tests = _band_test_count(spec)
+
+    tb = TestBuilder(model_ref=str(spec.get("name") or ""))
+
+    # --- Discrimination (hard) — only assessable if there are tests to grade.
+    if n_tests == 0:
+        tb.add("sufficiency", _na_axis(
+            "discrimination", "Discrimination (bands not trivially wide)", "hard",
+            "no tests declared — the test set can't be audited for rigor"))
+    else:
+        disc_verdict = "mismatch" if wide else ("drift" if loose else "within_tol")
+        tb.add("sufficiency", check(
+            "discrimination", "Discrimination (bands not trivially wide)", None,
+            value(1.0, op=">="), severity="hard", verdict=disc_verdict,
+            detail={"wide_bands": wide, "one_sided_loose_primary": loose,
+                    "n_tests": n_tests}))
+
+    # --- Objective coverage (hard) — needs a declared objective to grade against.
     if comparison:
+        axes_declared = comparison_axes(spec)
         uncovered = uncovered_comparison_axes(spec)
         cov_label = "Comparison coverage (each compared card tested)"
         cov_detail = {"uncovered_cards": uncovered}
-        control_ok = has_comparison_reference(spec)
-        control_label = "Reference standard present (the comparison discriminator)"
+        cov_assessable = bool(axes_declared)
+        cov_na_reason = "no comparison axes declared — coverage not assessable"
     else:
+        mechs = objective_mechanisms(spec)
         uncovered = uncovered_mechanisms(spec)
         cov_label = "Objective coverage (mechanisms tested)"
-        cov_detail = {"uncovered_mechanisms": uncovered}
-        control_ok = has_discriminating_control(spec)
-        control_label = "Discriminating control present"
-    # Discrimination is 3-state, not the boolean-axis pattern: mismatch (hard)
-    # if any band is outright too wide; else drift (soft signal on a hard axis,
-    # which audit_gate turns into an overall "warn" — lockable but flagged, not
-    # a silent pass) if any primary test has an unverifiable one-sided
-    # threshold; else within_tol.
-    if wide:
-        disc_verdict = "mismatch"
-    elif loose:
-        disc_verdict = "drift"
+        cov_detail = {"declared_mechanisms": mechs, "uncovered_mechanisms": uncovered}
+        cov_assessable = bool(mechs)
+        cov_na_reason = ("no mechanisms named in question / purpose.mechanism / "
+                         "study_card — coverage not assessable")
+    if not cov_assessable:
+        tb.add("sufficiency", _na_axis("objective_coverage", cov_label, "hard", cov_na_reason))
     else:
-        disc_verdict = "within_tol"
-    tb = TestBuilder(model_ref=str(spec.get("name") or ""))
-    tb.add("sufficiency", check(
-        "discrimination", "Discrimination (bands not trivially wide)", None,
-        value(1.0, op=">="), severity="hard", verdict=disc_verdict,
-        detail={"wide_bands": wide, "one_sided_loose_primary": loose}))
-    tb.add("sufficiency", _axis(
-        "objective_coverage", cov_label, not uncovered, "hard", cov_detail))
-    tb.add("sufficiency", _axis(
-        "redundancy", "Independence (tests on distinct observables)",
-        not dupes, "soft", {"shared_paths": dupes}))
-    tb.add("sufficiency", _axis(
-        "discriminating_control", control_label, control_ok, "soft",
-        {"comparison": comparison}))
-    tb.add("provenance", _axis(
-        "band_provenance", "Bands carry citation/provenance",
-        not missing_prov, "soft", {"missing": missing_prov}))
+        tb.add("sufficiency", _axis("objective_coverage", cov_label, not uncovered, "hard", cov_detail))
+
+    # --- Independence (soft) — needs ≥2 tests before redundancy means anything.
+    if n_tests < 2:
+        tb.add("sufficiency", _na_axis(
+            "redundancy", "Independence (tests on distinct observables)", "soft",
+            "fewer than 2 tests — independence not assessable"))
+    else:
+        tb.add("sufficiency", _axis(
+            "redundancy", "Independence (tests on distinct observables)",
+            not dupes, "soft", {"shared_paths": dupes}))
+
+    # --- Discriminating control (soft) — only meaningful if tests exist.
+    control_ok = has_comparison_reference(spec) if comparison else has_discriminating_control(spec)
+    control_label = ("Reference standard present (the comparison discriminator)"
+                     if comparison else "Discriminating control present")
+    if n_tests == 0 and not comparison:
+        tb.add("sufficiency", _na_axis(
+            "discriminating_control", control_label, "soft",
+            "no tests declared — no control to audit"))
+    else:
+        tb.add("sufficiency", _axis(
+            "discriminating_control", control_label, control_ok, "soft",
+            {"comparison": comparison}))
+
+    # --- Band provenance (soft) — only bands can carry (or lack) provenance.
+    if n_band_tests == 0:
+        tb.add("provenance", _na_axis(
+            "band_provenance", "Bands carry citation/provenance", "soft",
+            "no numeric-band tests — provenance not assessable"))
+    else:
+        tb.add("provenance", _axis(
+            "band_provenance", "Bands carry citation/provenance",
+            not missing_prov, "soft", {"missing": missing_prov}))
     return tb.build()
 
 
 def audit_gate(report: dict) -> str:
-    hard_mismatch = soft_issue = False
+    """Overall audit verdict. ``fail`` on a hard mismatch; ``warn`` on a soft
+    issue; ``incomplete`` when the audit had nothing to assess (all axes
+    ungraded — e.g. a study with no tests, which must NOT read as a clean pass);
+    ``pass`` only when at least one axis was actually graded and none flagged."""
+    hard_mismatch = soft_issue = graded = False
     for g in (report.get("groups") or {}).values():
         for ax in g.get("axes") or []:
             v, sev = ax.get("verdict"), ax.get("severity", "hard")
+            if v in ("within_tol", "drift", "mismatch"):
+                graded = True
             if v == "mismatch" and sev == "hard":
                 hard_mismatch = True
             elif v in ("mismatch", "drift"):
                 soft_issue = True
-    return "fail" if hard_mismatch else ("warn" if soft_issue else "pass")
+    if hard_mismatch:
+        return "fail"
+    if soft_issue:
+        return "warn"
+    return "pass" if graded else "incomplete"
