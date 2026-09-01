@@ -186,3 +186,26 @@ def test_comparison_coverage_still_bites_on_an_untested_card():
     axes = {a["id"]: a for g in rep["groups"].values() for a in g["axes"]}
     assert axes["objective_coverage"]["verdict"] == "mismatch"        # hard → gate fail
     assert ta.audit_gate(rep) == "fail"
+
+
+def test_no_tests_is_not_a_vacuous_pass():
+    # A study with no tests must NOT earn green 'within_tol' on sufficiency
+    # checks — every axis is 'ungraded' (not assessable) and the gate is
+    # 'incomplete', not 'pass'.
+    spec = {"name": "diffusion-demo", "question": "how do particles spread"}
+    rep = ta.build_audit_report(spec)
+    axes = {a["id"]: a for g in rep["groups"].values() for a in g["axes"]}
+    assert all(ax["verdict"] == "ungraded" for ax in axes.values()), axes
+    for ax in axes.values():
+        assert (ax.get("detail") or {}).get("reason")   # each says WHY
+    assert ta.audit_gate(rep) == "incomplete"
+
+
+def test_declared_mechanism_but_no_test_is_not_met():
+    # Objective coverage is assessable (a mechanism is named) but uncovered →
+    # 'mismatch' (not met), not a vacuous pass.
+    spec = {"name": "x", "question": "does dnaA_ATP gate initiation",
+            "purpose": {"mechanism": "dnaA_ATP hydrolysis controls initiation"}}
+    rep = ta.build_audit_report(spec)
+    axes = {a["id"]: a for g in rep["groups"].values() for a in g["axes"]}
+    assert axes["objective_coverage"]["verdict"] == "mismatch"

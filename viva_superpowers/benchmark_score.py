@@ -13,7 +13,8 @@ from viva_superpowers.test_contract import TestBuilder, check, sanitize, value
 
 def score_test_sufficiency(audit_gate: str) -> dict:
     """The trial's /viva-tests audit gate → a hard axis."""
-    v = {"pass": "within_tol", "warn": "drift"}.get(str(audit_gate), "mismatch")
+    v = {"pass": "within_tol", "warn": "drift",
+         "incomplete": "ungraded"}.get(str(audit_gate), "mismatch")
     return check("test_sufficiency", "Test sufficiency (audit gate)", None,
                  value(1.0, op=">="), severity="hard", verdict=v,
                  detail={"audit_gate": audit_gate})
