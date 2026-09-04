@@ -377,6 +377,51 @@ If no investigations exist, print: `No investigations found. Run /viva-investiga
 
 ---
 
+### `import {check|sync} [--dry-run]`
+
+Manage which investigations this workspace carries **from an upstream repo it imports**
+(e.g. sms-ecoli importing v2ecoli). A workspace often carries a *subset* of the upstream
+repo's investigations — seeded from upstream, then hand-maintained. This makes the
+selection explicit and enforceable, so a new upstream investigation does not silently
+flow in.
+
+Selection lives in `workspace.yaml`:
+
+```yaml
+imported_investigations:          # either a plain list of upstream slugs (guard only)…
+  from: v2ecoli                   # …or a source block enabling additive sync:
+  git: https://github.com/vivarium-collective/v2ecoli.git
+  subtree: workspace/investigations   # optional (default)
+  allow:
+    - colonies
+    - metabolism-overflow
+native_investigations:            # investigations authored in THIS workspace
+  - cd1-review-comparison
+```
+
+- **`import check`** — conformance guard. Every investigation present under the
+  investigations dir must be declared (`imported ∪ native`) and the two lists disjoint;
+  a stray upstream investigation left off the allowlist fails. Exit 1 on any problem.
+  Wire into CI with a two-line pytest:
+
+  ```python
+  from viva_superpowers.investigation_import import assert_selection_ok
+  def test_investigation_selection():
+      assert_selection_ok(WORKSPACE_ROOT)
+  ```
+
+- **`import sync [--dry-run]`** — additively copy any allowlisted investigation that is
+  **missing** locally from the **pinned** upstream rev (resolved from `uv.lock`, not
+  upstream `main`). Never overwrites a local (divergent) copy; only allowlisted slugs are
+  pulled. `--upstream-src PATH` uses an existing local checkout instead of a cache clone;
+  `--rev SHA` overrides the pinned rev.
+
+Both are thin wrappers over `python -m viva_superpowers.investigation_import {check|sync}`.
+Excluding a future upstream investigation is just: leave it off the allowlist; `check`
+keeps it out for good.
+
+---
+
 ### `add-study <inv-slug> <study-slug>`
 
 Append a study slug to an investigation's `studies:` list.
